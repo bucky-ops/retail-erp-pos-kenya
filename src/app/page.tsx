@@ -46,10 +46,11 @@ const NAV: { id: ScreenId; label: string; icon: typeof LayoutDashboard }[] = [
 ];
 
 export default function App() {
-  const { page, setPage, sidebarCollapsed, toggleSidebar, device, user, setUser, stores, activeStoreId, setActiveStoreId, setBootstrap } = useApp();
+  const { page, setPage, sidebarCollapsed, toggleSidebar, device, user, setUser, stores, activeStoreId, setActiveStoreId, setBootstrap, hydrated } = useApp();
   const { online, setOnline, unsynced, setUnsynced } = useSync();
   const [mobileNav, setMobileNav] = useState(false);
   const booted = useRef(false);
+  const welcomed = useRef(false);
 
   /* bootstrap */
   useEffect(() => {
@@ -69,6 +70,29 @@ export default function App() {
         toast({ title: "Offline start", description: "Could not reach server — POS still works offline." })
       );
   }, [setBootstrap]);
+
+  /* session hydration flag — official persist API + failsafe */
+  useEffect(() => {
+    const flag = () => useApp.setState({ hydrated: true });
+    if (useApp.persist.hasHydrated()) {
+      flag();
+      return;
+    }
+    const unsub = useApp.persist.onFinishHydration(flag);
+    const failsafe = window.setTimeout(flag, 1500); // never trap the user on splash
+    return () => {
+      unsub();
+      window.clearTimeout(failsafe);
+    };
+  }, []);
+
+  /* welcome back once a persisted session is restored */
+  useEffect(() => {
+    if (hydrated && user && !welcomed.current) {
+      welcomed.current = true;
+      toast({ title: `Karibu tena, ${user.name.split(" ")[0]} 👋`, description: `${user.role} • session restored` });
+    }
+  }, [hydrated, user]);
 
   /* online detection + auto-sync of offline sales */
   useEffect(() => {
@@ -111,7 +135,13 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#F4F5F7]">
-      {!user ? (
+      {!hydrated ? (
+        /* splash while the persisted session rehydrates */
+        <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#172B4D]">
+          <div className="h-14 w-14 animate-pulse rounded-[14px] bg-[#0052CC] shadow-lg" />
+          <p className="font-display text-sm font-semibold tracking-wide text-white/80">DukaFlow POS</p>
+        </div>
+      ) : !user ? (
         <LoginScreen
           onLogin={(u) => {
             setUser(u);
@@ -307,8 +337,8 @@ export default function App() {
                 </div>
               </header>
 
-              {/* Screen body */}
-              <main className="min-h-0 flex-1 overflow-auto bg-[#F4F5F7] p-4 lg:p-8 df-scroll" aria-live="polite">
+              {/* Screen body — keyed for a soft transition between screens */}
+              <main key={page} className="df-fade-in min-h-0 flex-1 overflow-auto bg-[#F4F5F7] p-4 lg:p-8 df-scroll" aria-live="polite">
                 {page === "login" && <LoginScreen embedded />}
                 {page === "design" && <DesignScreen />}
                 {page === "dashboard" && <DashboardScreen />}

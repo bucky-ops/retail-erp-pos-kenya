@@ -243,6 +243,8 @@ export interface SettingsDto {
   receiptPrimaryColor: string;
   receiptSecondaryColor: string;
   companyName: string;
+  tierRules: string;
+  lastDailyJobsAt: string | null;
 }
 
 export const KES = (n: number, compact = false) => {

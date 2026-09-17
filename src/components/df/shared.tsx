@@ -5,7 +5,7 @@ import { ReactNode } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DeltaPill } from "@/components/df/badges";
 
-/** Standard KPI card — icon tile, label, value, delta/sub text. */
+/** Standard KPI card — icon tile, label, value, delta/sub text, optional inline chart. */
 export function KpiCard({
   icon,
   label,
@@ -15,6 +15,7 @@ export function KpiCard({
   iconBg = "#E9F2FF",
   iconColor = "#0052CC",
   loading,
+  chart,
   className,
 }: {
   icon: ReactNode;
@@ -25,6 +26,7 @@ export function KpiCard({
   iconBg?: string;
   iconColor?: string;
   loading?: boolean;
+  chart?: ReactNode;
   className?: string;
 }) {
   return (
@@ -44,6 +46,7 @@ export function KpiCard({
         <p className="font-display mt-3 text-xl font-bold text-[#172B4D]">{value}</p>
       )}
       <p className="mt-0.5 text-[12px] text-[#6B778C]">{label}</p>
+      {chart && <div className="mt-2">{chart}</div>}
       {sub && <p className="mt-1 text-[11px] font-medium text-[#6B778C]">{sub}</p>}
     </div>
   );

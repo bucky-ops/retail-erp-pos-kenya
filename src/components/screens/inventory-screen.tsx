@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ArrowRight, Boxes, Package, PackageX, Search, TriangleAlert, Wallet, ArrowLeftRight,
+  ArrowRight, Boxes, Loader2, Package, PackageX, Search, SlidersHorizontal, TriangleAlert, Wallet, ArrowLeftRight,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useApp } from "@/lib/store";
@@ -126,6 +126,9 @@ export default function InventoryScreen() {
   const [tfFrom, setTfFrom] = useState<number | null>(null);
   const [tfTo, setTfTo] = useState<number | null>(null);
   const [tfQty, setTfQty] = useState("");
+  const [adjQty, setAdjQty] = useState("");
+  const [adjReason, setAdjReason] = useState("Recount");
+  const [adjBusy, setAdjBusy] = useState(false);
   const [tfBusy, setTfBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -544,6 +547,70 @@ export default function InventoryScreen() {
                       <p className="text-[10px] uppercase text-[#6B778C]">Margin</p>
                       <div className="mt-1"><MarginBadge m={selected.margin} /></div>
                     </div>
+                  </div>
+                </div>
+
+                {/* stock adjustments (audit-logged to #stock-alerts) */}
+                <div>
+                  <h4 className="mb-2 text-[11px] font-bold uppercase tracking-widest text-[#6B778C]">Stock adjustment</h4>
+                  <div className="rounded-xl border border-[#DFE1E6] bg-[#FAFBFC] p-3">
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        value={adjQty}
+                        onChange={(e) => setAdjQty(e.target.value)}
+                        placeholder="± qty"
+                        className="h-9 w-24 rounded-lg border-[#DFE1E6] text-center text-[13px] font-bold"
+                      />
+                      <Select value={adjReason} onValueChange={setAdjReason}>
+                        <SelectTrigger className="h-9 flex-1 rounded-lg border-[#DFE1E6] text-[12px]">
+                          <SelectValue placeholder="Reason" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Recount">Recount</SelectItem>
+                          <SelectItem value="Received shipment">Received shipment</SelectItem>
+                          <SelectItem value="Damaged">Damaged</SelectItem>
+                          <SelectItem value="Theft / loss">Theft / loss</SelectItem>
+                          <SelectItem value="Return to supplier">Return to supplier</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        size="sm"
+                        disabled={adjBusy || !adjQty || Number(adjQty) === 0}
+                        onClick={async () => {
+                          if (!selected) return;
+                          setAdjBusy(true);
+                          try {
+                            const r = await api.post<{ ok: boolean; product: string; store: string }>("/api/inventory/adjust", {
+                              productId: selected.productId,
+                              storeId: selected.storeId,
+                              delta: Number(adjQty),
+                              reason: adjReason,
+                            });
+                            toast({
+                              title: `Stock adjusted: ${r.product}`,
+                              description: `${Number(adjQty) > 0 ? "+" : ""}${adjQty} at ${r.store} • ${adjReason} • #stock-alerts notified`,
+                            });
+                            setAdjQty("");
+                            // refresh drawer + table
+                            const fresh = await api.get<InvResponse>(
+                              `/api/inventory?storeId=${storeId === "all" ? "all" : storeId}&tab=${encodeURIComponent(tab)}&q=${encodeURIComponent(q)}`
+                            );
+                            setData(fresh);
+                            const row = fresh.rows.find((x) => x.productId === selected.productId);
+                            setSelectedId(row?.id ?? selected.id);
+                          } catch (e) {
+                            toast({ title: "Adjustment failed", description: e instanceof Error ? e.message : "Try again" });
+                          } finally {
+                            setAdjBusy(false);
+                          }
+                        }}
+                        className="h-9 rounded-lg bg-[#0052CC] px-3 text-[12px] font-bold text-white hover:bg-[#0041A8]"
+                      >
+                        {adjBusy ? <Loader2 size={13} className="animate-spin" /> : <SlidersHorizontal size={13} />} Apply
+                      </Button>
+                    </div>
+                    <p className="mt-2 text-[10px] text-[#6B778C]">Use − to write off damages/loss, + for recounts &amp; unlogged deliveries. Every adjustment is posted to #stock-alerts.</p>
                   </div>
                 </div>
 

@@ -67,6 +67,8 @@ export default function ReceiptsScreen() {
   const [cards, setCards] = useState<GiftCardWithQr[] | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [printTarget, setPrintTarget] = useState<"thermal" | "a4" | null>(null);
+  const [pngBusy, setPngBusy] = useState(false);
+  const [etimsBusy, setEtimsBusy] = useState(false);
 
   /* branding form */
   const [branding, setBranding] = useState({ primary: "#0052CC", secondary: "#00C853", promoFooter: "" });
@@ -125,6 +127,136 @@ export default function ReceiptsScreen() {
       window.print();
       setPrintTarget(null);
     }, 120);
+  };
+
+  /** Renders the 80mm receipt to a real PNG via canvas and downloads it. */
+  const downloadThermalPng = async (sale: SaleDto) => {
+    setPngBusy(true);
+    try {
+      const W = 300;
+      const lineH = 16;
+      const rows = sale.items.length + 12;
+      const H = 96 + rows * lineH + 200;
+      const canvas = document.createElement("canvas");
+      canvas.width = W;
+      canvas.height = H;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("Canvas unavailable");
+
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = "#172B4D";
+      ctx.textAlign = "center";
+
+      let y = 34;
+      ctx.font = 'bold 20px Sora, sans-serif';
+      ctx.fillText("DukaFlow", W / 2, y);
+      y += 18;
+      ctx.font = '11px monospace';
+      ctx.fillStyle = "#6B778C";
+      ctx.fillText(`KRA PIN P051234567A • ${sale.storeName ?? "Thika Road"}`, W / 2, y);
+      y += 14;
+      ctx.fillText("0712 345 678 • Thika Road, Nairobi", W / 2, y);
+      y += 22;
+
+      ctx.strokeStyle = "#DFE1E6";
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath();
+      ctx.moveTo(12, y); ctx.lineTo(W - 12, y); ctx.stroke();
+      ctx.setLineDash([]);
+      y += 16;
+
+      ctx.fillStyle = "#172B4D";
+      ctx.font = 'bold 12px monospace';
+      ctx.textAlign = "left";
+      ctx.fillText(sale.receiptNo, 14, y);
+      ctx.textAlign = "right";
+      ctx.font = '11px monospace';
+      ctx.fillStyle = "#6B778C";
+      ctx.fillText(new Date(sale.createdAt).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }), W - 14, y);
+      y += 16;
+      ctx.textAlign = "left";
+      ctx.fillStyle = "#172B4D";
+      ctx.fillText(`Customer: ${sale.customerName ?? "Walk-in"}${sale.customerTier ? ` (${sale.customerTier})` : ""}`, 14, y);
+      y += 20;
+
+      // items
+      ctx.font = '11px monospace';
+      for (const it of sale.items) {
+        ctx.fillStyle = "#172B4D";
+        ctx.textAlign = "left";
+        ctx.fillText(`${it.qty} x ${it.name.slice(0, 22)}`, 14, y);
+        ctx.textAlign = "right";
+        ctx.fillText(Math.round(it.total).toLocaleString(), W - 14, y);
+        y += lineH;
+      }
+
+      y += 6;
+      ctx.strokeStyle = "#DFE1E6";
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath(); ctx.moveTo(12, y); ctx.lineTo(W - 12, y); ctx.stroke();
+      ctx.setLineDash([]);
+      y += 18;
+
+      const kv = (label: string, value: string, bold = false, color = "#172B4D") => {
+        ctx.font = bold ? 'bold 12px monospace' : '11px monospace';
+        ctx.fillStyle = color;
+        ctx.textAlign = "left";
+        ctx.fillText(label, 14, y);
+        ctx.textAlign = "right";
+        ctx.fillText(value, W - 14, y);
+        y += bold ? 20 : lineH;
+      };
+      kv("Subtotal", Math.round(sale.subtotal).toLocaleString());
+      if (sale.discount > 0) kv("Discount", `-${Math.round(sale.discount).toLocaleString()}`, false, "#FF5630");
+      kv("VAT 16%", Math.round(sale.vat).toLocaleString());
+      kv("TOTAL", `KES ${Math.round(sale.total).toLocaleString()}`, true);
+      kv("Payment", sale.paymentMethod);
+
+      y += 10;
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#0052CC";
+      ctx.font = 'bold 11px monospace';
+      ctx.fillText(`Loyalty earned ${sale.pointsEarned} pts${loyaltyBal !== null ? ` | Bal ${loyaltyBal}` : ""}`, W / 2, y);
+      y += 26;
+
+      // QR (server PNG data URL)
+      const qrSrc = sale.qrCodeBase64;
+      if (qrSrc) {
+        const img = new Image();
+        await new Promise<void>((res) => {
+          img.onload = () => res();
+          img.onerror = () => res();
+          img.src = qrSrc;
+        });
+        ctx.drawImage(img, W / 2 - 55, y, 110, 110);
+        y += 118;
+      }
+      ctx.fillStyle = "#6B778C";
+      ctx.font = '9px monospace';
+      ctx.fillText(`KRA CU: ${sale.cuInvoiceNumber ?? "pending"}`, W / 2, y);
+      y += 24;
+
+      ctx.fillStyle = "#FF5630";
+      ctx.font = 'bold 11px monospace';
+      const promo = branding.promoFooter.slice(0, 44);
+      ctx.fillText(promo, W / 2, y);
+      y += 16;
+      ctx.fillStyle = "#6B778C";
+      ctx.font = '9px monospace';
+      ctx.fillText("Karibu tena! • DukaFlow POS v2.4", W / 2, y);
+
+      const url = canvas.toDataURL("image/png");
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${sale.receiptNo}.png`;
+      a.click();
+      toast({ title: "Receipt PNG downloaded", description: `${sale.receiptNo}.png • 300px thermal render with KRA QR` });
+    } catch (e) {
+      toast({ title: "PNG render failed", description: e instanceof Error ? e.message : "Try again" });
+    } finally {
+      setPngBusy(false);
+    }
   };
 
   const saveBranding = async () => {
@@ -325,11 +457,36 @@ export default function ReceiptsScreen() {
                   </Button>
                   <Button
                     variant="outline"
-                    onClick={() => toast({ title: "Receipt PNG saved to downloads", description: `${selected.receiptNo}.png • 300px thermal render` })}
+                    onClick={() => void downloadThermalPng(selected)}
+                    disabled={pngBusy}
                     className="h-9 rounded-xl text-[13px] font-semibold"
                   >
-                    <QrCode className="h-4 w-4" /> Download PNG
+                    {pngBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <QrCode className="h-4 w-4" />} Download PNG
                   </Button>
+                  {selected.kraStatus !== "Verified" && (
+                    <Button
+                      variant="outline"
+                      disabled={etimsBusy}
+                      onClick={async () => {
+                        setEtimsBusy(true);
+                        try {
+                          const r = await api.post<{ ok: boolean; message: string; sale: SaleDto }>(
+                            `/api/sales/${selected.id}/etims`,
+                            {}
+                          );
+                          toast({ title: "KRA eTIMS submitted ✅", description: r.message });
+                          setSales((cur) => (cur ? cur.map((s) => (s.id === r.sale.id ? { ...s, ...r.sale } : s)) : cur));
+                        } catch (e) {
+                          toast({ title: "eTIMS submission failed", description: e instanceof Error ? e.message : "Try again" });
+                        } finally {
+                          setEtimsBusy(false);
+                        }
+                      }}
+                      className="h-9 rounded-xl border-[#FFD54F] bg-[#FFF8E1] text-[13px] font-semibold text-[#B8860B] hover:bg-[#FFF3CD]"
+                    >
+                      {etimsBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Landmark className="h-4 w-4" />} Retry eTIMS
+                    </Button>
+                  )}
                 </div>
               )}
             </TabsContent>

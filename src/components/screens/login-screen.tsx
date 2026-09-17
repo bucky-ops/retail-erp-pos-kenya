@@ -136,6 +136,22 @@ export default function LoginScreen({
     >
       {/* ── Left: marketing panel ─────────────────────────── */}
       <div className="relative hidden flex-col overflow-hidden bg-gradient-to-br from-[#172B4D] via-[#142748] to-[#0E1B33] p-8 text-white md:flex md:p-10">
+        {/* ambient animated blobs */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -left-20 -top-24 h-72 w-72 rounded-full opacity-25 blur-3xl df-blob-a"
+          style={{ background: "radial-gradient(circle, #0052CC 0%, transparent 70%)" }}
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -bottom-28 -right-16 h-80 w-80 rounded-full opacity-20 blur-3xl df-blob-b"
+          style={{ background: "radial-gradient(circle, #00C853 0%, transparent 70%)" }}
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute left-1/3 top-1/2 h-48 w-48 rounded-full opacity-15 blur-3xl df-blob-a"
+          style={{ background: "radial-gradient(circle, #FF5630 0%, transparent 70%)", animationDelay: "-6s" }}
+        />
         <div className="absolute -right-20 -top-20 h-[280px] w-[280px] rounded-full bg-[#0052CC]/30 blur-[30px]" />
         <div className="absolute -bottom-24 -left-16 h-[220px] w-[220px] rounded-full bg-[#00C853]/10 blur-[30px]" />
 

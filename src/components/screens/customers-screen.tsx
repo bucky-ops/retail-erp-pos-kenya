@@ -674,6 +674,23 @@ function LoyaltyProgram() {
         setEarnPerKes(String(s.loyaltyEarnPerKes ?? 100));
         setPointValue(String(s.loyaltyPointValue ?? 1));
         setExpiryMonths(String(s.loyaltyExpiryMonths ?? 12));
+        // restore persisted tier rules (JSON in Settings.tierRules)
+        try {
+          const rules = JSON.parse(s.tierRules || "{}") as {
+            bronze?: { minPoints: number; discount: number };
+            silver?: { minPoints: number; discount: number };
+            gold?: { minPoints: number; discount: number };
+          };
+          setTiers((cur) =>
+            cur.map((t) => {
+              const key = t.name.toLowerCase() as "bronze" | "silver" | "gold";
+              const r = rules[key];
+              return r ? { ...t, min: String(r.minPoints), discount: r.discount } : t;
+            })
+          );
+        } catch {
+          /* keep defaults */
+        }
       })
       .catch(() => {})
       .finally(() => setLoaded(true));
@@ -695,9 +712,32 @@ function LoyaltyProgram() {
     }
   }, [earnPerKes, pointValue, expiryMonths]);
 
-  const saveTiers = useCallback(() => {
-    toast({ title: "Tiers saved", description: "Stored locally — tier sync endpoint lands in v2.5." });
-  }, []);
+  const saveTiers = useCallback(async () => {
+    try {
+      const payload = {
+        tierRules: JSON.stringify({
+          bronze: {
+            minPoints: Number(tiers[0]?.min) || 0,
+            discount: tiers[0]?.discount ?? 0,
+          },
+          silver: {
+            minPoints: Number(tiers[1]?.min) || 500,
+            discount: tiers[1]?.discount ?? 5,
+          },
+          gold: {
+            minPoints: Number(tiers[2]?.min) || 2000,
+            discount: tiers[2]?.discount ?? 10,
+          },
+          expiryMonths: Number(expiryMonths) || 12,
+          expiryEnabled: expiryOn,
+        }),
+      };
+      await api.put<{ ok: boolean }>("/api/settings", payload);
+      toast({ title: "Tiers saved", description: "Bronze/Silver/Gold thresholds persist for all stores and POS terminals." });
+    } catch (e) {
+      toast({ title: "Could not save tiers", description: err(e) });
+    }
+  }, [tiers, expiryMonths, expiryOn]);
 
   const ruleInput = "h-9 w-[84px] rounded-full border-[#DFE1E6] bg-white px-3 text-center text-[13px] font-bold";
 

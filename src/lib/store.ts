@@ -1,6 +1,7 @@
 "use client";
 
 import { create } from "zustand";
+import { persist, createJSONStorage } from "zustand/middleware";
 import { SettingsDto, StoreDto, StaffDto } from "@/types";
 
 export type ScreenId =
@@ -17,22 +18,26 @@ export interface AuthUser {
   storeName?: string;
 }
 
-interface AppState {
-  /* chrome */
+/** Session-scoped slice — the only part persisted to localStorage. */
+interface SessionSlice {
   page: ScreenId;
-  setPage: (p: ScreenId) => void;
   sidebarCollapsed: boolean;
-  toggleSidebar: () => void;
   device: "desktop" | "tablet" | "mobile";
-  setDevice: (d: "desktop" | "tablet" | "mobile") => void;
-
-  /* auth + store context */
   user: AuthUser | null;
-  setUser: (u: AuthUser | null) => void;
   activeStoreId: number | "all";
+}
+
+interface AppState extends SessionSlice {
+  /* hydration flag — flips once persisted session is restored */
+  hydrated: boolean;
+
+  setPage: (p: ScreenId) => void;
+  toggleSidebar: () => void;
+  setDevice: (d: "desktop" | "tablet" | "mobile") => void;
+  setUser: (u: AuthUser | null) => void;
   setActiveStoreId: (id: number | "all") => void;
 
-  /* bootstrap data */
+  /* bootstrap data (NOT persisted — refetched on boot) */
   stores: StoreDto[];
   staff: StaffDto[];
   settings: SettingsDto | null;
@@ -45,27 +50,47 @@ interface AppState {
   }) => void;
 }
 
-export const useApp = create<AppState>((set) => ({
+const initialSession: SessionSlice = {
   page: "dashboard",
-  setPage: (page) => set({ page }),
   sidebarCollapsed: false,
-  toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
   device: "desktop",
-  setDevice: (device) => set({ device }),
-
   user: null,
-  setUser: (user) => {
-    set({ user });
-  },
   activeStoreId: "all",
-  setActiveStoreId: (activeStoreId) => set({ activeStoreId }),
+};
 
-  stores: [],
-  staff: [],
-  settings: null,
-  categories: ["All"],
-  setBootstrap: ({ stores, staff, settings, categories }) => set({ stores, staff, settings, categories }),
-}));
+export const useApp = create<AppState>()(
+  persist<AppState, [], [], SessionSlice>(
+    (set) => ({
+      ...initialSession,
+      hydrated: false,
+
+      setPage: (page) => set({ page }),
+      toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
+      setDevice: (device) => set({ device }),
+      setUser: (user) => set({ user }),
+      setActiveStoreId: (activeStoreId) => set({ activeStoreId }),
+
+      stores: [],
+      staff: [],
+      settings: null,
+      categories: ["All"],
+      setBootstrap: ({ stores, staff, settings, categories }) =>
+        set({ stores, staff, settings, categories }),
+    }),
+    {
+      name: "dukaflow-session",
+      storage: createJSONStorage(() => localStorage),
+      version: 1,
+      partialize: (s) => ({
+        page: s.page,
+        sidebarCollapsed: s.sidebarCollapsed,
+        device: s.device,
+        user: s.user,
+        activeStoreId: s.activeStoreId,
+      }),
+    }
+  )
+);
 
 /** online/offline + unsynced sale count (single instance mounted in shell) */
 interface SyncState {

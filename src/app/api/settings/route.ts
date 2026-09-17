@@ -18,7 +18,7 @@ export async function PUT(req: NextRequest) {
     "smsApiKey", "smsSenderName",
     "loyaltyEarnPerKes", "loyaltyPointValue", "loyaltyExpiryMonths",
     "vatRate", "receiptPromoFooter", "receiptPrimaryColor", "receiptSecondaryColor",
-    "companyName",
+    "companyName", "tierRules",
   ] as const;
 
   const data: Record<string, string | number | boolean | Date> = {};

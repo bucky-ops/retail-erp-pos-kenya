@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import {
   Area,
+  AreaChart,
   CartesianGrid,
   Cell,
   ComposedChart,
@@ -194,6 +195,28 @@ export default function DashboardScreen() {
           delta="+12%"
           sub={`${data?.kpis.todayCount ?? 0} receipts today`}
           loading={loading}
+          chart={
+            <div className="h-8 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={data?.trend ?? []} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
+                  <defs>
+                    <linearGradient id="sparkBlue" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#0052CC" stopOpacity={0.35} />
+                      <stop offset="100%" stopColor="#0052CC" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <Area
+                    type="monotone"
+                    dataKey="sales"
+                    stroke="#0052CC"
+                    strokeWidth={1.8}
+                    fill="url(#sparkBlue)"
+                    isAnimationActive={false}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          }
         />
 
         {/* Payment split — mini donut card */}

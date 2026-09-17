@@ -302,5 +302,7 @@ model Settings {
   receiptPrimaryColor   String    @default("#0052CC")
   receiptSecondaryColor String    @default("#00C853")
   companyName           String    @default("DukaFlow Ltd")
+  tierRules             String    @default("{\"bronze\":{\"minPoints\":0,\"discount\":0},\"silver\":{\"minPoints\":500,\"discount\":5},\"gold\":{\"minPoints\":2000,\"discount\":10},\"expiryMonths\":12,\"expiryEnabled\":true}")
+  lastDailyJobsAt       DateTime?
   updatedAt             DateTime  @updatedAt
 }

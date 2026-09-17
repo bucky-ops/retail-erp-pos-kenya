@@ -2,8 +2,8 @@
 
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Building2, Check, Database, Download, Eye, EyeOff, Landmark, Loader2,
-  MessageSquare, MonitorSmartphone, Percent, Plug, ReceiptText, Smartphone,
+  Building2, CalendarClock, Check, Database, Download, Eye, EyeOff, Landmark, Loader2,
+  MessageSquare, MonitorSmartphone, Percent, Play, Plug, ReceiptText, Smartphone,
   Sparkles, Upload, Users, Warehouse, X,
 } from "lucide-react";
 import { api } from "@/lib/api";
@@ -158,6 +158,7 @@ export default function SettingsScreen() {
 
   const [mpesaEnv, setMpesaEnv] = useState<"Sandbox" | "Production">("Sandbox");
   const [autoBackup, setAutoBackup] = useState(true);
+  const [jobsBusy, setJobsBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   const set = useCallback(<K extends keyof SettingsDto>(key: K, value: SettingsDto[K]) => {
@@ -913,6 +914,50 @@ export default function SettingsScreen() {
                         });
                     }}
                   />
+                </div>
+
+                {/* ── Daily automation jobs ── */}
+                <div className="mt-6 rounded-xl border border-[#C8E6C9] bg-[#F0FFF4] p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="flex items-center gap-2 text-[13px] font-semibold text-[#172B4D]">
+                        <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-[#00C853]/15 text-[#1B7A2E]">
+                          <CalendarClock size={13} />
+                        </span>
+                        Daily automation jobs
+                      </p>
+                      <p className="mt-1 max-w-md text-[11px] leading-relaxed text-[#6B778C]">
+                        Runs when triggered (wire <code className="rounded bg-white px-1 font-mono text-[10px]">GET /api/cron/daily</code> to any scheduler):
+                        recalculate debt-plan overdue days • birthday SMS • debt reminders 1 day before due.
+                        Last run: {draft?.lastDailyJobsAt ? rel(draft.lastDailyJobsAt) : "never"}.
+                      </p>
+                    </div>
+                    <Button
+                      disabled={jobsBusy}
+                      onClick={async () => {
+                        setJobsBusy(true);
+                        try {
+                          const r = await api.post<{ birthdaySent: number; debtRemindersSent: number; overdueUpdated: number; birthdayCandidates: number; reminderCandidates: number }>(
+                            "/api/cron/daily",
+                            {}
+                          );
+                          toast({
+                            title: "Daily jobs completed ✅",
+                            description: `${r.overdueUpdated} overdue recalculated • ${r.birthdaySent}/${r.birthdayCandidates} birthday SMS • ${r.debtRemindersSent}/${r.reminderCandidates} debt reminders sent.`,
+                          });
+                          const s = await api.get<SettingsDto>("/api/settings");
+                          setDraft(s);
+                        } catch (e) {
+                          toast({ title: "Daily jobs failed", description: e instanceof Error ? e.message : "Unknown error" });
+                        } finally {
+                          setJobsBusy(false);
+                        }
+                      }}
+                      className="h-10 rounded-xl bg-[#00C853] px-5 text-[13px] font-bold text-white hover:bg-[#00A844]"
+                    >
+                      {jobsBusy ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />} Run jobs now
+                    </Button>
+                  </div>
                 </div>
               </Panel>
             )}

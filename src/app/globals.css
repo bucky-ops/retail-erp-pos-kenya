@@ -232,3 +232,17 @@
   .df-print-area-a4, .df-print-area-a4 * { visibility: visible; }
   .df-print-area-a4 { position: absolute; left: 0; top: 0; width: 210mm; }
 }
+
+/* login ambient blobs */
+@keyframes df-blob-float-a {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(40px, 30px) scale(1.12); }
+  66% { transform: translate(-24px, 50px) scale(0.94); }
+}
+@keyframes df-blob-float-b {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  40% { transform: translate(-48px, -36px) scale(1.1); }
+  75% { transform: translate(28px, -18px) scale(0.92); }
+}
+.df-blob-a { animation: df-blob-float-a 16s ease-in-out infinite; }
+.df-blob-b { animation: df-blob-float-b 20s ease-in-out infinite; }
