@@ -1,0 +1,657 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Gift, Landmark, Nfc, Phone, Printer, QrCode, Receipt, Smartphone, Sparkles, Tag, Loader2,
+} from "lucide-react";
+import { api } from "@/lib/api";
+import { CustomerDto, GiftCardDto, KES, SaleDto, SettingsDto } from "@/types";
+import { ScreenHeader, Panel, EmptyState, TableSkeleton } from "@/components/df/shared";
+import { KraBadge, TierBadge } from "@/components/df/badges";
+import { QrImage } from "@/components/df/qr";
+import { DukaMark, Logo } from "@/components/df/logo";
+import { toast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+
+/* ── contracts & helpers ──────────────────────────────────── */
+
+type GiftCardWithQr = GiftCardDto & { qr?: string };
+
+const GRADIENTS = ["blue-green", "navy", "gold", "blue", "green", "navy-gold"] as const;
+type Gradient = (typeof GRADIENTS)[number];
+
+const GC_CLASS: Record<Gradient, string> = {
+  "blue-green": "df-gc-blue-green",
+  navy: "df-gc-navy",
+  gold: "df-gc-gold",
+  blue: "df-gc-blue",
+  green: "df-gc-green",
+  "navy-gold": "df-gc-navy-gold",
+};
+
+const err = (e: unknown) => (e instanceof Error ? e.message : "Something went wrong");
+
+const fmtDateTime = (iso: string) =>
+  new Date(iso).toLocaleString("en-GB", {
+    day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
+  });
+
+const fmtExpiry = (iso: string | null) => {
+  if (!iso) return "No expiry";
+  const d = new Date(iso);
+  return `Exp ${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getFullYear()).slice(-2)}`;
+};
+
+const isExpired = (iso: string | null) => !!iso && new Date(iso).getTime() < Date.now();
+
+/* ── screen ───────────────────────────────────────────────── */
+
+export default function ReceiptsScreen() {
+  const [sales, setSales] = useState<SaleDto[] | null>(null);
+  const [customers, setCustomers] = useState<CustomerDto[]>([]);
+  const [settings, setSettings] = useState<SettingsDto | null>(null);
+  const [cards, setCards] = useState<GiftCardWithQr[] | null>(null);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [printTarget, setPrintTarget] = useState<"thermal" | "a4" | null>(null);
+
+  /* branding form */
+  const [branding, setBranding] = useState({ primary: "#0052CC", secondary: "#00C853", promoFooter: "" });
+  const [savingBrand, setSavingBrand] = useState(false);
+
+  /* new gift card dialog */
+  const [gcOpen, setGcOpen] = useState(false);
+  const [gcBusy, setGcBusy] = useState(false);
+  const [gcForm, setGcForm] = useState({ value: "5000", customerId: "", months: "12", gradient: "blue-green" as Gradient });
+
+  const load = useCallback(async () => {
+    try {
+      const [s, custs, cfg] = await Promise.all([
+        api.get<SaleDto[]>("/api/sales?limit=20"),
+        api.get<CustomerDto[]>("/api/customers"),
+        api.get<SettingsDto>("/api/settings"),
+      ]);
+      setSales(s);
+      setCustomers(custs);
+      setSettings(cfg);
+      setSelectedId((cur) => cur ?? s[0]?.id ?? null);
+      setBranding({
+        primary: cfg.receiptPrimaryColor || "#0052CC",
+        secondary: cfg.receiptSecondaryColor || "#00C853",
+        promoFooter: cfg.receiptPromoFooter || "",
+      });
+    } catch (e) {
+      toast({ title: "Could not load receipts", description: err(e) });
+      setSales([]);
+    }
+  }, []);
+
+  const loadCards = useCallback(async () => {
+    try {
+      setCards(await api.get<GiftCardWithQr[]>("/api/gift-cards"));
+    } catch (e) {
+      toast({ title: "Could not load gift cards", description: err(e) });
+      setCards([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+    void loadCards();
+  }, [load, loadCards]);
+
+  const selected = useMemo(() => sales?.find((s) => s.id === selectedId) ?? null, [sales, selectedId]);
+  const loyaltyBal = useMemo(() => {
+    if (!selected?.customerId) return null;
+    return customers.find((c) => c.id === selected.customerId)?.loyaltyPoints ?? null;
+  }, [customers, selected]);
+
+  const handlePrint = (target: "thermal" | "a4") => {
+    setPrintTarget(target);
+    window.setTimeout(() => {
+      window.print();
+      setPrintTarget(null);
+    }, 120);
+  };
+
+  const saveBranding = async () => {
+    setSavingBrand(true);
+    try {
+      await api.put("/api/settings", {
+        receiptPrimaryColor: branding.primary,
+        receiptSecondaryColor: branding.secondary,
+        receiptPromoFooter: branding.promoFooter,
+      });
+      toast({ title: "Branding saved", description: "Receipts and invoices now use the new colors & promo footer." });
+      await load();
+    } catch (e) {
+      toast({ title: "Save failed", description: err(e) });
+    } finally {
+      setSavingBrand(false);
+    }
+  };
+
+  const submitGiftCard = async () => {
+    const value = Number(gcForm.value);
+    if (!value || value <= 0) {
+      toast({ title: "Enter a gift card value" });
+      return;
+    }
+    setGcBusy(true);
+    try {
+      const res = await api.post<{ ok: boolean; card: { code: string } }>("/api/gift-cards", {
+        initialBalance: value,
+        months: Number(gcForm.months) || 12,
+        customerId: gcForm.customerId ? Number(gcForm.customerId) : undefined,
+        gradient: gcForm.gradient,
+      });
+      toast({ title: `Gift card ${res.card.code} issued`, description: `KES ${value.toLocaleString()} • expires in ${gcForm.months} months` });
+      setGcOpen(false);
+      await loadCards();
+    } catch (e) {
+      toast({ title: "Could not issue gift card", description: err(e) });
+    } finally {
+      setGcBusy(false);
+    }
+  };
+
+  const dash = <div className="my-2 border-t border-dashed border-[#DFE1E6]" />;
+
+  return (
+    <div>
+      <ScreenHeader
+        title="Receipts & Print"
+        subtitle="80mm thermal • A4 invoices • Gift cards"
+        actions={
+          <span className="inline-flex items-center gap-2 rounded-full border border-[#C8E6C9] bg-[#E8F5E9] px-3 py-1.5 text-[11px] font-bold text-[#1B7A2E]">
+            <Printer className="h-3.5 w-3.5" /> Print ready — 80mm & A4
+          </span>
+        }
+      />
+
+      <div className="grid grid-cols-12 gap-6">
+        {/* ══════════ GALLERY ══════════ */}
+        <div className="col-span-12 lg:col-span-4">
+          <Panel padding={false} className="overflow-hidden">
+            <div className="flex items-center justify-between border-b border-[#DFE1E6] px-4 py-3">
+              <h3 className="font-display text-[14px] font-bold text-[#172B4D]">Recent receipts</h3>
+              <Badge variant="outline" className="rounded-full border-[#DFE1E6] text-[10px] font-semibold text-[#6B778C]">
+                {sales ? `${sales.length} sales` : "…"}
+              </Badge>
+            </div>
+            <ScrollArea className="h-[620px]">
+              <div className="df-scroll divide-y divide-[#F4F5F7]">
+                {!sales ? (
+                  <div className="space-y-2 p-3">
+                    <TableSkeleton rows={8} cols={2} />
+                  </div>
+                ) : sales.length === 0 ? (
+                  <div className="p-4">
+                    <EmptyState icon={<Receipt className="h-6 w-6" />} title="No sales yet" sub="Complete a sale at the POS to see receipts here." />
+                  </div>
+                ) : (
+                  sales.map((s) => (
+                    <button
+                      key={s.id}
+                      onClick={() => setSelectedId(s.id)}
+                      className={cn(
+                        "block w-full px-4 py-3 text-left transition",
+                        selectedId === s.id ? "border-l-2 border-[#0052CC] bg-[#E9F2FF]" : "border-l-2 border-transparent hover:bg-[#F4F5F7]"
+                      )}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-mono text-[12px] font-bold text-[#172B4D]">{s.receiptNo}</span>
+                        <span className="font-display text-[13px] font-bold text-[#172B4D]">{KES(s.total)}</span>
+                      </div>
+                      <div className="mt-1 flex items-center justify-between gap-2">
+                        <span className="truncate text-[11px] text-[#6B778C]">{s.customerName ?? "Walk-in"}</span>
+                        <span className="inline-flex shrink-0 items-center gap-1.5">
+                          <span className="rounded-full bg-[#F4F5F7] px-2 py-0.5 text-[10px] font-semibold text-[#6B778C]">{s.paymentMethod}</span>
+                          <KraBadge status={s.kraStatus} />
+                        </span>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+              <ScrollBar />
+            </ScrollArea>
+          </Panel>
+        </div>
+
+        {/* ══════════ PREVIEW ══════════ */}
+        <div className="col-span-12 lg:col-span-8">
+          <Tabs defaultValue="thermal">
+            <TabsList className="mb-4 h-10 rounded-full border border-[#DFE1E6] bg-white p-1">
+              {[
+                ["thermal", "80mm Thermal"],
+                ["a4", "A4 Invoice"],
+                ["gift", "Gift Card"],
+              ].map(([v, l]) => (
+                <TabsTrigger key={v} value={v} className="rounded-full px-4 text-[13px] font-semibold data-[state=active]:bg-[#172B4D] data-[state=active]:text-white">
+                  {l}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+
+            {/* ── 80MM THERMAL ── */}
+            <TabsContent value="thermal" className="space-y-4">
+              <div className={cn("rounded-2xl border border-[#DFE1E6] bg-[#F4F5F7] p-6", printTarget === "thermal" && "df-print-area border-none bg-white p-0")}>
+                {!sales ? (
+                  <Skeleton className="mx-auto h-[520px] w-[300px] rounded-xl" />
+                ) : !selected ? (
+                  <EmptyState icon={<Receipt className="h-6 w-6" />} title="Select a receipt" sub="Pick a sale from the gallery to preview its 80mm thermal slip." />
+                ) : (
+                  <div className="df-thermal relative mx-auto w-[300px] p-4 text-[11px] leading-[1.4] text-[#172B4D] shadow-[0_10px_30px_rgba(23,43,77,0.15)]">
+                    <div className="flex justify-center">
+                      <Logo variant="full" size={28} />
+                    </div>
+                    <p className="mt-2 text-center font-semibold">{settings?.companyName ?? "DukaFlow Ltd"}</p>
+                    <p className="text-center font-mono text-[10px] text-[#6B778C]">PIN {settings?.kraPin ?? "P051234567A"}</p>
+                    <p className="text-center font-mono text-[10px] text-[#6B778C]">{selected.storeName ?? "Thika Road"} • 0712 345 678</p>
+                    {dash}
+                    <div className="flex justify-between">
+                      <span className="font-bold">{selected.receiptNo}</span>
+                      <span>{fmtDateTime(selected.createdAt)}</span>
+                    </div>
+                    <p>
+                      Customer: <span className="font-semibold">{selected.customerName ?? "Walk-in"}</span>
+                      {selected.customerTier ? <span className="ml-1 font-bold text-[#B8860B]">{selected.customerTier}</span> : null}
+                    </p>
+                    {dash}
+                    <table className="w-full">
+                      <tbody>
+                        {selected.items.map((it) => (
+                          <tr key={it.id}>
+                            <td className="py-0.5">{it.qty} x {it.name}</td>
+                            <td className="py-0.5 text-right tabular-nums">{it.total.toLocaleString()}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {dash}
+                    <div className="flex justify-between"><span>Subtotal</span><span className="tabular-nums">{selected.subtotal.toLocaleString()}</span></div>
+                    {selected.discount > 0 && (
+                      <div className="flex justify-between text-[#FF5630]">
+                        <span>Discount {selected.promoCode ?? ""}</span>
+                        <span className="tabular-nums">−{selected.discount.toLocaleString()}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between"><span>VAT 16%</span><span className="tabular-nums">{selected.vat.toLocaleString()}</span></div>
+                    <div className="mt-1 flex justify-between border-t border-dashed border-[#DFE1E6] pt-1 text-[14px] font-bold">
+                      <span>TOTAL</span><span className="tabular-nums">{KES(selected.total)}</span>
+                    </div>
+                    <p className="mt-1">Payment: {selected.paymentMethod}</p>
+                    <p className="text-[#0052CC]">
+                      Loyalty Earned {selected.pointsEarned} pts{loyaltyBal !== null ? ` | Bal ${loyaltyBal}` : ""}
+                    </p>
+                    {selected.pointsRedeemed > 0 && (
+                      <p className="text-[#0052CC]">Redeemed {selected.pointsRedeemed} pts</p>
+                    )}
+                    <div className="mt-3 flex flex-col items-center rounded-lg border border-[#DFE1E6] p-2">
+                      {selected.qrCodeBase64 ? (
+                        <img src={selected.qrCodeBase64} alt="KRA verification QR" width={140} height={140} className="mx-auto" />
+                      ) : (
+                        <QrImage text={`KRA:${selected.receiptNo}:TOTAL:${selected.total}`} size={140} className="mx-auto" />
+                      )}
+                      <p className="mt-1 text-center font-mono text-[10px] text-[#6B778C]">
+                        KRA Verification QR — CU: {selected.cuInvoiceNumber ?? "pending"}
+                      </p>
+                    </div>
+                    {branding.promoFooter && (
+                      <p className="mt-3 text-center font-bold text-[#FF5630]">{branding.promoFooter}</p>
+                    )}
+                    <p className="mt-2 text-center font-mono text-[9px] text-[#6B778C]">Karibu tena! • DukaFlow POS v2.4</p>
+                  </div>
+                )}
+              </div>
+              {selected && (
+                <div className="flex flex-wrap gap-2">
+                  <Button onClick={() => handlePrint("thermal")} className="h-9 rounded-xl bg-[#0052CC] text-[13px] font-semibold hover:bg-[#0041A8]">
+                    <Printer className="h-4 w-4" /> Print 80mm
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => toast({ title: "Receipt PNG saved to downloads", description: `${selected.receiptNo}.png • 300px thermal render` })}
+                    className="h-9 rounded-xl text-[13px] font-semibold"
+                  >
+                    <QrCode className="h-4 w-4" /> Download PNG
+                  </Button>
+                </div>
+              )}
+            </TabsContent>
+
+            {/* ── A4 INVOICE ── */}
+            <TabsContent value="a4" className="space-y-4">
+              <div className={cn("rounded-2xl border border-[#DFE1E6] bg-[#F4F5F7] p-6", printTarget === "a4" && "df-print-area border-none bg-white p-0")}>
+                {!sales ? (
+                  <Skeleton className="mx-auto h-[640px] w-full max-w-[700px] rounded-xl" />
+                ) : !selected ? (
+                  <EmptyState icon={<Receipt className="h-6 w-6" />} title="Select a receipt" sub="Pick a sale from the gallery to render its A4 tax invoice." />
+                ) : (
+                  <div className="mx-auto w-full max-w-[700px] border border-[#DFE1E6] bg-white p-8 shadow-[0_10px_30px_rgba(23,43,77,0.12)]">
+                    {/* header band */}
+                    <div className="flex items-center justify-between rounded-xl p-5 text-white" style={{ background: "linear-gradient(135deg,#0052CC 0%,#003d99 100%)" }}>
+                      <div>
+                        <Logo variant="white" size={22} />
+                        <p className="mt-1.5 text-[11px] text-white/85">{settings?.companyName ?? "DukaFlow Ltd"} • PIN {settings?.kraPin ?? "P051234567A"}</p>
+                        <p className="text-[11px] text-white/85">{selected.storeName ?? "Thika Road"}, Nairobi • 0712 345 678</p>
+                      </div>
+                      <p className="font-display text-2xl font-extrabold tracking-tight">TAX INVOICE</p>
+                    </div>
+
+                    {/* bill-to + meta */}
+                    <div className="mt-5 grid grid-cols-2 gap-4">
+                      <div className="rounded-xl border border-[#DFE1E6] p-3">
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-[#6B778C]">Bill To</p>
+                        <p className="mt-1 flex items-center gap-2 text-[14px] font-bold text-[#172B4D]">
+                          {selected.customerName ?? "Walk-in"}
+                          <TierBadge tier={selected.customerTier} />
+                        </p>
+                        <p className="text-[12px] text-[#6B778C]">
+                          {customers.find((c) => c.id === selected.customerId)?.phone ?? "—"}
+                        </p>
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 rounded-xl border border-[#DFE1E6] p-3 text-[11px]">
+                        <span className="text-[#6B778C]">Invoice #</span><span className="text-right font-mono font-bold text-[#172B4D]">{selected.receiptNo}</span>
+                        <span className="text-[#6B778C]">Date</span><span className="text-right text-[#172B4D]">{fmtDateTime(selected.createdAt)}</span>
+                        <span className="text-[#6B778C]">Payment</span><span className="text-right font-semibold text-[#172B4D]">{selected.paymentMethod}</span>
+                        <span className="text-[#6B778C]">KRA CU</span><span className="text-right font-mono text-[#172B4D]">{selected.cuInvoiceNumber ?? "pending"}</span>
+                        <span className="text-[#6B778C]">eTIMS</span>
+                        <span className="text-right"><KraBadge status={selected.kraStatus} /></span>
+                      </div>
+                    </div>
+
+                    {/* items */}
+                    <table className="mt-5 w-full overflow-hidden rounded-xl border border-[#DFE1E6] text-[12px]">
+                      <thead>
+                        <tr className="text-white" style={{ background: "#0052CC" }}>
+                          <th className="px-3 py-2 text-left font-semibold">Item</th>
+                          <th className="px-3 py-2 text-center font-semibold">Qty</th>
+                          <th className="px-3 py-2 text-right font-semibold">Unit Price</th>
+                          <th className="px-3 py-2 text-right font-semibold">Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selected.items.map((it, i) => (
+                          <tr key={it.id} className={cn(i % 2 === 1 && "bg-[#FAFBFC]")}>
+                            <td className="px-3 py-2 font-medium text-[#172B4D]">{it.emoji} {it.name}</td>
+                            <td className="px-3 py-2 text-center tabular-nums text-[#172B4D]">{it.qty}</td>
+                            <td className="px-3 py-2 text-right tabular-nums text-[#172B4D]">{it.unitPrice.toLocaleString()}</td>
+                            <td className="px-3 py-2 text-right font-bold tabular-nums text-[#172B4D]">{it.total.toLocaleString()}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+
+                    {/* totals + QR */}
+                    <div className="mt-5 flex flex-wrap items-start justify-end gap-6">
+                      <div className="w-[220px] space-y-1 text-[12px]">
+                        <div className="flex justify-between text-[#6B778C]"><span>Subtotal</span><span className="tabular-nums">{KES(selected.subtotal)}</span></div>
+                        {selected.discount > 0 && (
+                          <div className="flex justify-between font-semibold text-[#FF5630]">
+                            <span>Discount{selected.promoCode ? ` ${selected.promoCode}` : ""}</span>
+                            <span className="tabular-nums">−{KES(selected.discount)}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between text-[#6B778C]"><span>VAT 16%</span><span className="tabular-nums">{KES(selected.vat)}</span></div>
+                        <div className="flex justify-between border-t border-[#DFE1E6] pt-1.5">
+                          <span className="font-display text-[14px] font-bold text-[#172B4D]">GRAND TOTAL</span>
+                          <span className="font-display text-[16px] font-extrabold text-[#172B4D]">{KES(selected.total)}</span>
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-center">
+                        {selected.qrCodeBase64 ? (
+                          <img src={selected.qrCodeBase64} alt="KRA verification QR" width={150} height={150} className="rounded-lg border border-[#DFE1E6]" />
+                        ) : (
+                          <QrImage text={`KRA:${selected.receiptNo}:TOTAL:${selected.total}`} size={150} />
+                        )}
+                        <p className="mt-1 text-center text-[10px] font-semibold text-[#6B778C]">Scan to verify with KRA</p>
+                      </div>
+                    </div>
+
+                    {/* loyalty strip */}
+                    <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl bg-[#E9F2FF] px-4 py-2.5 text-[11px] font-semibold text-[#0052CC]">
+                      <span className="inline-flex items-center gap-1"><Sparkles className="h-3.5 w-3.5" /> Loyalty earned: {selected.pointsEarned} pts</span>
+                      {selected.pointsRedeemed > 0 && <span>Redeemed: {selected.pointsRedeemed} pts</span>}
+                      {loyaltyBal !== null && <span>Balance: {loyaltyBal} pts</span>}
+                      {selected.tierAtSale && <span>Tier at sale: {selected.tierAtSale}</span>}
+                    </div>
+
+                    {/* terms + payments + signature */}
+                    <div className="mt-5 grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-[#6B778C]">Payment details</p>
+                        <div className="mt-1.5 space-y-1 text-[11px] text-[#172B4D]">
+                          <p className="flex items-center gap-1.5"><Smartphone className="h-3.5 w-3.5 text-[#00C853]" /> M-Pesa Till 123456</p>
+                          <p className="flex items-center gap-1.5"><Phone className="h-3.5 w-3.5 text-[#0052CC]" /> Paybill 654321</p>
+                          <p className="flex items-center gap-1.5"><Landmark className="h-3.5 w-3.5 text-[#172B4D]" /> Bank: Equity 1234567890</p>
+                        </div>
+                        <p className="mt-3 max-w-[280px] text-[10px] leading-relaxed text-[#6B778C]">
+                          Payment due in 30 days. Goods sold are not returnable after 7 days. This invoice is generated
+                          electronically and verified by KRA eTIMS. Thank you for your business!
+                        </p>
+                      </div>
+                      <div className="flex flex-col items-end justify-end">
+                        <div className="w-48 border-t border-[#DFE1E6] pt-1 text-right text-[10px] text-[#6B778C]">Authorised Signature</div>
+                        <p className="font-display mt-3 text-[12px] font-bold text-[#0052CC]">Sell Smart. Stock Smart.</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+              {selected && (
+                <Button onClick={() => handlePrint("a4")} className="h-9 rounded-xl bg-[#0052CC] text-[13px] font-semibold hover:bg-[#0041A8]">
+                  <Printer className="h-4 w-4" /> Print A4
+                </Button>
+              )}
+            </TabsContent>
+
+            {/* ── GIFT CARDS ── */}
+            <TabsContent value="gift">
+              <div className="grid grid-cols-12 gap-4">
+                <div className="col-span-12 xl:col-span-8">
+                  <div className="mb-3 flex items-center justify-between">
+                    <h3 className="font-display text-[14px] font-bold text-[#172B4D]">Gift cards issued</h3>
+                    <Button onClick={() => setGcOpen(true)} className="h-8 rounded-xl bg-[#0052CC] px-3 text-[12px] font-semibold hover:bg-[#0041A8]">
+                      <Gift className="h-3.5 w-3.5" /> New Gift Card
+                    </Button>
+                  </div>
+                  {!cards ? (
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-[210px] rounded-2xl" />)}
+                    </div>
+                  ) : cards.length === 0 ? (
+                    <EmptyState icon={<Gift className="h-6 w-6" />} title="No gift cards yet" sub="Issue the first DukaFlow gift card to a loyal customer." action={<Button onClick={() => setGcOpen(true)} className="rounded-xl bg-[#0052CC] hover:bg-[#0041A8]">New Gift Card</Button>} />
+                  ) : (
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      {cards.map((c) => {
+                        const dead = c.status !== "Active" || isExpired(c.expiry);
+                        return (
+                          <div
+                            key={c.id}
+                            className={cn(
+                              "relative h-[210px] w-full max-w-[336px] overflow-hidden rounded-2xl p-5 text-white shadow-lg",
+                              GC_CLASS[(c.gradient as Gradient) in GC_CLASS ? (c.gradient as Gradient) : "blue-green"]
+                            )}
+                          >
+                            {/* holographic sheen */}
+                            <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-white/0 via-white/25 to-white/0" />
+                            <div className="relative flex h-full flex-col justify-between">
+                              <div className="flex items-start justify-between">
+                                <DukaMark white className="h-7 w-7" />
+                                <Nfc className="h-6 w-6 text-white/80" />
+                              </div>
+                              <div>
+                                <p className="font-display text-[26px] font-bold leading-none">{KES(c.balance)}</p>
+                                <p className="mt-1 font-mono text-[11px] opacity-90">{c.code} • {fmtExpiry(c.expiry)}</p>
+                              </div>
+                              <div className="flex items-end justify-between">
+                                <div>
+                                  <p className="text-[10px] opacity-80">DukaFlow • Gift Card</p>
+                                  <p className="text-[11px] font-semibold">{c.customerName ?? "Unassigned"}</p>
+                                </div>
+                                <div className="rounded-lg bg-white p-1">
+                                  <QrImage text={`DUKAFLOW-GIFT:${c.code}:${c.balance}`} size={64} className="rounded" />
+                                </div>
+                              </div>
+                            </div>
+                            {dead && (
+                              <div className="absolute inset-0 flex items-center justify-center bg-black/55">
+                                <span className="-rotate-12 rounded-lg border-2 border-white/80 px-4 py-1 font-display text-lg font-extrabold tracking-widest text-white">
+                                  {c.status === "Active" ? "EXPIRED" : c.status.toUpperCase()}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* customization rail */}
+                <div className="col-span-12 xl:col-span-4">
+                  <Panel className="h-fit">
+                    <h3 className="font-display text-[15px] font-bold text-[#172B4D]">Customization</h3>
+                    <p className="mt-0.5 text-[12px] text-[#6B778C]">Branding applied to every receipt & invoice</p>
+                    <div className="mt-4 space-y-4">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="primary-color" className="text-[11px] font-semibold text-[#172B4D]">Primary color</Label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            id="primary-color"
+                            type="color"
+                            value={branding.primary}
+                            onChange={(e) => setBranding((b) => ({ ...b, primary: e.target.value }))}
+                            className="h-9 w-10 cursor-pointer rounded-lg border border-[#DFE1E6] bg-white p-1"
+                            aria-label="Primary color"
+                          />
+                          <Input value={branding.primary} onChange={(e) => setBranding((b) => ({ ...b, primary: e.target.value }))} className="h-9 flex-1 rounded-xl font-mono text-[12px]" />
+                        </div>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="secondary-color" className="text-[11px] font-semibold text-[#172B4D]">Secondary color</Label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            id="secondary-color"
+                            type="color"
+                            value={branding.secondary}
+                            onChange={(e) => setBranding((b) => ({ ...b, secondary: e.target.value }))}
+                            className="h-9 w-10 cursor-pointer rounded-lg border border-[#DFE1E6] bg-white p-1"
+                            aria-label="Secondary color"
+                          />
+                          <Input value={branding.secondary} onChange={(e) => setBranding((b) => ({ ...b, secondary: e.target.value }))} className="h-9 flex-1 rounded-xl font-mono text-[12px]" />
+                        </div>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="promo-footer" className="flex items-center gap-1 text-[11px] font-semibold text-[#172B4D]">
+                          <Tag className="h-3 w-3" /> Footer promo text
+                        </Label>
+                        <Textarea
+                          id="promo-footer"
+                          value={branding.promoFooter}
+                          onChange={(e) => setBranding((b) => ({ ...b, promoFooter: e.target.value }))}
+                          placeholder="Thank You! You saved KES 300 with points! Come again!"
+                          className="h-20 resize-none rounded-xl text-[13px]"
+                        />
+                      </div>
+                      <div className="rounded-xl border border-[#DFE1E6] bg-[#FAFBFC] p-3">
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-[#6B778C]">Live promo preview</p>
+                        <p className="mt-1 text-center text-[12px] font-bold text-[#FF5630]">
+                          {branding.promoFooter || "Thank You! You saved KES 300 with points!"}
+                        </p>
+                      </div>
+                      <Button onClick={() => void saveBranding()} disabled={savingBrand} className="h-10 w-full rounded-xl bg-[#0052CC] font-semibold hover:bg-[#0041A8]">
+                        {savingBrand && <Loader2 className="h-4 w-4 animate-spin" />} Save & Preview Live
+                      </Button>
+                    </div>
+                  </Panel>
+                </div>
+              </div>
+            </TabsContent>
+          </Tabs>
+        </div>
+      </div>
+
+      {/* ══════════ New gift card dialog ══════════ */}
+      <Dialog open={gcOpen} onOpenChange={setGcOpen}>
+        <DialogContent className="rounded-[20px] sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle className="font-display">Issue gift card</DialogTitle>
+            <DialogDescription>Prepaid store credit — usable at any DukaFlow till.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="gc-value" className="text-[12px] font-semibold text-[#172B4D]">Value (KES)</Label>
+                <Input id="gc-value" type="number" min={100} value={gcForm.value} onChange={(e) => setGcForm((f) => ({ ...f, value: e.target.value }))} className="h-10 rounded-xl" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[12px] font-semibold text-[#172B4D]">Expiry</Label>
+                <Select value={gcForm.months} onValueChange={(v) => setGcForm((f) => ({ ...f, months: v }))}>
+                  <SelectTrigger className="h-10 rounded-xl"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="3">3 months</SelectItem>
+                    <SelectItem value="6">6 months</SelectItem>
+                    <SelectItem value="12">12 months</SelectItem>
+                    <SelectItem value="24">24 months</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-[12px] font-semibold text-[#172B4D]">Customer (optional)</Label>
+              <Select value={gcForm.customerId || "none"} onValueChange={(v) => setGcForm((f) => ({ ...f, customerId: v === "none" ? "" : v }))}>
+                <SelectTrigger className="h-10 rounded-xl"><SelectValue placeholder="Unassigned" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Unassigned — open card</SelectItem>
+                  {customers.map((c) => (
+                    <SelectItem key={c.id} value={String(c.id)}>{c.name} • {c.phone}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-[12px] font-semibold text-[#172B4D]">Card gradient</Label>
+              <div className="flex flex-wrap gap-2">
+                {GRADIENTS.map((g) => (
+                  <button
+                    key={g}
+                    type="button"
+                    onClick={() => setGcForm((f) => ({ ...f, gradient: g }))}
+                    aria-label={g}
+                    className={cn(
+                      "h-9 w-14 rounded-lg border-2 transition",
+                      GC_CLASS[g],
+                      gcForm.gradient === g ? "border-[#172B4D] shadow-md" : "border-transparent"
+                    )}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setGcOpen(false)} className="rounded-xl">Cancel</Button>
+            <Button onClick={() => void submitGiftCard()} disabled={gcBusy} className="rounded-xl bg-[#0052CC] font-semibold hover:bg-[#0041A8]">
+              {gcBusy && <Loader2 className="h-4 w-4 animate-spin" />} Issue card
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

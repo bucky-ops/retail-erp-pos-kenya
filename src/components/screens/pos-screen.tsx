@@ -1,0 +1,1432 @@
+"use client";
+
+/**
+ * POS — the offline-first point of sale.
+ *
+ * Flow: every sale is written to the IndexedDB queue FIRST (survives refresh,
+ * crash and full offline), then M-Pesa STK runs when applicable, then the sale
+ * posts to /api/sales. 403 credit blocks raise a red AlertDialog; network
+ * failures keep the sale queued and show the success modal with an
+ * "OFFLINE QUEUED" badge. syncPendingSales() runs on mount and whenever
+ * connectivity returns.
+ */
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  Ban,
+  Banknote,
+  Building2,
+  Check,
+  CreditCard,
+  Gift,
+  HandCoins,
+  Loader2,
+  Minus,
+  MonitorSmartphone,
+  Package,
+  Plus,
+  Printer,
+  ScanBarcode,
+  Search,
+  Shield,
+  ShoppingBag,
+  ShoppingCart,
+  Smartphone,
+  Sparkles,
+  Store as StoreIcon,
+  Trash2,
+  Users,
+  Wallet,
+  X,
+} from "lucide-react";
+import { api } from "@/lib/api";
+import { useApp, useSync } from "@/lib/store";
+import {
+  KES,
+  type CartLine,
+  type CustomerDto,
+  type PaymentMethod,
+  type ProductDto,
+  type SaleDto,
+  type SalePayload,
+  type SaleResult,
+} from "@/types";
+import { StockBadge, TierBadge } from "@/components/df/badges";
+import { DukaMark } from "@/components/df/logo";
+import { QrImage } from "@/components/df/qr";
+import { offlineQueue, syncPendingSales } from "@/lib/offline";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
+import { cn } from "@/lib/utils";
+import { toast } from "@/hooks/use-toast";
+
+/* ── helpers ─────────────────────────────────────────────────── */
+
+const initials = (name: string) =>
+  name
+    .split(" ")
+    .map((w) => w[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/** qty of a product at the active store ("all" sums every stock row). */
+const stockQty = (p: ProductDto, storeId: number | "all"): number => {
+  if (storeId === "all") return p.stock.reduce((a, s) => a + s.qty, 0);
+  const s = p.stock.find((st) => st.storeId === storeId);
+  return s ? s.qty : (p.stock[0]?.qty ?? 0);
+};
+
+const tierColor = (tier?: string | null) =>
+  tier === "Gold" ? "#FFD700" : tier === "Silver" ? "#B0BEC5" : "#BCAAA4";
+
+interface Totals {
+  subtotal: number;
+  tierPct: number;
+  tierDiscount: number;
+  promoEligible: boolean;
+  promoDiscount: number;
+  billDiscount: number;
+  pointsToUse: number;
+  pointsValue: number;
+  discountTotal: number;
+  vat: number;
+  total: number;
+}
+
+/** Client-side mirror of /api/sales pricing (server stays source of truth). */
+function computeTotals(args: {
+  lines: CartLine[];
+  tier: string | null;
+  promo: string | null;
+  billDiscount: number;
+  usePoints: boolean;
+  pointsAvailable: number;
+  pointValue: number;
+  vatRate: number;
+}): Totals {
+  const subtotal = args.lines.reduce((s, l) => s + l.unitPrice * l.qty, 0);
+  const tierPct = args.tier === "Gold" ? 0.1 : args.tier === "Silver" ? 0.05 : 0;
+  const tierDiscount = Math.round(subtotal * tierPct);
+  const promoEligible = !!args.promo && subtotal >= 5000;
+  const promoDiscount = promoEligible ? 500 : 0;
+  const billDiscount = Math.max(0, Math.round(args.billDiscount));
+
+  // points never exceed the amount due after tier/promo/bill discounts
+  const remaining = Math.max(0, subtotal - tierDiscount - promoDiscount - billDiscount);
+  const pointsToUse =
+    args.usePoints && args.pointsAvailable > 0
+      ? Math.max(0, Math.min(args.pointsAvailable, Math.floor(remaining / args.pointValue)))
+      : 0;
+  const pointsValue = pointsToUse * args.pointValue;
+
+  const discountTotal = tierDiscount + promoDiscount + billDiscount + pointsValue;
+  const base = Math.max(0, subtotal - discountTotal);
+  const vat = Math.round(base * args.vatRate);
+  const total = base + vat;
+  return {
+    subtotal,
+    tierPct,
+    tierDiscount,
+    promoEligible,
+    promoDiscount,
+    billDiscount,
+    pointsToUse,
+    pointsValue,
+    discountTotal,
+    vat,
+    total,
+  };
+}
+
+interface PayMethod {
+  method: PaymentMethod;
+  label: string;
+  icon: typeof Banknote;
+  color: string;
+}
+
+const PAY_METHODS: PayMethod[] = [
+  { method: "Cash", label: "CASH", icon: Banknote, color: "#172B4D" },
+  { method: "M-Pesa", label: "M-PESA STK PUSH", icon: Smartphone, color: "#00C853" },
+  { method: "Till", label: "TILL", icon: StoreIcon, color: "#0052CC" },
+  { method: "Paybill", label: "PAYBILL", icon: Building2, color: "#6B778C" },
+  { method: "Gift Card", label: "GIFT CARD", icon: CreditCard, color: "#B8860B" },
+  { method: "Credit Sale", label: "CREDIT SALE", icon: HandCoins, color: "#FF5630" },
+];
+
+interface StkState {
+  open: boolean;
+  phase: "pending" | "success";
+  phone: string;
+  id: string | null;
+  message: string | null;
+}
+
+interface SuccessState {
+  sale: SaleDto;
+  loyalty: { earned: number; balance: number; redeemed: number } | null;
+  offline: boolean;
+}
+
+/* ── component ───────────────────────────────────────────────── */
+
+export default function PosScreen() {
+  const activeStoreId = useApp((s) => s.activeStoreId);
+  const user = useApp((s) => s.user);
+  const categories = useApp((s) => s.categories);
+  const settings = useApp((s) => s.settings);
+  const activeStore = useApp((s) => (s.activeStoreId === "all" ? undefined : s.stores.find((st) => st.id === s.activeStoreId)));
+  const online = useSync((s) => s.online);
+  const unsynced = useSync((s) => s.unsynced);
+  const setUnsynced = useSync((s) => s.setUnsynced);
+
+  /* catalog */
+  const [search, setSearch] = useState("");
+  const [debouncedQ, setDebouncedQ] = useState("");
+  const [searchFocus, setSearchFocus] = useState(false);
+  const [category, setCategory] = useState("All");
+  const [products, setProducts] = useState<ProductDto[]>([]);
+  const [productsLoading, setProductsLoading] = useState(true);
+  const [catalogNonce, setCatalogNonce] = useState(0);
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  /* cart */
+  const [cart, setCart] = useState<CartLine[]>([]);
+  const [customer, setCustomer] = useState<CustomerDto | null>(null);
+  const [promo, setPromo] = useState<string | null>(null);
+  const [promoInput, setPromoInput] = useState("");
+  const [billDiscount, setBillDiscount] = useState("");
+  const [usePoints, setUsePoints] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("Cash");
+  const [paying, setPaying] = useState(false);
+
+  /* dialogs */
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [custQuery, setCustQuery] = useState("");
+  const [custResults, setCustResults] = useState<CustomerDto[]>([]);
+  const [custLoading, setCustLoading] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newPhone, setNewPhone] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [stk, setStk] = useState<StkState>({ open: false, phase: "pending", phone: "", id: null, message: null });
+  const [blocked, setBlocked] = useState<{ reason: string; overdueDays: number } | null>(null);
+  const [success, setSuccess] = useState<SuccessState | null>(null);
+
+  const vatRate = settings?.vatRate ?? 0.16;
+  const pointValue = settings?.loyaltyPointValue ?? 1;
+
+  /* ── sync on mount + whenever connectivity returns ─────────── */
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      try {
+        const c = await offlineQueue.count();
+        if (!alive) return;
+        setUnsynced(c.unsynced);
+        if (online && c.unsynced > 0) {
+          const { synced, failed } = await syncPendingSales();
+          if (!alive) return;
+          if (synced > 0) {
+            toast({
+              title: `↗ ${synced} offline sale${synced > 1 ? "s" : ""} synced`,
+              description: failed ? `${failed} still queued` : "Queue clear",
+            });
+          }
+          const c2 = await offlineQueue.count();
+          if (alive) setUnsynced(c2.unsynced);
+        }
+      } catch {
+        /* IndexedDB unavailable — POS still works in-memory */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [online, setUnsynced]);
+
+  /* ── debounced search ──────────────────────────────────────── */
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQ(search), 250);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  /* F2 focuses the scan/search field */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "F2") {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  /* ── cart mutations ────────────────────────────────────────── */
+  const addToCart = useCallback(
+    (p: ProductDto) => {
+      const available = stockQty(p, activeStoreId);
+      if (available <= 0) {
+        toast({ title: "Out of stock", description: `${p.name} is unavailable at this store`, variant: "destructive" });
+        return;
+      }
+      setCart((prev) => {
+        const idx = prev.findIndex((l) => l.productId === p.id);
+        if (idx === -1) {
+          return [...prev, { productId: p.id, name: p.name, emoji: p.emoji, sku: p.sku, unitPrice: p.price, qty: 1 }];
+        }
+        return prev.map((l, i) => (i === idx ? { ...l, qty: Math.min(l.qty + 1, available) } : l));
+      });
+    },
+    [activeStoreId]
+  );
+
+  const setLineQty = (productId: number, qty: number) => {
+    const q = Math.max(1, Math.min(9999, Math.round(qty) || 1));
+    setCart((prev) => prev.map((l) => (l.productId === productId ? { ...l, qty: q } : l)));
+  };
+
+  const removeLine = (productId: number) => setCart((prev) => prev.filter((l) => l.productId !== productId));
+
+  /* ── catalog fetch (debounced, barcode-aware) ──────────────── */
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      setProductsLoading(true);
+      try {
+        const params = new URLSearchParams();
+        if (debouncedQ.trim()) params.set("q", debouncedQ.trim());
+        if (category !== "All") params.set("category", category);
+        if (activeStoreId !== "all") params.set("storeId", String(activeStoreId));
+        const list = await api.get<ProductDto[]>(`/api/products?${params.toString()}`);
+        if (!alive) return;
+        setProducts(list);
+
+        // barcode gun / all-digit entry → auto-add first match
+        const q = debouncedQ.trim();
+        if (/^\d{8,}$/.test(q) && list.length > 0) {
+          const match = list.find((p) => p.barcode === q || p.sku === q) ?? list[0];
+          addToCart(match);
+          toast({ title: `Barcode scanned: ${q}`, description: `${match.name} added to cart` });
+          setSearch("");
+        }
+      } catch {
+        /* offline — keep last catalog so POS never stops selling */
+      } finally {
+        if (alive) setProductsLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [debouncedQ, category, activeStoreId, catalogNonce, addToCart]);
+
+  /* ── customer picker fetch ─────────────────────────────────── */
+  useEffect(() => {
+    if (!pickerOpen) return;
+    let alive = true;
+    const t = setTimeout(() => {
+      void (async () => {
+        setCustLoading(true);
+        try {
+          const qs = custQuery.trim() ? `?q=${encodeURIComponent(custQuery.trim())}` : "";
+          const list = await api.get<CustomerDto[]>(`/api/customers${qs}`);
+          if (alive) setCustResults(list);
+        } catch {
+          if (alive) setCustResults([]);
+        } finally {
+          if (alive) setCustLoading(false);
+        }
+      })();
+    }, 250);
+    return () => {
+      alive = false;
+      clearTimeout(t);
+    };
+  }, [pickerOpen, custQuery]);
+
+  const createCustomer = async () => {
+    if (!newName.trim() || !newPhone.trim()) return;
+    setCreating(true);
+    try {
+      const c = await api.post<CustomerDto>("/api/customers", {
+        name: newName.trim(),
+        phone: newPhone.trim(),
+        storeId: activeStoreId === "all" ? undefined : activeStoreId,
+      });
+      toast({ title: `${c.name} added`, description: "Bronze tier • start earning loyalty points today" });
+      setCustomer(c);
+      setPickerOpen(false);
+      setNewName("");
+      setNewPhone("");
+      setCustQuery("");
+    } catch (e) {
+      toast({
+        title: "Could not create customer",
+        description: e instanceof Error ? e.message : "Try again",
+        variant: "destructive",
+      });
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const applyPromo = () => {
+    const code = promoInput.trim().toUpperCase();
+    if (!code) return;
+    setPromo(code);
+    setPromoInput("");
+    toast({
+      title: `Promo ${code} applied`,
+      description: "Server validates on pay — flat KES 500 off when subtotal ≥ KES 5,000",
+    });
+  };
+
+  /* ── totals ────────────────────────────────────────────────── */
+  const totals = computeTotals({
+    lines: cart,
+    tier: customer?.tier ?? null,
+    promo,
+    billDiscount: Number(billDiscount) || 0,
+    usePoints,
+    pointsAvailable: customer?.loyaltyPoints ?? 0,
+    pointValue,
+    vatRate,
+  });
+
+  /* ── PAY flow ──────────────────────────────────────────────── */
+  const markQueue = async (clientId: string, status: "synced" | "failed", error?: string) => {
+    const item = (await offlineQueue.all()).find((q) => q.clientId === clientId);
+    if (item) {
+      await offlineQueue.update(
+        status === "synced"
+          ? { ...item, status: "synced", syncedAt: Date.now() }
+          : { ...item, status: "failed", error: error ?? "Sale failed" }
+      );
+      if (status === "synced") await offlineQueue.clearSynced();
+    }
+    const c = await offlineQueue.count();
+    setUnsynced(c.unsynced);
+  };
+
+  const buildOfflineSale = (payload: SalePayload, clientId: string, t: Totals): SaleDto => {
+    const earned = Math.floor(t.total / (settings?.loyaltyEarnPerKes ?? 100));
+    return {
+      id: 0,
+      receiptNo: `OFF-${clientId.slice(0, 6).toUpperCase()}`,
+      storeId: payload.storeId,
+      customerId: payload.customerId,
+      customerName: customer?.name ?? "Walk-in",
+      staffName: payload.staffName,
+      subtotal: t.subtotal,
+      discount: t.discountTotal,
+      vat: t.vat,
+      total: t.total,
+      paymentMethod: payload.paymentMethod,
+      pointsEarned: earned,
+      pointsRedeemed: t.pointsToUse,
+      tierAtSale: customer?.tier ?? null,
+      promoCode: payload.promoCode ?? null,
+      status: "Queued",
+      kraStatus: "Pending",
+      cuInvoiceNumber: null,
+      qrCodeBase64: null,
+      offlineCreated: true,
+      createdAt: new Date().toISOString(),
+      items: [],
+    };
+  };
+
+  const resetTransaction = () => {
+    setSuccess(null);
+    setCart([]);
+    setCustomer(null);
+    setPromo(null);
+    setPromoInput("");
+    setBillDiscount("");
+    setUsePoints(false);
+    setPaymentMethod("Cash");
+  };
+
+  const handlePay = async () => {
+    if (cart.length === 0 || paying) return;
+    const isOffline = !online || !navigator.onLine;
+    if (paymentMethod === "Credit Sale" && !customer) {
+      toast({
+        title: "Credit sale needs a customer",
+        description: "Select a customer with a credit limit before paying on credit.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setPaying(true);
+    const clientId = crypto.randomUUID();
+    const storeId = activeStoreId === "all" ? (user?.storeId ?? 1) : activeStoreId;
+    const payload: SalePayload = {
+      clientId,
+      storeId,
+      customerId: customer?.id ?? null,
+      staffName: user?.name ?? "Counter 1",
+      items: cart,
+      paymentMethod,
+      promoCode: promo,
+      pointsRedeemed: totals.pointsToUse,
+      billDiscount: totals.billDiscount > 0 ? totals.billDiscount : undefined,
+      offlineCreated: isOffline,
+      ...(isOffline ? { createdAt: new Date().toISOString() } : {}),
+    };
+
+    /* 1. ALWAYS write to the offline queue first */
+    try {
+      await offlineQueue.enqueue({ clientId, payload, status: "pending", createdAt: Date.now() });
+      const c = await offlineQueue.count();
+      setUnsynced(c.unsynced);
+    } catch {
+      /* queue write failed (private mode?) — continue with direct post */
+    }
+
+    try {
+      /* 2. M-Pesa STK push (online only) */
+      if (paymentMethod === "M-Pesa") {
+        const phone = customer?.phone ?? "0712345678";
+        if (isOffline) {
+          toast({ title: "Queued — STK will fire on sync", description: "Sale stored on this device" });
+        } else {
+          setStk({ open: true, phase: "pending", phone, id: null, message: null });
+          try {
+            const init = await api.post<{ ok: boolean; checkoutRequestId: string; customerMessage: string }>(
+              "/api/mpesa/stk",
+              { phone, amount: totals.total, receiptNo: null }
+            );
+            setStk((s) => ({ ...s, id: init.checkoutRequestId, message: init.customerMessage }));
+
+            let status: "Pending" | "Success" = "Pending";
+            const deadline = Date.now() + 10_000;
+            while (status !== "Success" && Date.now() < deadline) {
+              await sleep(1500);
+              const st = await api.get<{ status: "Pending" | "Success" }>(`/api/mpesa/stk?id=${init.checkoutRequestId}`);
+              status = st.status;
+            }
+            if (status !== "Success") {
+              toast({ title: "STK not confirmed in 10s", description: "Confirm the payment on the phone — sale continues." });
+            }
+            setStk((s) => ({ ...s, phase: "success" }));
+            await sleep(500);
+            setStk((s) => ({ ...s, open: false }));
+          } catch (e) {
+            setStk((s) => ({ ...s, open: false }));
+            await markQueue(clientId, "failed", e instanceof Error ? e.message : "STK failed");
+            toast({
+              title: "M-Pesa STK failed",
+              description: e instanceof Error ? e.message : "Could not reach Daraja",
+              variant: "destructive",
+            });
+            setPaying(false);
+            return;
+          }
+        }
+      }
+
+      /* 3. Post the sale (online) or resolve offline */
+      if (isOffline) {
+        const offlineSale = buildOfflineSale(payload, clientId, totals);
+        const loyalty = {
+          earned: offlineSale.pointsEarned,
+          balance: Math.max(0, (customer?.loyaltyPoints ?? 0) - totals.pointsToUse + offlineSale.pointsEarned),
+          redeemed: totals.pointsToUse,
+        };
+        setSuccess({ sale: offlineSale, loyalty, offline: true });
+        toast({ title: "Sale saved offline — will auto-sync", description: KES(totals.total) });
+        setPaying(false);
+        return;
+      }
+
+      // raw fetch here on purpose: we need the structured 403 {blocked} body for POS credit blocking
+      const res = await fetch("/api/sales", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.status === 403) {
+        const data = (await res.json().catch(() => null)) as { blocked?: { reason: string; overdueDays: number } } | null;
+        const reason = data?.blocked?.reason ?? "Credit sale blocked";
+        await markQueue(clientId, "failed", reason);
+        setBlocked(data?.blocked ?? { reason, overdueDays: 0 });
+        setPaying(false);
+        return;
+      }
+
+      if (!res.ok) {
+        const data = (await res.json().catch(() => null)) as { error?: string } | null;
+        const message = data?.error ?? `Sale failed (${res.status})`;
+        await markQueue(clientId, "failed", message);
+        toast({ title: "Sale rejected", description: message, variant: "destructive" });
+        setPaying(false);
+        return;
+      }
+
+      const data = (await res.json()) as SaleResult;
+      if (!data.ok || !data.sale) {
+        const message = data.error ?? "Sale failed on server";
+        await markQueue(clientId, "failed", message);
+        toast({ title: "Sale rejected", description: message, variant: "destructive" });
+        setPaying(false);
+        return;
+      }
+
+      await markQueue(clientId, "synced");
+      setSuccess({ sale: data.sale, loyalty: data.loyalty ?? null, offline: false });
+      toast({ title: `✅ ${data.sale.receiptNo} recorded`, description: `${paymentMethod} • ${KES(data.sale.total)}` });
+      setCatalogNonce((n) => n + 1); // refresh stock badges after server decrement
+    } catch (e) {
+      /* network dropped mid-payment → keep queued, show offline-queued receipt */
+      const offlineSale = buildOfflineSale(payload, clientId, totals);
+      const loyalty = {
+        earned: offlineSale.pointsEarned,
+        balance: Math.max(0, (customer?.loyaltyPoints ?? 0) - totals.pointsToUse + offlineSale.pointsEarned),
+        redeemed: totals.pointsToUse,
+      };
+      setSuccess({ sale: offlineSale, loyalty, offline: true });
+      toast({
+        title: "Sale saved offline — will auto-sync",
+        description: e instanceof Error ? e.message : KES(totals.total),
+      });
+    } finally {
+      setPaying(false);
+    }
+  };
+
+  /* ── render ────────────────────────────────────────────────── */
+
+  const billNum = Number(billDiscount) || 0;
+
+  return (
+    <div className="flex min-h-[620px] flex-col overflow-hidden rounded-2xl border border-[#DFE1E6] bg-white shadow-sm lg:h-full">
+      {/* header strip */}
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#DFE1E6] bg-[#FAFBFC] px-4 py-2.5">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#0052CC]">
+            <div className="h-5 w-5">
+              <DukaMark white />
+            </div>
+          </div>
+          <div>
+            <p className="font-display text-[14px] font-bold leading-tight text-[#172B4D]">DukaFlow POS</p>
+            <p className="text-[11px] text-[#6B778C]">
+              {activeStore ? activeStore.name : "All Stores"} • {user?.name ?? "Guest"} ({user?.role ?? "Staff"})
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-bold",
+              online ? "border-[#C8E6C9] bg-[#E8F5E9] text-[#1B7A2E]" : "border-[#FFE0B2] bg-[#FFF8E1] text-[#B8860B]"
+            )}
+          >
+            <span className={cn("h-2 w-2 rounded-full", online ? "animate-pulse bg-[#00C853]" : "bg-[#FFAB00]")} />
+            {online ? "Online • Auto-sync" : "Offline mode"}
+          </span>
+          {unsynced > 0 && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-[#FFF0E5] px-2.5 py-1 text-[11px] font-bold text-[#D04A1E]">
+              <Package size={11} /> {unsynced} queued
+            </span>
+          )}
+          <span className="inline-flex items-center gap-1 rounded-full border border-[#C8E6C9] bg-[#E8F5E9] px-2.5 py-1 text-[11px] font-bold text-[#1B7A2E]">
+            <Check size={11} /> Offline-ready
+          </span>
+        </div>
+      </div>
+
+      {/* body */}
+      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-12">
+        {/* ── LEFT: catalog ─────────────────────────────────── */}
+        <div className="flex min-h-0 flex-col bg-[#F4F5F7] lg:col-span-7">
+          {/* search */}
+          <div className="flex items-center gap-3 p-4 pb-2">
+            <div className="relative max-w-[520px] flex-1">
+              <span
+                className={cn(
+                  "absolute left-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg",
+                  searchFocus ? "df-barcode-pulse bg-[#FFF8E1] text-[#B8860B]" : "bg-[#F4F5F7] text-[#6B778C]"
+                )}
+              >
+                {searchFocus ? <ScanBarcode size={15} /> : <Search size={15} />}
+              </span>
+              <Input
+                ref={searchRef}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onFocus={() => setSearchFocus(true)}
+                onBlur={() => setSearchFocus(false)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && products.length > 0) {
+                    addToCart(products[0]);
+                    toast({ title: `${products[0].name} added`, description: KES(products[0].price) });
+                    setSearch("");
+                  }
+                }}
+                placeholder="Scan barcode or search items… (F2)"
+                className="h-10 rounded-xl border-[#DFE1E6] bg-white pl-11 pr-10 text-[13px]"
+              />
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md border border-[#DFE1E6] bg-[#FAFBFC] px-1.5 py-0.5 text-[10px] font-bold text-[#6B778C]">
+                F2
+              </span>
+            </div>
+          </div>
+
+          {/* category pills */}
+          <div className="df-scroll flex items-center gap-1.5 overflow-x-auto px-4 pb-2">
+            {categories.map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => setCategory(c)}
+                className={cn(
+                  "whitespace-nowrap rounded-full border px-3 py-1.5 text-[12px] font-semibold transition",
+                  category === c
+                    ? "border-[#0052CC] bg-[#0052CC] text-white"
+                    : "border-[#DFE1E6] bg-white text-[#6B778C] hover:border-[#0052CC]/40"
+                )}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+
+          {/* customer strip */}
+          <div className="flex items-center justify-between gap-3 border-b border-[#DFE1E6] bg-white px-4 py-2.5">
+            {customer ? (
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#172B4D] text-[11px] font-bold text-white">
+                  {initials(customer.name)}
+                </span>
+                <div className="min-w-0">
+                  <p className="flex items-center gap-1.5 truncate text-[13px] font-semibold text-[#172B4D]">
+                    {customer.name} <TierBadge tier={customer.tier} />
+                  </p>
+                  <p className="text-[11px] text-[#6B778C]">{customer.phone}</p>
+                </div>
+                <button
+                  type="button"
+                  aria-label="Clear customer"
+                  onClick={() => {
+                    setCustomer(null);
+                    setUsePoints(false);
+                  }}
+                  className="ml-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[#DFE1E6] text-[#6B778C] transition hover:text-[#FF5630]"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#DFE1E6] text-[#6B778C]">
+                  <Users size={14} />
+                </span>
+                <div>
+                  <p className="text-[13px] font-semibold text-[#172B4D]">Walk-in customer</p>
+                  <p className="text-[11px] text-[#6B778C]">No loyalty • No debt tracking</p>
+                </div>
+              </div>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setCustQuery("");
+                setPickerOpen(true);
+              }}
+              className="h-8 shrink-0 rounded-full border-[#DFE1E6] bg-white px-3 text-[12px] font-semibold text-[#172B4D]"
+            >
+              {customer ? "Change" : "Select customer"}
+            </Button>
+          </div>
+
+          {/* product grid */}
+          <div className="df-scroll min-h-0 flex-1 overflow-y-auto p-4 pt-3">
+            {productsLoading ? (
+              <div className="grid grid-cols-2 gap-3 xl:grid-cols-3">
+                {Array.from({ length: 9 }).map((_, i) => (
+                  <Skeleton key={i} className="h-[168px] rounded-2xl" />
+                ))}
+              </div>
+            ) : products.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-[#DFE1E6] bg-white/70 py-12 text-center">
+                <Package size={28} className="mx-auto mb-2 text-[#6B778C]" />
+                <p className="font-display text-[14px] font-semibold text-[#172B4D]">No products found</p>
+                <p className="mt-1 text-[12px] text-[#6B778C]">Try another search, category or store.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3 xl:grid-cols-3">
+                {products.map((p) => {
+                  const qty = stockQty(p, activeStoreId);
+                  const out = qty <= 0;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      disabled={out}
+                      onClick={() => addToCart(p)}
+                      className={cn(
+                        "group flex flex-col rounded-2xl border border-[#DFE1E6] bg-white p-3 text-left shadow-sm transition hover:shadow-md",
+                        out && "opacity-60"
+                      )}
+                    >
+                      <div className="relative flex h-14 items-center justify-center rounded-xl bg-[#F4F5F7] text-2xl">
+                        {p.emoji}
+                        {out && (
+                          <span className="absolute inset-0 flex items-center justify-center rounded-xl bg-white/70">
+                            <span className="rounded-full bg-[#172B4D] px-2 py-1 text-[10px] font-bold text-white">
+                              Out of Stock
+                            </span>
+                          </span>
+                        )}
+                        <span className="absolute -top-1.5 right-1.5">
+                          <StockBadge qty={qty} />
+                        </span>
+                      </div>
+                      <p className="mt-2 line-clamp-2 text-[13px] font-semibold leading-tight text-[#172B4D]">{p.name}</p>
+                      <p className="mt-0.5 truncate font-mono text-[11px] text-[#6B778C]">{p.sku}</p>
+                      <div className="mt-auto flex items-center justify-between pt-2">
+                        <span className="font-display text-[13px] font-bold text-[#172B4D]">{KES(p.price)}</span>
+                        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#0052CC] text-white transition group-hover:bg-[#0041A8] group-disabled:bg-[#DFE1E6]">
+                          <Plus size={14} />
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── RIGHT: cart ───────────────────────────────────── */}
+        <div className="flex min-h-0 flex-col border-t border-[#DFE1E6] bg-white lg:col-span-5 lg:border-l lg:border-t-0">
+          {/* customer card */}
+          {customer ? (
+            <div className="relative border-b border-[#DFE1E6] bg-[#FAFBFC] p-4 pt-5">
+              <div className="absolute inset-x-0 top-0 h-1.5" style={{ background: tierColor(customer.tier) }} />
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#172B4D] text-[12px] font-bold text-white">
+                    {initials(customer.name)}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="flex items-center gap-1.5 truncate text-sm font-semibold text-[#172B4D]">
+                      {customer.name} <TierBadge tier={customer.tier} />
+                    </p>
+                    <p className="text-[11px] text-[#6B778C]">{customer.phone}</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  aria-label="Clear customer"
+                  onClick={() => {
+                    setCustomer(null);
+                    setUsePoints(false);
+                  }}
+                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[#DFE1E6] bg-white text-[#6B778C] transition hover:text-[#FF5630]"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+
+              <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
+                <div className="rounded-lg border border-[#DFE1E6] bg-white p-2">
+                  <p className="flex items-center gap-1 font-semibold text-[#6B778C]">
+                    <Sparkles size={11} className="text-[#B8860B]" /> Points
+                  </p>
+                  <p className="mt-0.5 font-bold text-[#172B4D]">{customer.loyaltyPoints} pts</p>
+                </div>
+                <div
+                  className={cn(
+                    "rounded-lg border p-2",
+                    customer.debtBalance > 0 ? "border-[#FFCDD2] bg-[#FFEBEE]" : "border-[#DFE1E6] bg-white"
+                  )}
+                >
+                  <p className="flex items-center gap-1 font-semibold text-[#6B778C]">
+                    <HandCoins size={11} /> Debt
+                  </p>
+                  <p className={cn("mt-0.5 font-bold", customer.debtBalance > 0 ? "text-[#C62828]" : "text-[#172B4D]")}>
+                    {KES(customer.debtBalance)}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-[#DFE1E6] bg-white p-2">
+                  <p className="flex items-center gap-1 font-semibold text-[#6B778C]">
+                    <Gift size={11} className="text-[#0052CC]" /> Gift Card
+                  </p>
+                  <p className="mt-0.5 font-bold text-[#172B4D]">{KES(customer.giftCardBalance)}</p>
+                </div>
+                <div className="rounded-lg border border-[#DFE1E6] bg-white p-2">
+                  <p className="flex items-center gap-1 font-semibold text-[#6B778C]">
+                    <Shield size={11} className="text-[#1B7A2E]" /> Credit limit
+                  </p>
+                  <p className="mt-0.5 font-bold text-[#172B4D]">{KES(customer.creditLimit, true)}</p>
+                  {customer.creditLimit > 0 && (
+                    <div className="mt-1 h-1 rounded-full bg-[#F4F5F7]">
+                      <div
+                        className="h-1 rounded-full bg-[#FF5630]"
+                        style={{ width: `${Math.min(100, Math.round((customer.debtBalance / customer.creditLimit) * 100))}%` }}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="border-b border-[#DFE1E6] bg-[#FAFBFC] p-4">
+              <div className="flex items-center justify-between gap-2 rounded-xl border border-dashed border-[#DFE1E6] p-3">
+                <div className="flex items-center gap-2.5">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#DFE1E6] text-[#6B778C]">
+                    <Users size={15} />
+                  </span>
+                  <div>
+                    <p className="text-[13px] font-semibold text-[#172B4D]">Walk-in customer</p>
+                    <p className="text-[11px] text-[#6B778C]">No loyalty • No debt</p>
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setCustQuery("");
+                    setPickerOpen(true);
+                  }}
+                  className="h-8 rounded-full border-[#DFE1E6] bg-white px-3 text-[12px] font-semibold text-[#172B4D]"
+                >
+                  Select customer
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* cart lines */}
+          <div className="df-scroll min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
+            {cart.length === 0 ? (
+              <div className="flex h-full flex-col items-center justify-center py-10 text-center">
+                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#F4F5F7] text-[#6B778C]">
+                  <ShoppingCart size={20} />
+                </div>
+                <p className="font-display text-[14px] font-semibold text-[#172B4D]">Cart empty — scan or tap a product</p>
+                <p className="mt-1 text-[12px] text-[#6B778C]">Works fully offline; sales queue and auto-sync.</p>
+              </div>
+            ) : (
+              cart.map((l) => (
+                <div
+                  key={l.productId}
+                  className="flex gap-3 rounded-xl border border-[#F4F5F7] bg-[#FAFBFC] p-2 transition hover:border-[#DFE1E6]"
+                >
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[#DFE1E6] bg-white text-lg">
+                    {l.emoji}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[13px] font-semibold text-[#172B4D]">{l.name}</p>
+                    <p className="truncate text-[11px] text-[#6B778C]">
+                      {l.sku} • {KES(l.unitPrice)}
+                    </p>
+                    <div className="mt-1 flex items-center gap-2">
+                      <div className="flex items-center gap-1 rounded-full border border-[#DFE1E6] bg-white px-1">
+                        <button
+                          type="button"
+                          aria-label="Decrease quantity"
+                          onClick={() => setLineQty(l.productId, l.qty - 1)}
+                          className="flex h-7 w-7 items-center justify-center rounded-full text-[#6B778C] transition hover:bg-[#F4F5F7] hover:text-[#172B4D]"
+                        >
+                          <Minus size={12} />
+                        </button>
+                        <input
+                          value={l.qty}
+                          onChange={(e) => setLineQty(l.productId, Number(e.target.value.replace(/\D/g, "")) || 1)}
+                          inputMode="numeric"
+                          aria-label={`Quantity for ${l.name}`}
+                          className="w-9 border-0 bg-transparent text-center text-[12px] font-bold text-[#172B4D] outline-none"
+                        />
+                        <button
+                          type="button"
+                          aria-label="Increase quantity"
+                          onClick={() => setLineQty(l.productId, l.qty + 1)}
+                          className="flex h-7 w-7 items-center justify-center rounded-full text-[#6B778C] transition hover:bg-[#F4F5F7] hover:text-[#172B4D]"
+                        >
+                          <Plus size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 flex-col items-end justify-between">
+                    <p className="whitespace-nowrap text-[13px] font-bold text-[#172B4D]">{KES(l.unitPrice * l.qty)}</p>
+                    <button
+                      type="button"
+                      aria-label={`Remove ${l.name}`}
+                      onClick={() => removeLine(l.productId)}
+                      className="text-[#FF5630] transition hover:opacity-70"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* totals footer */}
+          <div className="space-y-3 border-t border-[#DFE1E6] bg-white p-4">
+            {/* promo */}
+            {promo ? (
+              <div className="flex items-center justify-between rounded-xl border border-[#C8E6C9] bg-[#E8F5E9] px-3 py-2">
+                <span className="flex items-center gap-1.5 text-[12px] font-bold text-[#1B7A2E]">
+                  <Check size={13} /> {promo}
+                  {totals.promoEligible ? (
+                    <span>−{KES(totals.promoDiscount)}</span>
+                  ) : (
+                    <span className="font-semibold text-[#B8860B]">needs min spend KES 5,000</span>
+                  )}
+                </span>
+                <button type="button" aria-label="Remove promo" onClick={() => setPromo(null)} className="text-[#6B778C] hover:text-[#FF5630]">
+                  <X size={13} />
+                </button>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <Input
+                  value={promoInput}
+                  onChange={(e) => setPromoInput(e.target.value.toUpperCase())}
+                  onKeyDown={(e) => e.key === "Enter" && applyPromo()}
+                  placeholder="Promo code (e.g. GOLD10)"
+                  className="h-9 flex-1 rounded-xl border-[#DFE1E6] bg-[#FAFBFC] text-[13px]"
+                />
+                <Button
+                  variant="outline"
+                  onClick={applyPromo}
+                  className="h-9 rounded-xl border-[#DFE1E6] bg-white px-4 text-[12px] font-bold text-[#172B4D]"
+                >
+                  Apply
+                </Button>
+              </div>
+            )}
+
+            {/* bill discount + loyalty */}
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label htmlFor="bill-discount" className="text-[10px] font-semibold uppercase tracking-wide text-[#6B778C]">
+                  Bill discount KES
+                </label>
+                <Input
+                  id="bill-discount"
+                  type="number"
+                  min={0}
+                  value={billDiscount}
+                  onChange={(e) => setBillDiscount(e.target.value)}
+                  placeholder="0"
+                  className="mt-1 h-9 rounded-xl border-[#DFE1E6] bg-[#FAFBFC] text-[13px]"
+                />
+              </div>
+              {customer && (
+                <div className="rounded-xl border border-[#DFE1E6] bg-[#FAFBFC] px-3 py-1.5">
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={usePoints}
+                      onCheckedChange={setUsePoints}
+                      disabled={customer.loyaltyPoints <= 0}
+                      className="data-[state=checked]:bg-[#00C853]"
+                    />
+                    <p className="text-[12px] font-semibold text-[#172B4D]">Use points</p>
+                  </div>
+                  <p className="mt-0.5 text-[10px] leading-tight text-[#6B778C]">
+                    {customer.loyaltyPoints} pts available (1 pt = KES {pointValue})
+                    {totals.pointsToUse > 0 && (
+                      <b className="text-[#1B7A2E]">
+                        {" "}
+                        • −KES {totals.pointsValue.toLocaleString()} ({totals.pointsToUse} pts used)
+                      </b>
+                    )}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* totals */}
+            <div className="space-y-1.5 text-[13px]">
+              <div className="flex justify-between">
+                <span className="text-[#6B778C]">Subtotal</span>
+                <span className="font-semibold text-[#172B4D]">{KES(totals.subtotal)}</span>
+              </div>
+              {totals.tierDiscount > 0 && customer && (
+                <div className="flex justify-between">
+                  <span className="text-[#6B778C]">
+                    Discount <span className="font-medium text-[#B8860B]">({customer.tier} {Math.round(totals.tierPct * 100)}% applied)</span>
+                  </span>
+                  <span className="font-semibold text-[#FF5630]">−{KES(totals.tierDiscount)}</span>
+                </div>
+              )}
+              {promo && totals.promoEligible && (
+                <div className="flex justify-between">
+                  <span className="text-[#6B778C]">Promo {promo}</span>
+                  <span className="font-semibold text-[#FF5630]">−{KES(totals.promoDiscount)}</span>
+                </div>
+              )}
+              {billNum > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-[#6B778C]">Bill discount</span>
+                  <span className="font-semibold text-[#FF5630]">−{KES(totals.billDiscount)}</span>
+                </div>
+              )}
+              {totals.pointsToUse > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-[#6B778C]">Points redemption</span>
+                  <span className="font-semibold text-[#FF5630]">−{KES(totals.pointsValue)}</span>
+                </div>
+              )}
+              <div className="flex justify-between">
+                <span className="text-[#6B778C]">VAT {Math.round(vatRate * 100)}%</span>
+                <span className="font-semibold text-[#172B4D]">{KES(totals.vat)}</span>
+              </div>
+              <div className="flex items-center justify-between border-t border-dashed border-[#DFE1E6] pt-2">
+                <span className="font-display text-[14px] font-bold text-[#172B4D]">GRAND TOTAL</span>
+                <span className="font-display text-[22px] font-extrabold text-[#172B4D]">{KES(totals.total)}</span>
+              </div>
+            </div>
+
+            {/* payment modes */}
+            <div className="grid grid-cols-3 gap-2">
+              {PAY_METHODS.map((m) => {
+                const active = paymentMethod === m.method;
+                return (
+                  <button
+                    key={m.method}
+                    type="button"
+                    onClick={() => setPaymentMethod(m.method)}
+                    className={cn(
+                      "flex h-[52px] flex-col items-center justify-center gap-1 rounded-xl border px-1 text-[10px] font-bold leading-tight transition",
+                      active
+                        ? "border-[#172B4D] bg-[#172B4D] text-white shadow-md"
+                        : "border-[#DFE1E6] bg-[#FAFBFC] hover:bg-white"
+                    )}
+                    style={active ? undefined : { color: m.color }}
+                  >
+                    <m.icon size={16} />
+                    {m.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* PAY */}
+            <Button
+              type="button"
+              disabled={cart.length === 0 || paying}
+              onClick={() => void handlePay()}
+              className="h-12 w-full rounded-xl bg-[#0052CC] text-[15px] font-bold text-white shadow-[0_8px_24px_rgba(0,82,204,0.35)] hover:bg-[#0041A8]"
+            >
+              {paying ? <Loader2 size={18} className="animate-spin" /> : <ShoppingBag size={18} />}
+              {paying ? "Processing…" : `PAY ${KES(totals.total)}`}
+            </Button>
+
+            {/* peripheral row */}
+            <div className="flex items-center justify-between text-[11px] text-[#6B778C]">
+              <button
+                type="button"
+                onClick={() => toast({ title: "Receipt sent to 80mm printer" })}
+                className="flex items-center gap-1 transition hover:text-[#172B4D]"
+              >
+                <Printer size={12} /> 80mm receipt
+              </button>
+              <button
+                type="button"
+                onClick={() => toast({ title: "💵 Drawer kicked" })}
+                className="flex items-center gap-1 font-semibold transition hover:text-[#172B4D]"
+              >
+                <Wallet size={12} /> Cash drawer
+              </button>
+              <button
+                type="button"
+                onClick={() => toast({ title: "Customer display mirrored" })}
+                className="flex items-center gap-1 transition hover:text-[#172B4D]"
+              >
+                <MonitorSmartphone size={12} /> Display
+              </button>
+            </div>
+            <p className="text-center text-[10px] text-[#6B778C]">
+              Prices include 0% rating for exempt items — VAT auto-calculated
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* ── customer picker dialog ────────────────────────────── */}
+      <Dialog
+        open={pickerOpen}
+        onOpenChange={(o) => {
+          setPickerOpen(o);
+          if (!o) setCustQuery("");
+        }}
+      >
+        <DialogContent className="max-w-[520px] overflow-hidden rounded-2xl p-0">
+          <div className="border-b border-[#DFE1E6] bg-[#FAFBFC] p-4">
+            <DialogHeader>
+              <DialogTitle className="font-display text-[15px] font-bold text-[#172B4D]">Select customer</DialogTitle>
+              <DialogDescription className="text-[12px]">
+                Search by name or phone (e.g. 0712), or create a new walk-in signup.
+              </DialogDescription>
+            </DialogHeader>
+            <Input
+              value={custQuery}
+              onChange={(e) => setCustQuery(e.target.value)}
+              placeholder="Search name or phone…"
+              autoFocus
+              className="mt-3 h-10 rounded-xl border-[#DFE1E6] bg-white text-[13px]"
+            />
+          </div>
+          <div className="df-scroll max-h-[300px] overflow-y-auto p-2">
+            {custLoading ? (
+              <div className="space-y-2 p-1">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <Skeleton key={i} className="h-12 rounded-xl" />
+                ))}
+              </div>
+            ) : custResults.length === 0 ? (
+              <p className="py-8 text-center text-[12px] text-[#6B778C]">No customers match — create one below.</p>
+            ) : (
+              custResults.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => {
+                    setCustomer(c);
+                    setPickerOpen(false);
+                    setCustQuery("");
+                  }}
+                  className="flex w-full items-center gap-3 rounded-xl border border-transparent p-2 text-left transition hover:border-[#DFE1E6] hover:bg-[#FAFBFC]"
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#172B4D] text-[11px] font-bold text-white">
+                    {initials(c.name)}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="flex items-center gap-1.5 truncate text-[13px] font-semibold text-[#172B4D]">
+                      {c.name} <TierBadge tier={c.tier} />
+                    </p>
+                    <p className="truncate text-[11px] text-[#6B778C]">
+                      {c.phone}
+                      {c.debtBalance > 0 && <b className="text-[#FF5630]"> • Debt {KES(c.debtBalance)}</b>}
+                    </p>
+                  </div>
+                  <span className="shrink-0 text-[11px] font-bold text-[#6B778C]">{c.loyaltyPoints} pts</span>
+                </button>
+              ))
+            )}
+          </div>
+          <div className="border-t border-[#DFE1E6] bg-[#FAFBFC] p-4">
+            <p className="text-[12px] font-bold text-[#172B4D]">＋ New customer</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Input
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="Full name"
+                className="h-9 min-w-[130px] flex-1 rounded-xl border-[#DFE1E6] bg-white text-[13px]"
+              />
+              <Input
+                value={newPhone}
+                onChange={(e) => setNewPhone(e.target.value)}
+                placeholder="07xx xxx xxx"
+                inputMode="tel"
+                className="h-9 min-w-[130px] flex-1 rounded-xl border-[#DFE1E6] bg-white text-[13px]"
+              />
+              <Button
+                disabled={!newName.trim() || !newPhone.trim() || creating}
+                onClick={() => void createCustomer()}
+                className="h-9 rounded-xl bg-[#0052CC] px-4 text-[12px] font-bold text-white hover:bg-[#0041A8]"
+              >
+                {creating ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} Add
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── M-Pesa STK dialog ─────────────────────────────────── */}
+      <Dialog open={stk.open} onOpenChange={(o) => !o && setStk((s) => ({ ...s, open: false }))}>
+        <DialogContent className="max-w-[420px] rounded-2xl" showCloseButton={false}>
+          <DialogTitle className="sr-only">M-Pesa STK Push</DialogTitle>
+          <DialogDescription className="sr-only">
+            Confirm the M-Pesa payment on the customer&apos;s phone.
+          </DialogDescription>
+          <div className="flex flex-col items-center py-4 text-center">
+            <div
+              className={cn(
+                "flex h-14 w-14 items-center justify-center rounded-2xl",
+                stk.phase === "success" ? "bg-[#E8F5E9] text-[#00C853]" : "bg-[#E9F2FF] text-[#0052CC]"
+              )}
+            >
+              {stk.phase === "success" ? <Check size={26} /> : <Loader2 size={26} className="animate-spin" />}
+            </div>
+            <h3 className="font-display mt-3 text-[16px] font-bold text-[#172B4D]">M-Pesa STK Push</h3>
+            <p className="mt-1 text-[13px] text-[#6B778C]">
+              {stk.phase === "success" ? "Payment confirmed" : "Enter M-Pesa PIN on your phone"}
+            </p>
+            <p className="mt-2 rounded-full bg-[#F4F5F7] px-3 py-1 font-mono text-[12px] font-bold text-[#172B4D]">
+              {stk.phone} • {KES(totals.total)}
+            </p>
+            {stk.message && <p className="mt-2 max-w-[300px] text-[11px] text-[#6B778C]">{stk.message}</p>}
+            {stk.phase === "pending" && (
+              <p className="mt-3 text-[11px] font-semibold text-[#B8860B]">Polling Daraja simulator…</p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── success / offline-queued modal ────────────────────── */}
+      <Dialog open={!!success} onOpenChange={(o) => !o && resetTransaction()}>
+        <DialogContent className="max-w-[560px] overflow-hidden rounded-[24px] p-0">
+          <DialogTitle className="sr-only">Sale receipt</DialogTitle>
+          <DialogDescription className="sr-only">Sale completed successfully.</DialogDescription>
+          {success && (
+            <>
+              <div className="df-print-area bg-white p-6 text-center md:p-8">
+                <div className="df-point-pop mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-[#E8F5E9]">
+                  <Check size={36} className="text-[#00C853]" />
+                </div>
+                <h2 className="font-display mt-4 text-[24px] font-bold text-[#172B4D]">
+                  {success.offline ? "Sale Queued Offline!" : "Sale Complete!"}
+                </h2>
+                <p className="mt-1 text-[14px] text-[#6B778C]">
+                  <span className="font-mono font-semibold text-[#172B4D]">{success.sale.receiptNo}</span> •{" "}
+                  {success.sale.paymentMethod}
+                  {success.offline && (
+                    <span className="ml-2 rounded-full bg-[#FFF8E1] px-2 py-0.5 text-[10px] font-bold text-[#B8860B]">
+                      OFFLINE QUEUED
+                    </span>
+                  )}
+                </p>
+
+                {/* KRA eTIMS QR */}
+                {success.sale.qrCodeBase64 && !success.offline && (
+                  <div className="mx-auto mt-5 w-fit rounded-xl border border-[#DFE1E6] p-3">
+                    <img
+                      src={success.sale.qrCodeBase64}
+                      alt="KRA verification QR"
+                      width={120}
+                      height={120}
+                      className="rounded-lg"
+                    />
+                    <p className="mt-2 text-[10px] font-medium text-[#6B778C]">
+                      KRA Verification QR — CU:{" "}
+                      <span className="font-mono">{success.sale.cuInvoiceNumber ?? "—"}</span>
+                    </p>
+                  </div>
+                )}
+
+                {/* loyalty QR */}
+                {success.loyalty && success.sale.customerId && !success.offline && (
+                  <div className="mt-4 flex items-center justify-center gap-4 rounded-xl border border-[#FFE082] bg-[#FFFDE7] p-3">
+                    <QrImage
+                      text={`DUKAFLOW-LOYALTY:${success.sale.customerId}:${success.loyalty.balance}`}
+                      size={100}
+                      alt="Loyalty QR"
+                    />
+                    <div className="text-left">
+                      <p className="df-point-pop font-display text-[15px] font-bold text-[#B8860B]">
+                        +{success.loyalty.earned} points earned
+                      </p>
+                      <p className="mt-0.5 text-[12px] text-[#6B778C]">
+                        Balance {success.loyalty.balance} pts • {customer?.name ?? "Customer"}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* totals recap */}
+                <div className="mx-auto mt-5 w-full max-w-[320px] space-y-1.5 rounded-xl border border-[#DFE1E6] bg-[#FAFBFC] p-3 text-[12px]">
+                  <div className="flex justify-between">
+                    <span className="text-[#6B778C]">Subtotal</span>
+                    <span className="font-semibold text-[#172B4D]">{KES(success.sale.subtotal)}</span>
+                  </div>
+                  {success.sale.discount > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-[#6B778C]">Discount</span>
+                      <span className="font-semibold text-[#FF5630]">−{KES(success.sale.discount)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between">
+                    <span className="text-[#6B778C]">VAT</span>
+                    <span className="font-semibold text-[#172B4D]">{KES(success.sale.vat)}</span>
+                  </div>
+                  <div className="flex justify-between border-t border-dashed border-[#DFE1E6] pt-1.5">
+                    <span className="font-bold text-[#172B4D]">Total</span>
+                    <span className="font-display text-[15px] font-extrabold text-[#172B4D]">{KES(success.sale.total)}</span>
+                  </div>
+                </div>
+                {success.offline && (
+                  <p className="mt-3 text-[11px] text-[#6B778C]">
+                    Stored on this device — will sync automatically when back online.
+                  </p>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-2 border-t border-[#DFE1E6] bg-[#FAFBFC] p-4">
+                <Button
+                  variant="outline"
+                  onClick={() => window.print()}
+                  className="h-10 rounded-xl border-[#DFE1E6] bg-white text-[13px] font-semibold text-[#172B4D]"
+                >
+                  <Printer size={14} /> Print 80mm
+                </Button>
+                <Button
+                  onClick={resetTransaction}
+                  className="h-10 rounded-xl bg-[#172B4D] text-[13px] font-bold text-white hover:bg-[#0F1E38]"
+                >
+                  <ShoppingBag size={14} /> New Sale
+                </Button>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── credit-sale blocked alert ─────────────────────────── */}
+      <AlertDialog open={!!blocked} onOpenChange={(o) => !o && setBlocked(null)}>
+        <AlertDialogContent className="max-w-[460px] rounded-2xl border-[#FFCDD2]">
+          <AlertDialogHeader>
+            <div className="mb-1 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#FFEBEE] text-[#FF5630]">
+              <Ban size={22} />
+            </div>
+            <AlertDialogTitle className="font-display text-[#FF5630]">Credit Sale Blocked</AlertDialogTitle>
+            <AlertDialogDescription className="text-[13px] font-medium text-[#172B4D]">
+              {blocked?.reason}
+            </AlertDialogDescription>
+            <p className="text-[12px] text-[#6B778C]">
+              Clear the block at Manager — record a debt payment on the Debts screen, then retry the sale.
+            </p>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction className="rounded-xl bg-[#FF5630] font-bold text-white hover:bg-[#E14A28]">
+              Understood
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}

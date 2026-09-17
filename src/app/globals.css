@@ -1,0 +1,234 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-inter);
+  --font-display: var(--font-sora);
+  --font-mono: var(--font-geist-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  /* DukaFlow brand */
+  --color-df-blue: #0052cc;
+  --color-df-green: #00c853;
+  --color-df-red: #ff5630;
+  --color-df-navy: #172b4d;
+  --color-df-yellow: #ffab00;
+  --color-df-gray: #6b778c;
+  --color-df-line: #dfe1e6;
+  --color-df-bg: #f4f5f7;
+}
+
+:root {
+  --radius: 0.75rem;
+  --background: #f4f5f7;
+  --foreground: #172b4d;
+  --card: #ffffff;
+  --card-foreground: #172b4d;
+  --popover: #ffffff;
+  --popover-foreground: #172b4d;
+  --primary: #0052cc;
+  --primary-foreground: #ffffff;
+  --secondary: #f4f5f7;
+  --secondary-foreground: #172b4d;
+  --muted: #f4f5f7;
+  --muted-foreground: #6b778c;
+  --accent: #e9f2ff;
+  --accent-foreground: #0052cc;
+  --destructive: #ff5630;
+  --border: #dfe1e6;
+  --input: #dfe1e6;
+  --ring: #0052cc;
+  --chart-1: #0052cc;
+  --chart-2: #00c853;
+  --chart-3: #ff5630;
+  --chart-4: #ffab00;
+  --chart-5: #172b4d;
+  --sidebar: #172b4d;
+  --sidebar-foreground: #ffffff;
+  --sidebar-primary: #0052cc;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: rgba(255, 255, 255, 0.08);
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: rgba(255, 255, 255, 0.1);
+  --sidebar-ring: #0052cc;
+}
+
+.dark {
+  --background: #10182a;
+  --foreground: #f4f5f7;
+  --card: #172341;
+  --card-foreground: #f4f5f7;
+  --popover: #172341;
+  --popover-foreground: #f4f5f7;
+  --primary: #388bff;
+  --primary-foreground: #ffffff;
+  --secondary: #1d2b4d;
+  --secondary-foreground: #f4f5f7;
+  --muted: #1d2b4d;
+  --muted-foreground: #8993a7;
+  --accent: #1d2b4d;
+  --accent-foreground: #9dc6ff;
+  --destructive: #ff5630;
+  --border: rgba(255, 255, 255, 0.1);
+  --input: rgba(255, 255, 255, 0.15);
+  --ring: #388bff;
+  --chart-1: #388bff;
+  --chart-2: #00c853;
+  --chart-3: #ff5630;
+  --chart-4: #ffab00;
+  --chart-5: #8993a7;
+  --sidebar: #10182a;
+  --sidebar-foreground: #f4f5f7;
+  --sidebar-primary: #388bff;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: rgba(255, 255, 255, 0.06);
+  --sidebar-accent-foreground: #f4f5f7;
+  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-ring: #388bff;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  }
+  h1, h2, h3, h4, .font-display {
+    font-family: var(--font-sora), var(--font-inter), ui-sans-serif, sans-serif;
+  }
+}
+
+/* ── DukaFlow utilities ─────────────────────────────────────── */
+
+.font-display {
+  font-family: var(--font-sora), sans-serif;
+}
+
+/* slim scrollbars for panels & lists */
+.df-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #c1c7d0 transparent;
+}
+.df-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.df-scroll::-webkit-scrollbar-thumb {
+  background: #c1c7d0;
+  border-radius: 999px;
+}
+.df-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 80mm thermal receipt paper look */
+.df-thermal {
+  font-family: "IBM Plex Mono", "Courier New", monospace;
+  background: #fff;
+  clip-path: polygon(
+    0 0, 100% 0,
+    100% calc(100% - 6px), 96% 100%, 92% calc(100% - 6px), 88% 100%, 84% calc(100% - 6px), 80% 100%, 76% calc(100% - 6px), 72% 100%, 68% calc(100% - 6px), 64% 100%, 60% calc(100% - 6px), 56% 100%, 52% calc(100% - 6px), 48% 100%, 44% calc(100% - 6px), 40% 100%, 36% calc(100% - 6px), 32% 100%, 28% 100%, 24% calc(100% - 6px), 20% 100%, 16% calc(100% - 6px), 12% 100%, 8% calc(100% - 6px), 4% 100%, 0 calc(100% - 6px)
+  );
+}
+
+/* barcode pulse animation on POS search */
+@keyframes df-barcode-pulse {
+  0%, 100% { opacity: 1; transform: scaleX(1); }
+  50% { opacity: 0.45; transform: scaleX(0.96); }
+}
+.df-barcode-pulse {
+  animation: df-barcode-pulse 1.6s ease-in-out infinite;
+}
+
+/* success modal point burst */
+@keyframes df-point-pop {
+  0% { transform: scale(0.4); opacity: 0; }
+  60% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.df-point-pop {
+  animation: df-point-pop 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes df-slide-up {
+  from { transform: translateY(14px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.df-slide-up {
+  animation: df-slide-up 0.3s ease-out both;
+}
+
+@keyframes df-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.df-fade-in {
+  animation: df-fade-in 0.25s ease-out both;
+}
+
+/* kanban card grab feedback */
+.df-kanban-card {
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+.df-kanban-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(23, 43, 77, 0.12);
+}
+.df-kanban-card.df-dragging {
+  opacity: 0.45;
+  transform: rotate(1.5deg) scale(0.98);
+}
+
+/* gift card gradients */
+.df-gc-blue-green { background: linear-gradient(135deg, #0052cc 0%, #00c853 100%); }
+.df-gc-navy { background: linear-gradient(135deg, #172b4d 0%, #0052cc 100%); }
+.df-gc-gold { background: linear-gradient(135deg, #b8860b 0%, #ffd700 55%, #fff3b0 100%); }
+.df-gc-blue { background: linear-gradient(135deg, #0052cc 0%, #2684ff 100%); }
+.df-gc-green { background: linear-gradient(135deg, #00875a 0%, #00c853 100%); }
+.df-gc-navy-gold { background: linear-gradient(135deg, #172b4d 0%, #364f7a 45%, #b8860b 100%); }
+
+/* print media */
+@media print {
+  body * { visibility: hidden; }
+  .df-print-area, .df-print-area * { visibility: visible; }
+  .df-print-area { position: absolute; left: 0; top: 0; width: 80mm; }
+  .df-print-area-a4, .df-print-area-a4 * { visibility: visible; }
+  .df-print-area-a4 { position: absolute; left: 0; top: 0; width: 210mm; }
+}

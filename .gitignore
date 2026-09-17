@@ -1,2 +1,39 @@
-skills/
 node_modules/
+.next/
+out/
+build/
+dist/
+
+# env & logs
+.env
+*.log
+dev.log
+server.log
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# local db files (seed regenerates)
+db/*.db
+db/*.db-journal
+
+# tool results / agent context
+tool-results/
+agent-ctx/
+upload/
+download/
+skills/
+examples/
+tests/
+Caddyfile
+bun.lock
+
+tsconfig.tsbuildinfo
+worklog.md
+.zscripts/
+mini-services/
+download/
+next-env.d.ts

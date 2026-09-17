@@ -1,0 +1,306 @@
+// DukaFlow — Kenya Retail ERP + POS
+// Prisma schema (SQLite). All money values are KES.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Org structure ────────────────────────────────────────────────────────────
+
+model Store {
+  id        Int          @id @default(autoincrement())
+  name      String       @unique
+  location  String
+  isMain    Boolean      @default(false)
+  createdAt DateTime     @default(now())
+  stocks    StockLevel[]
+  sales     Sale[]
+  staff     Staff[]
+}
+
+model Staff {
+  id      Int     @id @default(autoincrement())
+  name    String
+  role    String // Cashier | Store Keeper | Sales | Manager | Owner | Accountant
+  pin     String // 4-digit POS login PIN (demo: stored plain)
+  color   String  @default("#0052CC")
+  onShift Boolean @default(false)
+  storeId Int?
+  store   Store?  @relation(fields: [storeId], references: [id])
+}
+
+// ─── Customers / loyalty / credit ────────────────────────────────────────────
+
+model Customer {
+  id              Int        @id @default(autoincrement())
+  name            String
+  phone           String     @unique
+  email           String?
+  tier            String     @default("Bronze") // Gold | Silver | Bronze
+  loyaltyPoints   Int        @default(0)
+  totalSpent      Float      @default(0)
+  debtBalance     Float      @default(0)
+  creditLimit     Float      @default(0)
+  giftCardBalance Float      @default(0)
+  birthday        DateTime?
+  lastVisit       String?
+  storeId         Int?
+  notes           String?
+  createdAt       DateTime   @default(now())
+  sales           Sale[]
+  debtPlans       DebtPlan[]
+  giftCards       GiftCard[]
+  smsLogs         SmsLog[]
+}
+
+// ─── Catalog & multi-store stock ─────────────────────────────────────────────
+
+model Product {
+  id        Int          @id @default(autoincrement())
+  name      String
+  sku       String       @unique
+  barcode   String       @unique
+  category  String
+  price     Float
+  cost      Float        @default(0)
+  unit      String       @default("pc")
+  emoji     String       @default("📦")
+  active    Boolean      @default(true)
+  stocks    StockLevel[]
+  saleItems SaleItem[]
+}
+
+model StockLevel {
+  id           Int     @id @default(autoincrement())
+  productId    Int
+  storeId      Int
+  qty          Float   @default(0)
+  reorderPoint Float   @default(10)
+  product      Product @relation(fields: [productId], references: [id])
+  store        Store   @relation(fields: [storeId], references: [id])
+
+  @@unique([productId, storeId])
+}
+
+model StockTransfer {
+  id          Int      @id @default(autoincrement())
+  productId   Int
+  fromStoreId Int
+  toStoreId   Int
+  qty         Float
+  status      String   @default("Completed")
+  createdAt   DateTime @default(now())
+}
+
+// ─── Sales (POS receipts + invoices) ─────────────────────────────────────────
+
+model Sale {
+  id              Int        @id @default(autoincrement())
+  receiptNo       String     @unique
+  storeId         Int
+  customerId      Int?
+  staffName       String     @default("Counter 1")
+  subtotal        Float
+  discount        Float      @default(0)
+  vat             Float      @default(0)
+  total           Float
+  paymentMethod   String // Cash | M-Pesa | Till | Paybill | Gift Card | Credit Sale | Card
+  pointsRedeemed  Int        @default(0)
+  pointsEarned    Int        @default(0)
+  tierAtSale      String?
+  promoCode       String?
+  status          String     @default("Completed")
+  kraStatus       String     @default("Pending") // Verified | Pending | Failed
+  cuInvoiceNumber String?
+  qrCodeBase64    String?
+  offlineCreated  Boolean    @default(false)
+  clientId        String? // offline queue dedupe key
+  syncedAt        DateTime?
+  createdAt       DateTime   @default(now())
+  items           SaleItem[]
+  store           Store      @relation(fields: [storeId], references: [id])
+  customer        Customer?  @relation(fields: [customerId], references: [id])
+
+  @@unique([clientId])
+}
+
+model SaleItem {
+  id        Int      @id @default(autoincrement())
+  saleId    Int
+  productId Int?
+  name      String
+  emoji     String   @default("📦")
+  qty       Float
+  unitPrice Float
+  discount  Float    @default(0)
+  total     Float
+  sale      Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product   Product? @relation(fields: [productId], references: [id])
+}
+
+// ─── Sales pipeline (Quotation → Proforma → Order → Invoiced → Paid) ─────────
+
+model PipelineDeal {
+  id            String   @id @default(cuid())
+  stage         String   @default("quotation") // quotation|proforma|order|invoiced|paid
+  customerName  String
+  customerPhone String?
+  title         String   @default("")
+  amount        Float
+  itemCount     Int      @default(1)
+  assignee      String   @default("M")
+  notes         String?
+  history       String   @default("[]") // JSON [{stage, at, by}]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// ─── Gift cards & debt plans ─────────────────────────────────────────────────
+
+model GiftCard {
+  id             Int       @id @default(autoincrement())
+  code           String    @unique
+  balance        Float
+  initialBalance Float
+  customerId     Int?
+  expiry         DateTime?
+  status         String    @default("Active") // Active | Empty | Expired
+  gradient       String    @default("blue")
+  createdAt      DateTime  @default(now())
+  customer       Customer? @relation(fields: [customerId], references: [id])
+}
+
+model DebtPlan {
+  id                  Int      @id @default(autoincrement())
+  customerId          Int
+  invoiceNo           String?
+  totalDebt           Float
+  installmentType     String   @default("Weekly") // Weekly | Monthly
+  installmentAmount   Float
+  nextDueDate         DateTime
+  status              String   @default("Active") // Active | Completed | Defaulted
+  autoReminderSms     Boolean  @default(true)
+  autoBlockPosOverdue Boolean  @default(true)
+  overdueDays         Int      @default(0)
+  customer            Customer @relation(fields: [customerId], references: [id])
+  createdAt           DateTime @default(now())
+}
+
+// ─── HR & Kenya payroll ──────────────────────────────────────────────────────
+
+model Employee {
+  id             Int       @id @default(autoincrement())
+  name           String
+  idNo           String
+  dept           String
+  role           String
+  basic          Float
+  houseAllowance Float     @default(0)
+  transport      Float     @default(0)
+  helb           Float     @default(0)
+  bankAccount    String?
+  mpesaNumber    String?
+  active         Boolean   @default(true)
+  payslips       Payslip[]
+}
+
+model Payslip {
+  id             Int      @id @default(autoincrement())
+  employeeId     Int
+  period         String // "2026-09"
+  basic          Float
+  houseAllowance Float
+  transport      Float
+  overtime       Float    @default(0)
+  gross          Float
+  nssf           Float
+  shif           Float
+  housingLevy    Float
+  paye           Float
+  helb           Float    @default(0)
+  net            Float
+  status         String   @default("Draft") // Draft | Paid
+  employee       Employee @relation(fields: [employeeId], references: [id])
+  createdAt      DateTime @default(now())
+
+  @@unique([employeeId, period])
+}
+
+// ─── Raven chat ──────────────────────────────────────────────────────────────
+
+model ChatChannel {
+  id          Int           @id @default(autoincrement())
+  name        String        @unique
+  description String?
+  unread      Int           @default(0)
+  members     Int           @default(0)
+  messages    ChatMessage[]
+}
+
+model ChatMessage {
+  id        Int         @id @default(autoincrement())
+  channelId Int
+  author    String
+  initials  String
+  content   String
+  docLink   String? // JSON ERP doc card {title, sub, kind}
+  createdAt DateTime    @default(now())
+  channel   ChatChannel @relation(fields: [channelId], references: [id])
+}
+
+// ─── Messaging (Africa's Talking / WhatsApp Cloud API) ───────────────────────
+
+model SmsLog {
+  id         Int       @id @default(autoincrement())
+  customerId Int?
+  customer   Customer? @relation(fields: [customerId], references: [id])
+  phone      String
+  message    String
+  channel    String    @default("SMS") // SMS | WhatsApp
+  type       String    @default("Promo") // Receipt | DebtReminder | Birthday | Promo | Blast
+  status     String    @default("Delivered")
+  cost       Float     @default(0)
+  createdAt  DateTime  @default(now())
+}
+
+model PromoCode {
+  id        Int       @id @default(autoincrement())
+  code      String    @unique
+  type      String    @default("percent") // percent | flat
+  value     Float
+  active    Boolean   @default(true)
+  minSpend  Float     @default(0)
+  expiresAt DateTime?
+}
+
+// ─── Singleton settings ──────────────────────────────────────────────────────
+
+model Settings {
+  id                    Int       @id @default(1)
+  kraPin                String    @default("P051234567A")
+  kraBranchId           String    @default("00")
+  kraDeviceSerial       String    @default("KRA-DEVICE-001")
+  kraCallbackUrl        String    @default("https://api.dukaflow.co.ke/etims/callback")
+  kraConnected          Boolean   @default(true)
+  kraLastSync           DateTime?
+  mpesaConsumerKey      String    @default("demo-consumer-key")
+  mpesaConsumerSecret   String    @default("demo-consumer-secret")
+  mpesaTillNumbers      String    @default("123456, 654321")
+  mpesaCallbackUrl      String    @default("https://api.dukaflow.co.ke/mpesa/callback")
+  smsApiKey             String    @default("atsk_demo_1234567890")
+  smsSenderName         String    @default("DUKAFLOW")
+  loyaltyEarnPerKes     Int       @default(100)
+  loyaltyPointValue     Float     @default(1)
+  loyaltyExpiryMonths   Int       @default(12)
+  vatRate               Float     @default(0.16)
+  receiptPromoFooter    String    @default("Thank You! You saved KES 300 with points! Come again!")
+  receiptPrimaryColor   String    @default("#0052CC")
+  receiptSecondaryColor String    @default("#00C853")
+  companyName           String    @default("DukaFlow Ltd")
+  updatedAt             DateTime  @updatedAt
+}
