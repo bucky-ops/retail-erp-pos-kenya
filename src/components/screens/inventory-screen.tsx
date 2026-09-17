@@ -266,10 +266,10 @@ export default function InventoryScreen() {
         subtitle="Multi-store stock, margins & transfers"
         actions={
           <>
-            <span className="hidden rounded-full border border-[#DFE1E6] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#6B778C] sm:inline-flex">
+            <span className="hidden rounded-full border border-[#DFE1E6] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#6B778C] @md:inline-flex">
               Value <b className="ml-1 text-[#172B4D]">{KES(summary.totalValue, true)}</b>
             </span>
-            <span className="hidden rounded-full border border-[#DFE1E6] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#6B778C] sm:inline-flex">
+            <span className="hidden rounded-full border border-[#DFE1E6] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#6B778C] @md:inline-flex">
               <b className="mr-1 text-[#172B4D]">{summary.skuCount}</b> SKUs
             </span>
             <Button
@@ -283,7 +283,7 @@ export default function InventoryScreen() {
       />
 
       {/* KPI row */}
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 @6xl:grid-cols-4">
         <KpiCard icon={<Wallet size={17} />} label="Stock value (at cost)" value={KES(summary.totalValue, true)} loading={loading} />
         <KpiCard icon={<Boxes size={17} />} label="Distinct SKUs" value={String(summary.skuCount)} loading={loading} />
         <KpiCard

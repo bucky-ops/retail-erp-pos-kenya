@@ -108,7 +108,7 @@ export default function DesignScreen() {
 
       {/* ROW 1 — logo suite + colors/typography */}
       <div className="grid grid-cols-12 gap-6">
-        <Panel className="col-span-12 lg:col-span-5">
+        <Panel className="col-span-12 @4xl:col-span-5">
           <h3 className="font-display text-[16px] font-bold text-[#172B4D]">Logo Suite</h3>
           <div className="mt-4 space-y-4">
             {[
@@ -169,10 +169,10 @@ export default function DesignScreen() {
           </div>
         </Panel>
 
-        <div className="col-span-12 space-y-6 lg:col-span-7">
+        <div className="col-span-12 space-y-6 @4xl:col-span-7">
           <Panel>
             <h3 className="font-display text-[16px] font-bold text-[#172B4D]">Colors</h3>
-            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="mt-4 grid grid-cols-2 gap-3 @xl:grid-cols-4">
               {COLORS.map((c) => {
                 const lum = luminance(c.hex);
                 const onWhite = Math.abs(lum - 1) > 0.35;
@@ -251,7 +251,7 @@ export default function DesignScreen() {
 
       {/* ROW 2 — components + tier ladder */}
       <div className="grid grid-cols-12 gap-6">
-        <Panel className="col-span-12 xl:col-span-7">
+        <Panel className="col-span-12 @6xl:col-span-7">
           <h3 className="font-display text-[16px] font-bold text-[#172B4D]">Components</h3>
 
           <p className="mt-4 text-[11px] font-bold uppercase tracking-widest text-[#6B778C]">Buttons</p>
@@ -280,7 +280,7 @@ export default function DesignScreen() {
             <KraBadge status="Pending" />
           </div>
 
-          <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="mt-5 grid grid-cols-1 gap-4 @xl:grid-cols-2">
             <div>
               <p className="text-[11px] font-bold uppercase tracking-widest text-[#6B778C]">KPI card</p>
               <KpiCard
@@ -308,7 +308,7 @@ export default function DesignScreen() {
           </div>
         </Panel>
 
-        <Panel className="col-span-12 xl:col-span-5">
+        <Panel className="col-span-12 @6xl:col-span-5">
           <h3 className="font-display text-[16px] font-bold text-[#172B4D]">Tier Ladder</h3>
           <p className="mt-0.5 text-[12px] text-[#6B778C]">Loyalty tiers — auto-upgrade on lifetime points.</p>
           <div className="mt-4 space-y-3">
@@ -335,7 +335,7 @@ export default function DesignScreen() {
         <h3 className="font-display text-[16px] font-bold text-[#172B4D]">Logo Guidelines — Wrong Usage</h3>
         <p className="mt-0.5 text-[12px] text-[#6B778C]">Never stretch, recolor, rotate or low-contrast the mark.</p>
 
-        <div className="mt-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div className="mt-4 grid grid-cols-2 gap-4 @4xl:grid-cols-4">
           {[
             {
               label: "Stretched",
@@ -387,7 +387,7 @@ export default function DesignScreen() {
         </div>
 
         <p className="mt-6 text-[11px] font-bold uppercase tracking-widest text-[#6B778C]">Correct usage</p>
-        <div className="mt-2 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="mt-2 grid grid-cols-1 gap-4 @xl:grid-cols-3">
           <div className="overflow-hidden rounded-xl border border-[#DFE1E6]">
             <div className="flex h-24 items-center justify-center bg-white p-4">
               <Logo variant="full" size={22} />

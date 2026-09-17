@@ -21,6 +21,7 @@ model Store {
   stocks    StockLevel[]
   sales     Sale[]
   staff     Staff[]
+  tillSessions TillSession[]
 }
 
 model Staff {
@@ -98,6 +99,23 @@ model StockTransfer {
   qty         Float
   status      String   @default("Completed")
   createdAt   DateTime @default(now())
+}
+
+// ─── Till sessions (X/Z reports — cash-drawer shift reconciliation) ─────────
+
+model TillSession {
+  id           Int       @id @default(autoincrement())
+  storeId      Int
+  store        Store     @relation(fields: [storeId], references: [id])
+  openedBy     String    // staff name
+  openingFloat Float     @default(0) // cash in drawer at open
+  expectedCash Float? // computed at close: float + cash sales
+  countedCash  Float? // physically counted at close
+  variance     Float? // counted - expected
+  status       String    @default("Open") // Open | Closed
+  note         String?
+  openedAt     DateTime  @default(now())
+  closedAt     DateTime?
 }
 
 // ─── Sales (POS receipts + invoices) ─────────────────────────────────────────
@@ -314,5 +332,10 @@ model Settings {
   companyName           String    @default("DukaFlow Ltd")
   tierRules             String    @default("{\"bronze\":{\"minPoints\":0,\"discount\":0},\"silver\":{\"minPoints\":500,\"discount\":5},\"gold\":{\"minPoints\":2000,\"discount\":10},\"expiryMonths\":12,\"expiryEnabled\":true}")
   lastDailyJobsAt       DateTime?
+  // Scheduled report email ("Schedule email" on Reports) — a mock mailer that logs to SmsLog with channel=Email
+  reportScheduleEnabled   Boolean   @default(false)
+  reportScheduleFrequency String    @default("Weekly") // Daily | Weekly | Monthly (sent 08:00 EAT by /api/cron/report)
+  reportScheduleEmail     String    @default("owner@dukaflow.co.ke")
+  reportScheduleLastSentAt DateTime?
   updatedAt             DateTime  @updatedAt
 }

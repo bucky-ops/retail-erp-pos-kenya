@@ -150,7 +150,10 @@ export default function App() {
         />
       ) : (
         <div className={cn(device !== "desktop" && "p-2 md:p-6 bg-[#E3E6EA] min-h-screen")}>
-          <div className={cn("flex h-screen min-h-0", frameClass)}>
+          {/* @container makes every responsive `@xl:`-style variant inside respond to the FRAME
+              width in preview modes (tablet 1016px / mobile 382px) instead of the real viewport,
+              and to the full window on desktop — fixes the mobile-frame clipping bug. */}
+          <div className={cn("@container flex h-screen min-h-0", frameClass)}>
             {/* ── Sidebar (hidden in mobile frame — mobile nav is in topbar) ── */}
             <aside
               className={cn(
@@ -240,12 +243,12 @@ export default function App() {
             {/* ── Main column ─────────────────────────── */}
             <div className="flex min-w-0 flex-1 flex-col bg-[#F4F5F7]">
               {/* Topbar */}
-              <header className="sticky top-0 z-20 flex h-[64px] items-center justify-between border-b border-[#DFE1E6] bg-white px-4 lg:px-8">
+              <header className="sticky top-0 z-20 flex h-[64px] items-center justify-between border-b border-[#DFE1E6] bg-white px-4 @4xl:px-8">
                 <div className="flex items-center gap-3">
-                  <div className="lg:hidden">
+                  <div className="@4xl:hidden">
                     <Logo size={20} />
                   </div>
-                  <div className="hidden items-center gap-2 rounded-full border border-[#DFE1E6] bg-[#F4F5F7] px-3 py-1.5 md:flex">
+                  <div className="hidden items-center gap-2 rounded-full border border-[#DFE1E6] bg-[#F4F5F7] px-3 py-1.5 @2xl:flex">
                     <StoreIcon size={14} className="text-[#6B778C]" />
                     <select
                       aria-label="Store selector"
@@ -261,7 +264,7 @@ export default function App() {
                   </div>
                   <div
                     className={cn(
-                      "hidden items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-medium md:flex",
+                      "hidden items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-medium @2xl:flex",
                       online
                         ? "border-[#C8E6C9] bg-[#E8F5E9] text-[#1B7A2E]"
                         : "border-[#FFE0B2] bg-[#FFF8E1] text-[#B8860B]"
@@ -271,14 +274,14 @@ export default function App() {
                     {online ? "Online • KRA Connected" : `Offline${unsynced ? ` • ${unsynced} sales queued` : ""}`}
                   </div>
                   {page === "pos" && (
-                    <span className="hidden rounded-full border border-[#DFE1E6] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#6B778C] md:inline-flex">
+                    <span className="hidden rounded-full border border-[#DFE1E6] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#6B778C] @2xl:inline-flex">
                       {activeStore ? activeStore.name : "All Stores"} • Offline-first
                     </span>
                   )}
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <span className="hidden items-center gap-2 text-[12px] text-[#6B778C] md:flex">{today}</span>
+                  <span className="hidden items-center gap-2 text-[12px] text-[#6B778C] @2xl:flex">{today}</span>
                   {unsynced > 0 && (
                     <span className="inline-flex items-center gap-1.5 rounded-full bg-[#FFF0E5] px-2.5 py-1 text-[11px] font-bold text-[#D04A1E]">
                       <WifiOff size={12} /> {unsynced} queued
@@ -291,7 +294,7 @@ export default function App() {
                       const c = await offlineQueue.count();
                       setUnsynced(c.unsynced);
                     }}
-                    className="hidden h-8 w-8 items-center justify-center rounded-full border border-[#DFE1E6] text-[#6B778C] transition hover:bg-[#F4F5F7] sm:flex"
+                    className="hidden h-8 w-8 items-center justify-center rounded-full border border-[#DFE1E6] text-[#6B778C] transition hover:bg-[#F4F5F7] @md:flex"
                     aria-label="Sync offline sales"
                   >
                     <RefreshCw size={14} />
@@ -299,7 +302,7 @@ export default function App() {
                   <button
                     onClick={() => setPage("pos")}
                     aria-label="Open POS"
-                    className="hidden h-8 w-8 items-center justify-center rounded-full border border-[#DFE1E6] text-[#6B778C] transition hover:bg-[#F4F5F7] sm:flex"
+                    className="hidden h-8 w-8 items-center justify-center rounded-full border border-[#DFE1E6] text-[#6B778C] transition hover:bg-[#F4F5F7] @md:flex"
                   >
                     <Search size={14} />
                   </button>
@@ -328,7 +331,7 @@ export default function App() {
                       aria-label="All screens"
                       className={cn(
                         "flex h-8 w-8 items-center justify-center rounded-full border border-[#DFE1E6] text-[#6B778C] transition hover:bg-[#F4F5F7]",
-                        device === "desktop" && "lg:hidden"
+                        device === "desktop" && "@4xl:hidden"
                       )}
                     >
                       <Menu size={15} />
@@ -338,7 +341,7 @@ export default function App() {
               </header>
 
               {/* Screen body — keyed for a soft transition between screens */}
-              <main key={page} className="df-fade-in min-h-0 flex-1 overflow-auto bg-[#F4F5F7] p-4 lg:p-8 df-scroll" aria-live="polite">
+              <main key={page} className="df-fade-in min-h-0 flex-1 overflow-auto bg-[#F4F5F7] p-4 @md:p-6 @4xl:p-8 df-scroll" aria-live="polite">
                 {page === "login" && <LoginScreen embedded />}
                 {page === "design" && <DesignScreen />}
                 {page === "dashboard" && <DashboardScreen />}
@@ -356,12 +359,12 @@ export default function App() {
               </main>
 
               {/* Sticky footer */}
-              <footer className="mt-auto flex items-center justify-between border-t border-[#DFE1E6] bg-white px-4 py-2.5 text-[11px] text-[#6B778C] lg:px-8">
+              <footer className="mt-auto flex items-center justify-between border-t border-[#DFE1E6] bg-white px-4 py-2.5 text-[11px] text-[#6B778C] @4xl:px-8">
                 <span className="flex items-center gap-1.5">
                   <PackageCheck size={12} className="text-[#00C853]" />
                   DukaFlow v2.4 — Multi-store • Offline-first POS • KRA eTIMS • M-Pesa Ready
                 </span>
-                <span className="hidden sm:inline">
+                <span className="hidden @md:inline">
                   {activeStore ? `${activeStore.name}, ${activeStore.location}` : "All Stores"} • Nairobi, Kenya
                 </span>
               </footer>

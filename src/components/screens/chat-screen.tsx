@@ -192,7 +192,7 @@ export default function ChatScreen() {
   return (
     <div className="grid grid-cols-12 gap-0 overflow-hidden rounded-2xl border border-[#DFE1E6] bg-white shadow-sm">
       {/* Pane 1 — channel rail */}
-      <div className="col-span-12 flex max-h-[660px] flex-col border-[#DFE1E6] md:col-span-3 md:border-r">
+      <div className="col-span-12 flex max-h-[660px] flex-col border-[#DFE1E6] @2xl:col-span-3 @2xl:border-r">
         <div className="border-b border-[#DFE1E6] p-3">
           <div className="flex items-center gap-2">
             <span className="font-display text-[14px] font-bold text-[#172B4D]">Raven</span>
@@ -260,7 +260,7 @@ export default function ChatScreen() {
       </div>
 
       {/* Pane 2 — conversation */}
-      <div className="col-span-12 flex max-h-[660px] flex-col md:col-span-6">
+      <div className="col-span-12 flex max-h-[660px] flex-col @2xl:col-span-6">
         <div className="flex items-center justify-between border-b border-[#DFE1E6] px-4 py-3">
           <div className="min-w-0">
             <p className="truncate font-display text-[14px] font-bold text-[#172B4D]">
@@ -270,7 +270,7 @@ export default function ChatScreen() {
               {active?.members ?? 0} members{active?.description ? ` • ${active.description}` : ""}
             </p>
           </div>
-          <span className="hidden shrink-0 rounded-full bg-[#F4F5F7] px-2.5 py-1 text-[10px] font-bold text-[#6B778C] sm:block">
+          <span className="hidden shrink-0 rounded-full bg-[#F4F5F7] px-2.5 py-1 text-[10px] font-bold text-[#6B778C] @md:block">
             {messages.length} messages
           </span>
         </div>
@@ -395,7 +395,7 @@ export default function ChatScreen() {
               className="h-10 shrink-0 rounded-xl bg-[#0052CC] px-4 text-[13px] font-bold text-white hover:bg-[#0041A8]"
             >
               {sending ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
-              <span className="hidden sm:inline">Send</span>
+              <span className="hidden @md:inline">Send</span>
             </Button>
           </div>
           <p className="mt-1.5 text-[10px] text-[#6B778C]">
@@ -406,7 +406,7 @@ export default function ChatScreen() {
       </div>
 
       {/* Pane 3 — thread rail */}
-      <div className="col-span-12 hidden max-h-[660px] flex-col border-[#DFE1E6] lg:col-span-3 lg:flex lg:border-l">
+      <div className="col-span-12 hidden max-h-[660px] flex-col border-[#DFE1E6] @4xl:col-span-3 @4xl:flex @4xl:border-l">
         <div className="border-b border-[#DFE1E6] px-4 py-3">
           <p className="font-display text-[14px] font-bold text-[#172B4D]">Thread</p>
           <p className="mt-0.5 text-[11px] text-[#6B778C]">Cement transfer • {2 + threadReplies.length} replies</p>

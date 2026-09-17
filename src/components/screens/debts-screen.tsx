@@ -386,7 +386,7 @@ export default function DebtsScreen() {
         {/* ════════════════ DEBTORS ════════════════ */}
         <TabsContent value="debtors" className="space-y-4">
           {/* KPI row */}
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+          <div className="grid grid-cols-2 gap-3 @2xl:grid-cols-3 @6xl:grid-cols-5">
             <KpiCard
               icon={<HandCoins className="h-4 w-4" />}
               label="Total to collect"
@@ -421,7 +421,7 @@ export default function DebtsScreen() {
               iconBg="#FFEBEE"
               iconColor="#C62828"
             />
-            <div className="col-span-2 rounded-2xl border border-[#172B4D] bg-[#172B4D] p-4 shadow-sm md:col-span-1">
+            <div className="col-span-2 rounded-2xl border border-[#172B4D] bg-[#172B4D] p-4 shadow-sm @2xl:col-span-1">
               <div className="flex items-center justify-between">
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-[#00C853]">
                   <TrendingUp className="h-4 w-4" />
@@ -586,15 +586,15 @@ export default function DebtsScreen() {
 
         {/* ════════════════ CREDITORS ════════════════ */}
         <TabsContent value="creditors" className="space-y-4">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 @2xl:grid-cols-3">
             <KpiCard icon={<Landmark className="h-4 w-4" />} label="Total to pay suppliers" value={KES(CREDITOR_BOOK.toPay)} sub={`${CREDITORS.filter((c) => !c.paid).length} open bills in view`} />
             <KpiCard icon={<CalendarClock className="h-4 w-4" />} label="Bills due this week" value={String(CREDITOR_BOOK.dueThisWeek)} iconBg="#FFF8E1" iconColor="#B8860B" sub="schedule B2C payouts" />
             <KpiCard icon={<HandCoins className="h-4 w-4" />} label="Active suppliers" value={String(CREDITOR_BOOK.suppliers)} iconBg="#E8F5E9" iconColor="#1B7A2E" sub="cement • paint • steel" />
           </div>
 
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 @6xl:grid-cols-3">
             {/* bills table */}
-            <Panel padding={false} className="overflow-hidden xl:col-span-2">
+            <Panel padding={false} className="overflow-hidden @6xl:col-span-2">
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>

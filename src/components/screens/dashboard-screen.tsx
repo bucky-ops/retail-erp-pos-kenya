@@ -187,7 +187,7 @@ export default function DashboardScreen() {
       />
 
       {/* ── Row 1: KPI cards ─────────────────────────────── */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 @2xl:grid-cols-2 @6xl:grid-cols-4">
         <KpiCard
           icon={<TrendingUp size={16} />}
           label="Today's Sales"
@@ -290,7 +290,7 @@ export default function DashboardScreen() {
 
       {/* ── Row 2: trend + sales by store ────────────────── */}
       <div className="grid grid-cols-12 gap-5">
-        <Panel className="col-span-12 xl:col-span-8">
+        <Panel className="col-span-12 @6xl:col-span-8">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <h3 className="font-display text-[15px] font-bold text-[#172B4D]">Sales Trend (7 days)</h3>
@@ -355,7 +355,7 @@ export default function DashboardScreen() {
           </div>
         </Panel>
 
-        <Panel className="col-span-12 xl:col-span-4">
+        <Panel className="col-span-12 @6xl:col-span-4">
           <h3 className="font-display text-[15px] font-bold text-[#172B4D]">Sales by Store</h3>
           <p className="text-[11px] text-[#6B778C]">This week, all locations</p>
           <div className="mt-4 space-y-4">
@@ -389,7 +389,7 @@ export default function DashboardScreen() {
 
       {/* ── Row 3: live feed + right rail ────────────────── */}
       <div className="grid grid-cols-12 gap-5">
-        <Panel padding={false} className="col-span-12 overflow-hidden xl:col-span-8">
+        <Panel padding={false} className="col-span-12 overflow-hidden @6xl:col-span-8">
           <div className="flex items-center justify-between border-b border-[#DFE1E6] p-4 md:p-5">
             <div className="flex items-center gap-2">
               <span className="h-2 w-2 animate-pulse rounded-full bg-[#00C853]" />
@@ -406,7 +406,7 @@ export default function DashboardScreen() {
                   <th className="p-3 font-semibold">Time</th>
                   <th className="p-3 font-semibold">Receipt</th>
                   <th className="p-3 font-semibold">Customer</th>
-                  <th className="hidden p-3 font-semibold md:table-cell">Store</th>
+                  <th className="hidden p-3 font-semibold @2xl:table-cell">Store</th>
                   <th className="p-3 font-semibold">Amount</th>
                   <th className="p-3 font-semibold">Pay</th>
                   <th className="p-3 font-semibold">KRA</th>
@@ -426,7 +426,7 @@ export default function DashboardScreen() {
                         <TierBadge tier={f.tier} />
                       </div>
                     </td>
-                    <td className="hidden whitespace-nowrap p-3 text-[#6B778C] md:table-cell">{f.store}</td>
+                    <td className="hidden whitespace-nowrap p-3 text-[#6B778C] @2xl:table-cell">{f.store}</td>
                     <td className="whitespace-nowrap p-3 font-bold text-[#172B4D]">{KES(f.amount)}</td>
                     <td className="p-3">
                       <span className={cn("whitespace-nowrap rounded-full px-2 py-1 text-[11px] font-bold", payChip(f.pay))}>
@@ -458,7 +458,7 @@ export default function DashboardScreen() {
         </Panel>
 
         {/* right rail */}
-        <div className="col-span-12 space-y-4 xl:col-span-4">
+        <div className="col-span-12 space-y-4 @6xl:col-span-4">
           <Panel>
             <h3 className="font-display text-[15px] font-bold text-[#172B4D]">Staff on Shift</h3>
             <div className="mt-3 space-y-3">

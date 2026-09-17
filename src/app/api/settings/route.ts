@@ -21,6 +21,7 @@ export async function PUT(req: NextRequest) {
     "vatRate",
     "happyHourEnabled", "happyHourStart", "happyHourEnd", "happyHourPercent", "happyHourCategory", "receiptPromoFooter", "receiptPrimaryColor", "receiptSecondaryColor",
     "companyName", "tierRules",
+    "reportScheduleEnabled", "reportScheduleFrequency", "reportScheduleEmail",
   ] as const;
 
   const data: Record<string, string | number | boolean | Date> = {};

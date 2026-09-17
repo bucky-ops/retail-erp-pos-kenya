@@ -205,7 +205,7 @@ export default function CustomersScreen() {
       ) : (
         <>
           {/* KPI row */}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 @xl:grid-cols-3">
             <KpiCard icon={<Users size={17} />} label="Total customers" value={all ? String(kpis.total) : "—"} loading={!all} />
             <KpiCard
               icon={<Sparkles size={17} />}
@@ -503,7 +503,7 @@ function CustomerDetail({
       </div>
 
       {/* 6 stat tiles */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 @xl:grid-cols-3 @6xl:grid-cols-6">
         {stats.map((s) => (
           <div
             key={s.label}
@@ -518,9 +518,9 @@ function CustomerDetail({
         ))}
       </div>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 @6xl:grid-cols-3">
         {/* left: chart + purchases */}
-        <div className="space-y-4 xl:col-span-2">
+        <div className="space-y-4 @6xl:col-span-2">
           <Panel className="p-4 md:p-5">
             <h4 className="font-display text-[14px] font-bold text-[#172B4D]">Spend • Last 6 Months</h4>
             <div className="mt-3 h-[190px]">
@@ -742,9 +742,9 @@ function LoyaltyProgram() {
   const ruleInput = "h-9 w-[84px] rounded-full border-[#DFE1E6] bg-white px-3 text-center text-[13px] font-bold";
 
   return (
-    <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
+    <div className="grid grid-cols-1 gap-4 @6xl:grid-cols-12">
       {/* rules builder */}
-      <Panel className="xl:col-span-7">
+      <Panel className="@6xl:col-span-7">
         <h4 className="font-display text-[14px] font-bold text-[#172B4D]">Program Rules — visual rule builder</h4>
         {!loaded ? (
           <div className="mt-3 space-y-2">
@@ -803,7 +803,7 @@ function LoyaltyProgram() {
       </Panel>
 
       {/* tiers */}
-      <Panel className="xl:col-span-5">
+      <Panel className="@6xl:col-span-5">
         <div className="flex items-center justify-between">
           <h4 className="font-display text-[14px] font-bold text-[#172B4D]">Tiers</h4>
           <Button variant="outline" onClick={saveTiers} className="h-8 rounded-xl text-[12px] font-semibold">
@@ -958,7 +958,7 @@ function GiftCardsTab({ customers }: { customers: CustomerDto[] }) {
       </div>
 
       {cards === null ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 @xl:grid-cols-2 @6xl:grid-cols-3">
           {[0, 1, 2, 3, 4, 5].map((i) => (
             <div key={i} className="h-[220px] animate-pulse rounded-2xl bg-[#F4F5F7]" />
           ))}
@@ -975,7 +975,7 @@ function GiftCardsTab({ customers }: { customers: CustomerDto[] }) {
           }
         />
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 @xl:grid-cols-2 @6xl:grid-cols-3">
           {cards.map((card) => {
             const expired = isExpired(card.expiry);
             const dead = card.balance <= 0 || expired || card.status === "Empty";

@@ -130,12 +130,12 @@ export default function LoginScreen({
   const card = (
     <div
       className={cn(
-        "grid w-full max-w-[980px] grid-cols-1 overflow-hidden rounded-3xl bg-white md:grid-cols-2",
+        "grid w-full max-w-[980px] grid-cols-1 overflow-hidden rounded-3xl bg-white @3xl:grid-cols-2",
         !embedded && "border border-[#DFE1E6] shadow-2xl"
       )}
     >
       {/* ── Left: marketing panel ─────────────────────────── */}
-      <div className="relative hidden flex-col overflow-hidden bg-gradient-to-br from-[#172B4D] via-[#142748] to-[#0E1B33] p-8 text-white md:flex md:p-10">
+      <div className="relative hidden flex-col overflow-hidden bg-gradient-to-br from-[#172B4D] via-[#142748] to-[#0E1B33] p-8 text-white @3xl:flex @3xl:p-10">
         {/* ambient animated blobs */}
         <div
           aria-hidden
@@ -206,7 +206,7 @@ export default function LoginScreen({
 
       {/* ── Right: auth panel ─────────────────────────────── */}
       <div className="relative flex flex-col p-6 md:p-10">
-        <div className="mb-6 md:hidden">
+        <div className="mb-6 @3xl:hidden">
           <Logo size={22} />
         </div>
 
@@ -410,7 +410,8 @@ export default function LoginScreen({
           {card}
         </Panel>
       ) : (
-        <div className="flex min-h-screen items-center justify-center bg-[#172B4D] p-4">{card}</div>
+        /* @container so the login card's @3xl: variants respond to the real window width */
+        <div className="@container flex min-h-screen items-center justify-center bg-[#172B4D] p-4">{card}</div>
       )}
 
       {/* store-select modal */}
@@ -423,7 +424,7 @@ export default function LoginScreen({
             </div>
             <p className="mt-1 text-sm text-[#6B778C]">Choose which store to operate in. You can switch anytime.</p>
 
-            <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="mt-5 grid grid-cols-1 gap-4 @xl:grid-cols-2">
               {storeList.map((s, i) => (
                 <button
                   key={s.id}

@@ -196,7 +196,7 @@ export default function MessagesScreen() {
       />
 
       {/* Campaign stats */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 @xl:grid-cols-2 @6xl:grid-cols-4">
         <Panel className="p-4">
           <div className="flex items-center justify-between">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#E9F2FF] text-[#0052CC]">
@@ -230,7 +230,7 @@ export default function MessagesScreen() {
       {/* Main grid */}
       <div className="grid grid-cols-12 gap-4">
         {/* LEFT — compose */}
-        <Panel className="col-span-12 lg:col-span-7">
+        <Panel className="col-span-12 @4xl:col-span-7">
           <h3 className="font-display text-[15px] font-bold text-[#172B4D]">Compose Blast</h3>
           <p className="mt-0.5 text-[12px] text-[#6B778C]">Merge tags personalise every message per customer.</p>
 
@@ -315,7 +315,7 @@ export default function MessagesScreen() {
 
           <div className="mt-4 grid grid-cols-12 gap-4">
             {/* editor */}
-            <div className="col-span-12 md:col-span-7">
+            <div className="col-span-12 @2xl:col-span-7">
               <Textarea
                 ref={taRef}
                 rows={6}
@@ -355,7 +355,7 @@ export default function MessagesScreen() {
             </div>
 
             {/* iPhone preview */}
-            <div className="col-span-12 md:col-span-5">
+            <div className="col-span-12 @2xl:col-span-5">
               <div className="mx-auto w-[300px] max-w-full rounded-[36px] border-4 border-[#172B4D] bg-white p-3 shadow-xl">
                 <div className="overflow-hidden rounded-[24px] border border-[#DFE1E6]">
                   <div className="flex items-center gap-2 bg-[#00C853] px-3 py-2 text-white">
@@ -393,7 +393,7 @@ export default function MessagesScreen() {
         </Panel>
 
         {/* RIGHT — recent messages */}
-        <Panel className="col-span-12 lg:col-span-5" padding={false}>
+        <Panel className="col-span-12 @4xl:col-span-5" padding={false}>
           <div className="flex items-center justify-between border-b border-[#DFE1E6] p-4">
             <h3 className="font-display text-[15px] font-bold text-[#172B4D]">Recent Messages</h3>
             <div className="flex rounded-full bg-[#F4F5F7] p-0.5">

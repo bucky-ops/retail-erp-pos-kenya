@@ -10,14 +10,20 @@ import {
   Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import { api } from "@/lib/api";
-import { KES } from "@/types";
+import { KES, SettingsDto } from "@/types";
 import { Panel, ScreenHeader, TableSkeleton } from "@/components/df/shared";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -82,6 +88,7 @@ export default function ReportsScreen() {
   const [data, setData] = useState<ReportsPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [drill, setDrill] = useState<ReportId | null>(null);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -482,7 +489,7 @@ export default function ReportsScreen() {
       {loading && !data ? (
         <TableSkeleton rows={8} cols={4} />
       ) : (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 @2xl:grid-cols-2 @6xl:grid-cols-4">
           {REPORTS.map(({ id, title, desc, icon: Icon }) => (
             <button
               key={id}
@@ -596,12 +603,7 @@ export default function ReportsScreen() {
             </Button>
             <Button
               variant="outline"
-              onClick={() =>
-                toast({
-                  title: "Report scheduled",
-                  description: "Every Monday 8am to owner@dukaflow.co.ke",
-                })
-              }
+              onClick={() => setScheduleOpen(true)}
               className="h-9 flex-1 rounded-xl border-[#DFE1E6] text-[13px] font-bold text-[#172B4D]"
             >
               <CalendarClock size={14} /> Schedule email
@@ -609,6 +611,171 @@ export default function ReportsScreen() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* scheduled-report email dialog — persists to Settings, sends via /api/cron/report */}
+      <ScheduleDialog open={scheduleOpen} onOpenChange={setScheduleOpen} currentReport={drillMeta?.title} />
     </div>
+  );
+}
+
+/* ── Scheduled report email dialog ────────────────────────────
+   Real persisted schedule (Settings.reportSchedule*) backed by
+   /api/cron/report — the mock Frappe scheduler hook that emails
+   the owner a full sales summary (logged to Messages as Email). */
+const FREQ_LABEL: Record<string, string> = {
+  Daily: "Every day, 08:00 EAT",
+  Weekly: "Every Monday, 08:00 EAT",
+  Monthly: "1st of every month, 08:00 EAT",
+};
+
+function ScheduleDialog({
+  open,
+  onOpenChange,
+  currentReport,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  currentReport?: string;
+}) {
+  const [settings, setSettings] = useState<SettingsDto | null>(null);
+  const [enabled, setEnabled] = useState(false);
+  const [freq, setFreq] = useState("Weekly");
+  const [email, setEmail] = useState("owner@dukaflow.co.ke");
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+
+  /* fresh settings each open */
+  useEffect(() => {
+    if (!open) return;
+    api
+      .get<SettingsDto>("/api/settings")
+      .then((s) => {
+        setSettings(s);
+        setEnabled(s.reportScheduleEnabled);
+        setFreq(String(s.reportScheduleFrequency));
+        setEmail(s.reportScheduleEmail);
+      })
+      .catch(() => toast({ title: "Could not load schedule", description: "Check your connection." }));
+  }, [open]);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const d = await api.put<{ settings: SettingsDto }>("/api/settings", {
+        reportScheduleEnabled: enabled,
+        reportScheduleFrequency: freq,
+        reportScheduleEmail: email.trim() || "owner@dukaflow.co.ke",
+      });
+      setSettings(d.settings);
+      toast({
+        title: enabled ? "Report email scheduled ✓" : "Schedule paused",
+        description: enabled
+          ? `${FREQ_LABEL[freq]} → ${d.settings.reportScheduleEmail}`
+          : "The owner will no longer receive automatic report emails.",
+      });
+      onOpenChange(false);
+    } catch (e) {
+      toast({ title: "Could not save schedule", description: err(e) });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const sendTest = async () => {
+    setTesting(true);
+    try {
+      const d = await api.post<{ ok: boolean; message?: string; email?: string; reason?: string }>(
+        "/api/cron/report?force=1",
+        {}
+      );
+      toast({
+        title: d.ok ? "Test report sent ✓" : "Not sent",
+        description: d.ok ? `Emailed to ${d.email} — check Messages for the copy.` : d.message,
+      });
+      if (d.ok) onOpenChange(false);
+    } catch (e) {
+      toast({ title: "Test send failed", description: err(e) });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const last = settings?.reportScheduleLastSentAt ? new Date(settings.reportScheduleLastSentAt) : null;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md rounded-2xl">
+        <DialogHeader>
+          <DialogTitle className="font-display flex items-center gap-2 text-[16px] text-[#172B4D]">
+            <CalendarClock size={16} className="text-[#0052CC]" /> Schedule report email
+          </DialogTitle>
+          <DialogDescription>
+            {currentReport ? `Automatic email for “${currentReport}” and the weekly sales summary.` : "Automatic owner sales summary."}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {/* enabled */}
+          <div className="flex items-center justify-between rounded-xl border border-[#DFE1E6] bg-[#FAFBFC] p-3">
+            <div>
+              <p className="text-[13px] font-bold text-[#172B4D]">Email the owner automatically</p>
+              <p className="text-[11px] text-[#6B778C]">Sales, VAT, top products & payment split</p>
+            </div>
+            <Switch checked={enabled} onCheckedChange={setEnabled} aria-label="Toggle scheduled report" />
+          </div>
+
+          {/* frequency */}
+          <div className="space-y-1.5">
+            <Label className="text-[12px] font-semibold text-[#172B4D]">Frequency</Label>
+            <Select value={freq} onValueChange={setFreq} disabled={!enabled}>
+              <SelectTrigger className="w-full rounded-xl text-[13px]"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Daily">Daily — every day 08:00 EAT</SelectItem>
+                <SelectItem value="Weekly">Weekly — Mondays 08:00 EAT</SelectItem>
+                <SelectItem value="Monthly">Monthly — 1st 08:00 EAT</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* email */}
+          <div className="space-y-1.5">
+            <Label className="text-[12px] font-semibold text-[#172B4D]">Recipient</Label>
+            <Input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="owner@dukaflow.co.ke"
+              disabled={!enabled}
+              className="rounded-xl text-[13px]"
+            />
+          </div>
+
+          {/* status */}
+          <div className="rounded-xl bg-[#E9F2FF] p-3 text-[11px] leading-relaxed text-[#0052CC]">
+            {enabled
+              ? `Active — ${FREQ_LABEL[freq]} → ${email}. Last sent: ${last ? last.toLocaleString("en-KE", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "never"}`
+              : "Schedule is off. Turn it on to receive automatic reports."}
+          </div>
+
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={sendTest}
+              disabled={testing || saving}
+              className="h-9 flex-1 rounded-xl border-[#DFE1E6] text-[12px] font-bold text-[#172B4D]"
+            >
+              {testing ? "Sending…" : "Send test now"}
+            </Button>
+            <Button
+              onClick={save}
+              disabled={saving || testing}
+              className="h-9 flex-1 rounded-xl bg-[#0052CC] text-[12px] font-bold text-white hover:bg-[#0041A8]"
+            >
+              {saving ? "Saving…" : "Save schedule"}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

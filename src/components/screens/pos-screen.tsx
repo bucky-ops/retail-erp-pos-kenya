@@ -21,7 +21,9 @@ import {
   CreditCard,
   Gift,
   HandCoins,
+  Landmark,
   Loader2,
+  Lock,
   Minus,
   MonitorSmartphone,
   Package,
@@ -75,6 +77,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
@@ -229,6 +232,16 @@ export default function PosScreen() {
   const [usePoints, setUsePoints] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("Cash");
   const [paying, setPaying] = useState(false);
+  const [tillOpen, setTillOpen] = useState(false);
+  /* till shift liveness — drives the green pulse dot on the Till button */
+  const [tillSessionLive, setTillSessionLive] = useState(false);
+  useEffect(() => {
+    if (activeStoreId === "all") return;
+    api
+      .get<{ session: unknown }>(`/api/till?storeId=${activeStoreId}`)
+      .then((d) => setTillSessionLive(!!d.session))
+      .catch(() => {});
+  }, [activeStoreId, tillOpen]);
 
   /* dialogs */
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -663,7 +676,7 @@ export default function PosScreen() {
   const billNum = Number(billDiscount) || 0;
 
   return (
-    <div className="flex min-h-[620px] flex-col overflow-hidden rounded-2xl border border-[#DFE1E6] bg-white shadow-sm lg:h-full">
+    <div className="flex min-h-[620px] flex-col overflow-hidden rounded-2xl border border-[#DFE1E6] bg-white shadow-sm @4xl:h-full">
       {/* header strip */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#DFE1E6] bg-[#FAFBFC] px-4 py-2.5">
         <div className="flex items-center gap-2.5">
@@ -680,6 +693,15 @@ export default function PosScreen() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {/* Cash-drawer / shift control (X & Z reports) */}
+          <button
+            onClick={() => setTillOpen(true)}
+            className="inline-flex h-7 items-center gap-1.5 rounded-full border border-[#DFE1E6] bg-white px-3 text-[11px] font-bold text-[#172B4D] transition hover:border-[#0052CC]/50 hover:text-[#0052CC]"
+            aria-label="Open cash drawer & shift reports"
+          >
+            <Landmark size={12} /> Till
+            {tillSessionLive && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#00C853]" aria-hidden />}
+          </button>
           <span
             className={cn(
               "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-bold",
@@ -701,9 +723,9 @@ export default function PosScreen() {
       </div>
 
       {/* body */}
-      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-12">
+      <div className="grid min-h-0 flex-1 grid-cols-1 @4xl:grid-cols-12">
         {/* ── LEFT: catalog ─────────────────────────────────── */}
-        <div className="flex min-h-0 flex-col bg-[#F4F5F7] lg:col-span-7">
+        <div className="flex min-h-0 flex-col bg-[#F4F5F7] @4xl:col-span-7">
           {/* search */}
           <div className="flex items-center gap-3 p-4 pb-2">
             <div className="relative max-w-[520px] flex-1">
@@ -808,7 +830,7 @@ export default function PosScreen() {
           {/* product grid */}
           <div className="df-scroll min-h-0 flex-1 overflow-y-auto p-4 pt-3">
             {productsLoading ? (
-              <div className="grid grid-cols-2 gap-3 xl:grid-cols-3">
+              <div className="grid grid-cols-2 gap-3 @6xl:grid-cols-3">
                 {Array.from({ length: 9 }).map((_, i) => (
                   <Skeleton key={i} className="h-[168px] rounded-2xl" />
                 ))}
@@ -820,7 +842,7 @@ export default function PosScreen() {
                 <p className="mt-1 text-[12px] text-[#6B778C]">Try another search, category or store.</p>
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-3 xl:grid-cols-3">
+              <div className="grid grid-cols-2 gap-3 @6xl:grid-cols-3">
                 {products.map((p) => {
                   const qty = stockQty(p, activeStoreId);
                   const out = qty <= 0;
@@ -865,7 +887,7 @@ export default function PosScreen() {
         </div>
 
         {/* ── RIGHT: cart ───────────────────────────────────── */}
-        <div className="flex min-h-0 flex-col border-t border-[#DFE1E6] bg-white lg:col-span-5 lg:border-l lg:border-t-0">
+        <div className="flex min-h-0 flex-col border-t border-[#DFE1E6] bg-white @4xl:col-span-5 @4xl:border-l @4xl:border-t-0">
           {/* customer card */}
           {customer ? (
             <div className="relative border-b border-[#DFE1E6] bg-[#FAFBFC] p-4 pt-5">
@@ -1488,6 +1510,362 @@ export default function PosScreen() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* ── cash drawer / X & Z reports ───────────────────────── */}
+      <TillDialog
+        open={tillOpen}
+        onOpenChange={setTillOpen}
+        storeId={activeStoreId === "all" ? (useApp.getState().stores.find((s) => s.isMain)?.id ?? 1) : activeStoreId}
+        storeName={activeStore?.name ?? "Thika Road (HQ)"}
+        userName={user?.name ?? "Counter 1"}
+      />
     </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════
+   TillDialog — cash-drawer shift management (X & Z reports).
+
+   X-Report: mid-shift snapshot. Drawer stays in, shift continues.
+   Z-Report: end-of-shift close. Counted cash is reconciled against
+   the expected drawer (opening float + cash sales) and the shift is
+   locked with a variance figure — exactly like a real hardware till.
+   ══════════════════════════════════════════════════════════════ */
+
+interface TillSessionDto {
+  id: number;
+  storeId: number;
+  openedBy: string;
+  openingFloat: number;
+  expectedCash: number | null;
+  countedCash: number | null;
+  variance: number | null;
+  status: string;
+  note: string | null;
+  openedAt: string;
+  closedAt: string | null;
+}
+
+interface TillReportDto {
+  receipts: number;
+  units: number;
+  gross: number;
+  discounts: number;
+  vat: number;
+  total: number;
+  avgBasket: number;
+  byMethod: Record<string, { total: number; count: number }>;
+  cash: number;
+  expectedCash: number;
+  openingFloat: number;
+  pointsRedeemed: number;
+  pointsEarned: number;
+  creditCount: number;
+  creditTotal: number;
+  recentSales: { id: number; receiptNo: string; total: number; paymentMethod: string; staffName: string; customer: string; createdAt: string }[];
+}
+
+function TillDialog({
+  open,
+  onOpenChange,
+  storeId,
+  storeName,
+  userName,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  storeId: number;
+  storeName: string;
+  userName: string;
+}) {
+  const [loading, setLoading] = useState(true);
+  const [session, setSession] = useState<TillSessionDto | null>(null);
+  const [report, setReport] = useState<TillReportDto | null>(null);
+  const [history, setHistory] = useState<TillSessionDto[]>([]);
+  const [float, setFloat] = useState("5000");
+  const [counted, setCounted] = useState("");
+  const [note, setNote] = useState("");
+  const [closing, setClosing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [zResult, setZResult] = useState<{ session: TillSessionDto; report: TillReportDto } | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const d = await api.get<{ session: TillSessionDto | null; report: TillReportDto | null; history: TillSessionDto[] }>(
+        `/api/till?storeId=${storeId}`
+      );
+      setSession(d.session);
+      setReport(d.report);
+      setHistory(d.history ?? []);
+    } catch (e) {
+      toast({ title: "Could not load till", description: e instanceof Error ? e.message : "Try again" });
+    } finally {
+      setLoading(false);
+    }
+  }, [storeId]);
+
+  useEffect(() => {
+    if (!open) return;
+    setZResult(null);
+    setClosing(false);
+    void load();
+  }, [open, load]);
+
+  const openTill = async () => {
+    setBusy(true);
+    try {
+      await api.post("/api/till", { action: "open", storeId, openedBy: userName, openingFloat: Number(float) || 0 });
+      toast({ title: "Till opened ✓", description: `${KES(Number(float) || 0)} float recorded — drawer unlocked.` });
+      await load();
+    } catch (e) {
+      toast({ title: "Could not open till", description: e instanceof Error ? e.message : "Try again" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const xReport = async () => {
+    setBusy(true);
+    try {
+      await api.post("/api/till", { action: "x-report", storeId });
+      toast({ title: "X-Report printed ✓", description: "Mid-shift snapshot — drawer stays open." });
+    } catch (e) {
+      toast({ title: "X-Report failed", description: e instanceof Error ? e.message : "Try again" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const closeTill = async () => {
+    setBusy(true);
+    try {
+      const d = await api.post<{ ok: boolean; type: string; session: TillSessionDto; report: TillReportDto }>("/api/till", {
+        action: "close",
+        storeId,
+        countedCash: Number(counted) || 0,
+        note,
+      });
+      setZResult({ session: d.session, report: d.report });
+      toast({
+        title: "Z-Report — shift closed",
+        description:
+          d.session.variance === 0
+            ? "Drawer balanced to the shilling. Asante!"
+            : `Variance ${d.session.variance! > 0 ? "+" : ""}${KES(d.session.variance ?? 0)}`,
+      });
+      await load();
+    } catch (e) {
+      toast({ title: "Could not close till", description: e instanceof Error ? e.message : "Try again" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const variancePreview = session && counted !== "" ? (Number(counted) || 0) - (report?.expectedCash ?? 0) : null;
+  const methodRows = report
+    ? Object.entries(report.byMethod).sort((a, b) => b[1].total - a[1].total)
+    : [];
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto rounded-2xl sm:max-w-[520px] df-scroll">
+        <DialogHeader>
+          <DialogTitle className="font-display flex items-center gap-2 text-[16px] text-[#172B4D]">
+            <Landmark size={16} className="text-[#0052CC]" /> Cash Drawer — {storeName}
+          </DialogTitle>
+          <DialogDescription>
+            {zResult
+              ? `Shift #${zResult.session.id} closed at ${zResult.session.closedAt ? new Date(zResult.session.closedAt).toLocaleTimeString("en-KE", { hour: "2-digit", minute: "2-digit" }) : ""} — drawer locked.`
+              : session
+                ? `Shift open since ${new Date(session.openedAt).toLocaleTimeString("en-KE", { hour: "2-digit", minute: "2-digit" })} by ${session.openedBy}`
+                : "No open shift — open the till to start selling on this drawer."}
+          </DialogDescription>
+        </DialogHeader>
+
+        {loading ? (
+          <div className="space-y-2 py-4">
+            <Skeleton className="h-16 w-full rounded-xl" />
+            <Skeleton className="h-24 w-full rounded-xl" />
+          </div>
+        ) : zResult ? (
+          /* ── Z-Report result ── */
+          <div className="space-y-3">
+            <div
+              className={cn(
+                "rounded-2xl border p-4 text-center",
+                Math.abs(zResult.session.variance ?? 0) < 1 ? "border-[#C8E6C9] bg-[#E8F5E9]" : "border-[#FFE0B2] bg-[#FFF8E1]"
+              )}
+            >
+              <p className="text-[11px] font-bold uppercase tracking-widest text-[#6B778C]">Z-Report • Shift #{zResult.session.id}</p>
+              <p className={cn("font-display mt-1 text-3xl font-extrabold tabular-nums", Math.abs(zResult.session.variance ?? 0) < 1 ? "text-[#00C853]" : "text-[#D04A1E]")}>
+                {zResult.session.variance === 0 ? "Balanced" : `${(zResult.session.variance ?? 0) > 0 ? "+" : ""}${KES(zResult.session.variance ?? 0)}`}
+              </p>
+              <p className="text-[11px] text-[#6B778C]">
+                Counted {KES(zResult.session.countedCash ?? 0)} vs expected {KES(zResult.session.expectedCash ?? 0)}
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-[12px]">
+              <div className="rounded-xl border border-[#DFE1E6] p-3">
+                <p className="text-[10px] font-bold uppercase text-[#6B778C]">Shift takings</p>
+                <p className="font-display text-lg font-bold tabular-nums text-[#172B4D]">{KES(zResult.report.total)}</p>
+                <p className="text-[11px] text-[#6B778C]">{zResult.report.receipts} receipts • {Math.round(zResult.report.units)} units</p>
+              </div>
+              <div className="rounded-xl border border-[#DFE1E6] p-3">
+                <p className="text-[10px] font-bold uppercase text-[#6B778C]">Banking (cash)</p>
+                <p className="font-display text-lg font-bold tabular-nums text-[#00C853]">{KES(zResult.report.cash)}</p>
+                <p className="text-[11px] text-[#6B778C]">Float {KES(zResult.report.openingFloat)} returned</p>
+              </div>
+            </div>
+            {zResult.session.note && <p className="rounded-xl bg-[#F4F5F7] p-3 text-[12px] text-[#6B778C]">📝 {zResult.session.note}</p>}
+            <Button onClick={() => setZResult(null)} className="h-9 w-full rounded-xl bg-[#0052CC] font-bold text-white hover:bg-[#0041A8]">
+              Back to till
+            </Button>
+          </div>
+        ) : !session ? (
+          /* ── open till flow ── */
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-[#DFE1E6] bg-[#FAFBFC] p-4">
+              <Label className="text-[12px] font-semibold text-[#172B4D]">Opening float (cash in drawer)</Label>
+              <Input
+                inputMode="numeric"
+                value={float}
+                onChange={(e) => setFloat(e.target.value.replace(/[^0-9]/g, ""))}
+                className="mt-2 h-11 rounded-xl text-right font-display text-lg font-bold tabular-nums"
+                placeholder="0"
+                aria-label="Opening float amount"
+              />
+              <p className="mt-2 text-[11px] text-[#6B778C]">
+                Typical float: KES 2,000–5,000 in KES 50/100/200 notes for change-making.
+              </p>
+            </div>
+            <Button
+              onClick={openTill}
+              disabled={busy}
+              className="h-11 w-full rounded-xl bg-[#00C853] font-display font-bold text-white hover:bg-[#00A84A]"
+            >
+              {busy ? <Loader2 size={15} className="animate-spin" /> : <Landmark size={15} />} Open till & start shift
+            </Button>
+          </div>
+        ) : (
+          /* ── live shift ── */
+          <div className="space-y-3">
+            {/* expected drawer hero */}
+            <div className="rounded-2xl bg-gradient-to-br from-[#172B4D] to-[#0E1B33] p-4 text-white">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-white/60">Expected cash in drawer</p>
+                  <p className="font-display mt-0.5 text-3xl font-extrabold tabular-nums">{KES(report?.expectedCash ?? 0)}</p>
+                  <p className="text-[11px] text-white/60">Float {KES(report?.openingFloat ?? 0)} + cash sales {KES(report?.cash ?? 0)}</p>
+                </div>
+                <span className="rounded-full bg-[#00C853]/20 px-2.5 py-1 text-[10px] font-bold text-[#7CFFB2]">● OPEN</span>
+              </div>
+            </div>
+
+            {/* takings grid */}
+            <div className="grid grid-cols-3 gap-2">
+              <div className="rounded-xl border border-[#DFE1E6] p-2.5 text-center">
+                <p className="font-display text-[15px] font-extrabold tabular-nums text-[#172B4D]">{report?.receipts ?? 0}</p>
+                <p className="text-[10px] font-semibold text-[#6B778C]">Receipts</p>
+              </div>
+              <div className="rounded-xl border border-[#DFE1E6] p-2.5 text-center">
+                <p className="font-display text-[15px] font-extrabold tabular-nums text-[#172B4D]">{Math.round(report?.units ?? 0)}</p>
+                <p className="text-[10px] font-semibold text-[#6B778C]">Units sold</p>
+              </div>
+              <div className="rounded-xl border border-[#DFE1E6] p-2.5 text-center">
+                <p className="font-display text-[15px] font-extrabold tabular-nums text-[#172B4D]">{KES(report?.avgBasket ?? 0)}</p>
+                <p className="text-[10px] font-semibold text-[#6B778C]">Avg basket</p>
+              </div>
+            </div>
+
+            {/* payment split */}
+            <div className="rounded-xl border border-[#DFE1E6] p-3">
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-[#6B778C]">Payment split</p>
+              {methodRows.length === 0 ? (
+                <p className="py-2 text-center text-[12px] text-[#6B778C]">No sales yet this shift.</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {methodRows.map(([m, v]) => (
+                    <div key={m} className="flex items-center justify-between text-[12px]">
+                      <span className="font-semibold text-[#172B4D]">{m}</span>
+                      <span className="text-[#6B778C]">×{v.count}</span>
+                      <span className="font-mono tabular-nums font-bold text-[#172B4D]">{KES(v.total)}</span>
+                    </div>
+                  ))}
+                  <div className="flex items-center justify-between border-t border-[#DFE1E6] pt-1.5 text-[12px]">
+                    <span className="font-bold text-[#172B4D]">Total takings</span>
+                    <span className="font-mono tabular-nums font-extrabold text-[#0052CC]">{KES(report?.total ?? 0)}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* close flow */}
+            {closing ? (
+              <div className="space-y-3 rounded-2xl border border-[#FFE0B2] bg-[#FFF8E1] p-4">
+                <p className="text-[12px] font-bold text-[#8D6708]">Count the physical cash in the drawer, then enter it below.</p>
+                <Input
+                  inputMode="numeric"
+                  value={counted}
+                  onChange={(e) => setCounted(e.target.value.replace(/[^0-9]/g, ""))}
+                  className="h-11 rounded-xl text-right font-display text-lg font-bold tabular-nums"
+                  placeholder="Counted cash"
+                  aria-label="Counted cash amount"
+                  autoFocus
+                />
+                {variancePreview !== null && (
+                  <p className={cn("text-center text-[13px] font-bold tabular-nums", variancePreview === 0 ? "text-[#00C853]" : "text-[#D04A1E]")}>
+                    {variancePreview === 0 ? "✓ Balanced" : `Variance: ${variancePreview > 0 ? "+" : ""}${KES(variancePreview)}`}
+                  </p>
+                )}
+                <Input
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  className="rounded-xl text-[12px]"
+                  placeholder="Note (optional) — e.g. KES 200 given as change to neighbour shop"
+                  aria-label="Shift note"
+                />
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => setClosing(false)} className="h-9 flex-1 rounded-xl border-[#DFE1E6] font-bold text-[#172B4D]">
+                    Cancel
+                  </Button>
+                  <Button onClick={closeTill} disabled={busy || counted === ""} className="h-9 flex-1 rounded-xl bg-[#FF5630] font-bold text-white hover:bg-[#E14A28]">
+                    {busy ? <Loader2 size={14} className="animate-spin" /> : <Lock size={14} />} Close & print Z
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={xReport} disabled={busy} className="h-10 flex-1 rounded-xl border-[#DFE1E6] font-bold text-[#172B4D]">
+                  <Printer size={14} /> X-Report
+                </Button>
+                <Button onClick={() => setClosing(true)} className="h-10 flex-1 rounded-xl bg-[#172B4D] font-bold text-white hover:bg-[#0E1B33]">
+                  <Lock size={14} /> Close till
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* recent closed shifts */}
+        {history.length > 0 && !zResult && (
+          <div className="rounded-xl border border-[#DFE1E6] p-3">
+            <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-[#6B778C]">Recent closed shifts</p>
+            <div className="space-y-1.5">
+              {history.slice(0, 4).map((h) => (
+                <div key={h.id} className="flex items-center justify-between text-[11px]">
+                  <span className="font-semibold text-[#172B4D]">
+                    #{h.id} • {h.openedBy.split(" ")[0]} • {h.closedAt ? new Date(h.closedAt).toLocaleDateString("en-KE", { day: "numeric", month: "short" }) : ""}
+                  </span>
+                  <span className={cn("font-mono font-bold tabular-nums", Math.abs(h.variance ?? 0) < 1 ? "text-[#00C853]" : "text-[#D04A1E]")}>
+                    {Math.abs(h.variance ?? 0) < 1 ? "Balanced" : `${(h.variance ?? 0) > 0 ? "+" : ""}${KES(h.variance ?? 0)}`}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

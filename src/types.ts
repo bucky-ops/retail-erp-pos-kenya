@@ -252,6 +252,10 @@ export interface SettingsDto {
   companyName: string;
   tierRules: string;
   lastDailyJobsAt: string | null;
+  reportScheduleEnabled: boolean;
+  reportScheduleFrequency: "Daily" | "Weekly" | "Monthly" | string;
+  reportScheduleEmail: string;
+  reportScheduleLastSentAt: string | null;
 }
 
 export const KES = (n: number, compact = false) => {

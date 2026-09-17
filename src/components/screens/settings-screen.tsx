@@ -351,10 +351,10 @@ export default function SettingsScreen() {
       <div className="space-y-5">
         <ScreenHeader title="Settings" subtitle="Company, stores, integrations & compliance" />
         <div className="grid grid-cols-12 gap-4">
-          <div className="col-span-12 lg:col-span-3">
+          <div className="col-span-12 @4xl:col-span-3">
             <TableSkeleton rows={8} cols={1} />
           </div>
-          <div className="col-span-12 lg:col-span-9">
+          <div className="col-span-12 @4xl:col-span-9">
             <TableSkeleton rows={8} cols={3} />
           </div>
         </div>
@@ -368,8 +368,8 @@ export default function SettingsScreen() {
 
       <div className="grid grid-cols-12 gap-4">
         {/* LEFT nav */}
-        <div className="col-span-12 lg:col-span-3">
-          <div className="lg:sticky lg:top-4">
+        <div className="col-span-12 @4xl:col-span-3">
+          <div className="@4xl:sticky @4xl:top-4">
             <Panel padding={false} className="p-2">
               {SECTIONS.map(({ id, label, icon: Icon }) => (
                 <button
@@ -392,12 +392,12 @@ export default function SettingsScreen() {
         </div>
 
         {/* RIGHT content */}
-        <div className="col-span-12 lg:col-span-9">
+        <div className="col-span-12 @4xl:col-span-9">
             {/* ── COMPANY ── */}
             {section === "company" && (
               <Panel>
                 <PanelHead title="Company" sub="Trading name & statutory VAT used on receipts and eTIMS invoices" icon={Building2} />
-                <div className="mt-6 grid max-w-[560px] grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="mt-6 grid max-w-[560px] grid-cols-1 gap-4 @xl:grid-cols-2">
                   <Field label="Company name">
                     <Input
                       value={draft.companyName}
@@ -438,7 +438,7 @@ export default function SettingsScreen() {
             {section === "stores" && (
               <Panel>
                 <PanelHead title="Stores & Warehouses" sub="Branches running DukaFlow terminals right now" icon={Warehouse} />
-                <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="mt-6 grid grid-cols-1 gap-4 @2xl:grid-cols-2">
                   {stores.map((s) => {
                     const stock = stockByStore[s.id] ?? 0;
                     return (
@@ -549,7 +549,7 @@ export default function SettingsScreen() {
             {section === "pos" && (
               <Panel>
                 <PanelHead title="POS Profiles" sub="Terminal layouts per device type" icon={MonitorSmartphone} />
-                <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+                <div className="mt-6 grid grid-cols-1 gap-4 @2xl:grid-cols-3">
                   {[
                     { name: "Counter POS", desc: "Desktop dock • 80mm receipt • barcode scanner", badge: "Thika Road + Kiambu" },
                     { name: "Mobile POS", desc: "Phone / tablet • M-Pesa STK push • queue-first offline", badge: "Delivery crews" },
@@ -583,7 +583,7 @@ export default function SettingsScreen() {
               <Panel>
                 <PanelHead title="Print Formats" sub="Receipt branding — live previews update as you edit" icon={ReceiptText} />
                 <div className="mt-6 grid grid-cols-12 gap-6">
-                  <div className="col-span-12 md:col-span-5">
+                  <div className="col-span-12 @2xl:col-span-5">
                     {/* 80mm mini receipt */}
                     <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-[#6B778C]">80mm thermal</p>
                     <div className="w-[180px] rounded-lg border border-[#DFE1E6] bg-white p-3 font-mono text-[8px] leading-relaxed text-[#172B4D] shadow-sm">
@@ -637,7 +637,7 @@ export default function SettingsScreen() {
                     </div>
                   </div>
 
-                  <div className="col-span-12 md:col-span-7">
+                  <div className="col-span-12 @2xl:col-span-7">
                     <div className="grid grid-cols-2 gap-4">
                       <Field label="Primary colour">
                         <div className="flex items-center gap-2">
@@ -1028,7 +1028,7 @@ export default function SettingsScreen() {
                     className="data-[state=checked]:bg-[#FFAB00]"
                   />
                 </div>
-                <div className="mt-4 grid max-w-[560px] grid-cols-2 gap-4 sm:grid-cols-4">
+                <div className="mt-4 grid max-w-[560px] grid-cols-2 gap-4 @xl:grid-cols-4">
                   <Field label="Starts">
                     <Input
                       type="time"
@@ -1192,6 +1192,84 @@ export default function SettingsScreen() {
                       className="h-10 rounded-xl bg-[#00C853] px-5 text-[13px] font-bold text-white hover:bg-[#00A844]"
                     >
                       {jobsBusy ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />} Run jobs now
+                    </Button>
+                  </div>
+                </div>
+
+                {/* ── Scheduled report email (mirrors Reports → Schedule email) ── */}
+                <div className="mt-4 rounded-xl border border-[#C5CAE9] bg-[#E8EAF6]/60 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="flex items-center gap-2 text-[13px] font-semibold text-[#172B4D]">
+                        <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-[#0052CC]/10 text-[#0052CC]">
+                          <CalendarClock size={13} />
+                        </span>
+                        Scheduled report email
+                      </p>
+                      <p className="mt-1 max-w-md text-[11px] leading-relaxed text-[#6B778C]">
+                        Automatic owner summary — revenue, VAT, top products & payment split
+                        (wire <code className="rounded bg-white px-1 font-mono text-[10px]">GET /api/cron/report</code> to any scheduler).
+                        Last sent: {draft?.reportScheduleLastSentAt ? rel(draft.reportScheduleLastSentAt) : "never"}.
+                      </p>
+                    </div>
+                    <Button
+                      disabled={jobsBusy}
+                      onClick={async () => {
+                        setJobsBusy(true);
+                        try {
+                          const r = await api.post<{ ok: boolean; message?: string; email?: string }>("/api/cron/report?force=1", {});
+                          toast({
+                            title: r.ok ? "Report emailed ✅" : "Not sent",
+                            description: r.ok ? `Delivered to ${r.email} — copy logged in Messages.` : r.message,
+                          });
+                          const s = await api.get<SettingsDto>("/api/settings");
+                          setDraft(s);
+                        } catch (e) {
+                          toast({ title: "Report send failed", description: e instanceof Error ? e.message : "Unknown error" });
+                        } finally {
+                          setJobsBusy(false);
+                        }
+                      }}
+                      className="h-10 rounded-xl bg-[#0052CC] px-5 text-[13px] font-bold text-white hover:bg-[#0041A8]"
+                    >
+                      {jobsBusy ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />} Send now
+                    </Button>
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-center gap-3">
+                    <label className="flex cursor-pointer items-center gap-2 text-[12px] font-semibold text-[#172B4D]">
+                      <Switch
+                        checked={draft?.reportScheduleEnabled ?? false}
+                        onCheckedChange={(v) => put({ reportScheduleEnabled: v }, v ? "Schedule activated" : "Schedule paused")}
+                        aria-label="Toggle scheduled report email"
+                      />
+                      {draft?.reportScheduleEnabled ? "Active" : "Off"}
+                    </label>
+                    <Select
+                      value={draft?.reportScheduleFrequency ?? "Weekly"}
+                      onValueChange={(v) => put({ reportScheduleFrequency: v }, "Frequency updated", `${v} report, 08:00 EAT`)}
+                      disabled={!draft?.reportScheduleEnabled}
+                    >
+                      <SelectTrigger className="h-9 w-[220px] rounded-xl text-[12px]"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Daily">Daily — every day 08:00</SelectItem>
+                        <SelectItem value="Weekly">Weekly — Mondays 08:00</SelectItem>
+                        <SelectItem value="Monthly">Monthly — 1st 08:00</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      type="email"
+                      value={draft?.reportScheduleEmail ?? ""}
+                      onChange={(e) => set("reportScheduleEmail", e.target.value)}
+                      placeholder="owner@dukaflow.co.ke"
+                      className="h-9 w-[240px] rounded-xl text-[12px]"
+                      aria-label="Report recipient email"
+                    />
+                    <Button
+                      variant="outline"
+                      onClick={() => put({ reportScheduleEmail: draft?.reportScheduleEmail ?? "" }, "Recipient saved", draft?.reportScheduleEmail)}
+                      className="h-9 rounded-xl border-[#DFE1E6] px-4 text-[12px] font-bold text-[#172B4D]"
+                    >
+                      Save email
                     </Button>
                   </div>
                 </div>

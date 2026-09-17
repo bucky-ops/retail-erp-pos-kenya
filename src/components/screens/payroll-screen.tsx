@@ -186,7 +186,7 @@ export default function PayrollScreen() {
       </div>
 
       {/* totals KPI row */}
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 @6xl:grid-cols-4">
         <KpiCard icon={<Wallet className="h-4 w-4" />} label="Gross payroll" value={KES(t?.gross ?? 0)} loading={!data} sub={`${t?.count ?? 0} employees`} />
         <KpiCard
           icon={<TrendingDown className="h-4 w-4" />}
@@ -310,7 +310,7 @@ export default function PayrollScreen() {
             </button>
           </CollapsibleTrigger>
           <CollapsibleContent>
-            <div className="mt-4 grid grid-cols-1 gap-3 text-[12px] leading-relaxed md:grid-cols-2">
+            <div className="mt-4 grid grid-cols-1 gap-3 text-[12px] leading-relaxed @2xl:grid-cols-2">
               <div className="rounded-xl border border-[#DFE1E6] bg-[#FAFBFC] p-3.5">
                 <p className="mb-1 font-bold text-[#172B4D]">1. Taxable pay</p>
                 <p className="font-mono text-[11px] text-[#0052CC]">taxable = gross − NSSF − SHIF − Housing Levy</p>

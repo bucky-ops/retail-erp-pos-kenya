@@ -316,7 +316,7 @@ export default function ReceiptsScreen() {
 
       <div className="grid grid-cols-12 gap-6">
         {/* ══════════ GALLERY ══════════ */}
-        <div className="col-span-12 lg:col-span-4">
+        <div className="col-span-12 @4xl:col-span-4">
           <Panel padding={false} className="overflow-hidden">
             <div className="flex items-center justify-between border-b border-[#DFE1E6] px-4 py-3">
               <h3 className="font-display text-[14px] font-bold text-[#172B4D]">Recent receipts</h3>
@@ -365,7 +365,7 @@ export default function ReceiptsScreen() {
         </div>
 
         {/* ══════════ PREVIEW ══════════ */}
-        <div className="col-span-12 lg:col-span-8">
+        <div className="col-span-12 @4xl:col-span-8">
           <Tabs defaultValue="thermal">
             <TabsList className="mb-4 h-10 rounded-full border border-[#DFE1E6] bg-white p-1">
               {[
@@ -620,7 +620,7 @@ export default function ReceiptsScreen() {
             {/* ── GIFT CARDS ── */}
             <TabsContent value="gift">
               <div className="grid grid-cols-12 gap-4">
-                <div className="col-span-12 xl:col-span-8">
+                <div className="col-span-12 @6xl:col-span-8">
                   <div className="mb-3 flex items-center justify-between">
                     <h3 className="font-display text-[14px] font-bold text-[#172B4D]">Gift cards issued</h3>
                     <Button onClick={() => setGcOpen(true)} className="h-8 rounded-xl bg-[#0052CC] px-3 text-[12px] font-semibold hover:bg-[#0041A8]">
@@ -628,13 +628,13 @@ export default function ReceiptsScreen() {
                     </Button>
                   </div>
                   {!cards ? (
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-4 @xl:grid-cols-2">
                       {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-[210px] rounded-2xl" />)}
                     </div>
                   ) : cards.length === 0 ? (
                     <EmptyState icon={<Gift className="h-6 w-6" />} title="No gift cards yet" sub="Issue the first DukaFlow gift card to a loyal customer." action={<Button onClick={() => setGcOpen(true)} className="rounded-xl bg-[#0052CC] hover:bg-[#0041A8]">New Gift Card</Button>} />
                   ) : (
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-4 @xl:grid-cols-2">
                       {cards.map((c) => {
                         const dead = c.status !== "Active" || isExpired(c.expiry);
                         return (
@@ -681,7 +681,7 @@ export default function ReceiptsScreen() {
                 </div>
 
                 {/* customization rail */}
-                <div className="col-span-12 xl:col-span-4">
+                <div className="col-span-12 @6xl:col-span-4">
                   <Panel className="h-fit">
                     <h3 className="font-display text-[15px] font-bold text-[#172B4D]">Customization</h3>
                     <p className="mt-0.5 text-[12px] text-[#6B778C]">Branding applied to every receipt & invoice</p>
