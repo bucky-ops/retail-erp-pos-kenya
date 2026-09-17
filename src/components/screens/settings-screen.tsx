@@ -2,7 +2,7 @@
 
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Building2, CalendarClock, Check, Database, Download, Eye, EyeOff, Landmark, Loader2,
+  Building2, CalendarClock, Check, Database, Download, Eye, EyeOff, Keyboard, Landmark, Loader2,
   MessageSquare, MonitorSmartphone, Percent, Play, Plug, ReceiptText, RefreshCw, Smartphone,
   Sparkles, Upload, Users, Warehouse, WifiOff, X,
 } from "lucide-react";
@@ -36,7 +36,7 @@ const err = (e: unknown) => (e instanceof Error ? e.message : "Something went wr
 
 type SectionId =
   | "company" | "stores" | "users" | "pos" | "print" | "taxes"
-  | "kra" | "mpesa" | "sms" | "loyalty" | "device" | "backup";
+  | "kra" | "mpesa" | "sms" | "loyalty" | "device" | "backup" | "shortcuts";
 
 const SECTIONS: { id: SectionId; label: string; icon: typeof Building2 }[] = [
   { id: "company", label: "Company", icon: Building2 },
@@ -50,6 +50,7 @@ const SECTIONS: { id: SectionId; label: string; icon: typeof Building2 }[] = [
   { id: "sms", label: "SMS Provider", icon: MessageSquare },
   { id: "loyalty", label: "Loyalty Rules", icon: Sparkles },
   { id: "device", label: "Device & Offline", icon: WifiOff },
+  { id: "shortcuts", label: "Keyboard Shortcuts", icon: Keyboard },
   { id: "backup", label: "Backup & Restore", icon: Database },
 ];
 
@@ -1279,6 +1280,52 @@ export default function SettingsScreen() {
             {/* ── DEVICE & OFFLINE ── */}
             {section === "device" && (
               <DevicePanel />
+            )}
+
+            {/* ── KEYBOARD SHORTCUTS ── */}
+            {section === "shortcuts" && (
+              <Panel>
+                <h3 className="font-display text-[15px] font-bold text-[#172B4D]">Keyboard shortcuts</h3>
+                <p className="mt-0.5 text-[12px] text-[#6B778C]">Every speed key in DukaFlow — learn these and the till flies.</p>
+                <div className="mt-4 grid gap-2 @2xl:grid-cols-2">
+                  {[
+                    { keys: ["F2"], where: "POS", what: "Focus the scan / search field — scan or type, then Enter adds the first match" },
+                    { keys: ["F4"], where: "POS", what: "Open Quick Return — scan a receipt number and refund what came back" },
+                    { keys: ["Enter"], where: "POS scan", what: "Add the first search match to the cart (barcode guns press Enter automatically)" },
+                    { keys: ["Enter"], where: "Stock take", what: "Scan mode: each barcode Enter bumps that line's counted quantity" },
+                    { keys: ["Esc"], where: "Anywhere", what: "Close the top dialog without saving" },
+                    { keys: ["Ctrl", "P"], where: "Anywhere", what: "Print the open statement / receipt / label sheet (uses the print-ready area)" },
+                    { keys: ["0–9"], where: "Login", what: "Type the 4-digit staff PIN — the pad also clicks" },
+                  ].map((r, i) => (
+                    <div
+                      key={i}
+                      className="group flex items-start gap-3 rounded-xl border border-[#DFE1E6] bg-white px-3.5 py-3 transition hover:border-[#0052CC]/40 hover:shadow-[0_2px_8px_rgba(0,82,204,0.08)]"
+                    >
+                      <div className="flex shrink-0 gap-1 pt-0.5">
+                        {r.keys.map((k) => (
+                          <kbd
+                            key={k}
+                            className="inline-flex h-6 min-w-6 items-center justify-center rounded-md border border-[#DFE1E6] border-b-2 bg-[#F4F5F7] px-1.5 font-mono text-[11px] font-bold text-[#172B4D] shadow-sm group-hover:border-[#0052CC]/30 group-hover:bg-[#E9F2FF] group-hover:text-[#0052CC]"
+                          >
+                            {k}
+                          </kbd>
+                        ))}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[12.5px] font-bold text-[#172B4D]">
+                          {r.what}
+                          <span className="ml-2 rounded-full bg-[#F4F5F7] px-1.5 py-0.5 text-[9.5px] font-bold text-[#6B778C]">{r.where}</span>
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-4 rounded-xl border border-dashed border-[#DFE1E6] bg-[#FAFBFC] px-4 py-3 text-[11.5px] leading-relaxed text-[#6B778C]">
+                  <b className="text-[#172B4D]">Tip for cashiers:</b> keep one hand on the barcode gun and one on the keyboard —
+                  F2 → scan → Enter → Cash → Enter closes a sale without touching the mouse. Print dialogs respect the
+                  print-area isolation, so only the receipt / statement / sticker sheet lands on paper.
+                </p>
+              </Panel>
             )}
         </div>
       </div>

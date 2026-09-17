@@ -16,7 +16,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Building2, Check, ChevronDown, Loader2, PackageMinus, Plus, Send, ShoppingCart, Tag, Truck, Undo2, X } from "lucide-react";
+import { Building2, Check, ChevronDown, FileText, Loader2, PackageMinus, Plus, Printer, Send, ShoppingCart, Tag, Truck, Undo2, X } from "lucide-react";
 import { api } from "@/lib/api";
 import { KES, type ProductDto } from "@/types";
 import { toast } from "@/hooks/use-toast";
@@ -27,7 +27,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -70,6 +70,29 @@ interface RTV {
 
 /* stock line used to pick + validate RTV quantities */
 interface StockRow { productId: number; name: string; emoji: string; sku: string; storeId: number; qty: number; cost: number }
+
+/* supplier reconciliation statement (POs + RTV debit notes + price list) */
+interface SupStmt {
+  supplier: { id: number; name: string; phone: string; email: string; kraPin: string; category: string; leadDays: number };
+  pos: {
+    id: number; poNo: string; status: string; total: number; receivedValue: number; outstandingValue: number;
+    orderedAt: string; receivedAt: string | null; storeName: string; lines: number;
+    items: { name: string; emoji: string; qty: number; received: number; unitCost: number }[];
+  }[];
+  rtvs: {
+    id: number; rtnNo: string; debitNoteNo: string; reason: string; total: number; status: string; note: string;
+    createdAt: string; storeName: string; items: { name: string; emoji: string; qty: number; unitCost: number }[];
+  }[];
+  prices: {
+    productId: number; name: string; emoji: string; sku: string; unit: string;
+    catalogCost: number; negotiatedCost: number; savingPerUnit: number; updatedAt: string;
+  }[];
+  summary: {
+    poCount: number; openPos: number; orderedValue: number; purchasedValue: number; openOrdersValue: number;
+    cancelledValue: number; rtvCount: number; returnedValue: number; creditedValue: number;
+    pendingCreditValue: number; netTraded: number; priceListCount: number; priceListSavings: number; generatedAt: string;
+  };
+}
 
 const err = (e: unknown) => (e instanceof Error ? e.message : "Something went wrong");
 
@@ -124,6 +147,12 @@ export function ProcurementDialog({
   const [priceEdits, setPriceEdits] = useState<Record<number, string>>({}); // productId → negotiated cost ("" clears)
   const [priceCatalog, setPriceCatalog] = useState<ProductDto[] | null>(null);
   const [priceBusy, setPriceBusy] = useState(false);
+
+  /* supplier reconciliation statement */
+  const [stmtSup, setStmtSup] = useState<Sup | null>(null);
+  const [stmtData, setStmtData] = useState<SupStmt | null>(null);
+  const [stmtLoading, setStmtLoading] = useState(false);
+  const [stmtBusy, setStmtBusy] = useState(false);
 
   /* return-to-vendor form */
   const [rtvs, setRtvs] = useState<RTV[] | null>(null);
@@ -414,7 +443,32 @@ export function ProcurementDialog({
     }
   };
 
+  /* ── supplier statement: load → render → print ───────── */
+  const openStatement = async (s: Sup) => {
+    setStmtSup(s);
+    setStmtData(null);
+    setStmtLoading(true);
+    try {
+      const d = await api.get<SupStmt>(`/api/suppliers/${s.id}/statement`);
+      setStmtData(d);
+    } catch (e) {
+      toast({ title: "Could not load statement", description: err(e) });
+      setStmtSup(null);
+    } finally {
+      setStmtLoading(false);
+    }
+  };
+
+  const printStatement = () => {
+    setStmtBusy(true);
+    window.setTimeout(() => {
+      window.print();
+      setStmtBusy(false);
+    }, 60);
+  };
+
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl rounded-2xl">
         <DialogHeader>
@@ -632,6 +686,14 @@ export function ProcurementDialog({
                   </div>
                   <Badge variant="outline" className="rounded-full border-[#DFE1E6] text-[10px] font-semibold text-[#6B778C]">{s.category}</Badge>
                   <span className="text-[10px] text-[#6B778C]">{s.leadDays}d lead • {s.poCount} POs</span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void openStatement(s)}
+                    className="h-7 rounded-lg px-2 text-[10.5px] font-bold text-[#172B4D] hover:border-[#172B4D] hover:bg-[#F4F5F7]"
+                  >
+                    <FileText className="h-3 w-3" /> Statement
+                  </Button>
                   <Button
                     size="sm"
                     variant="outline"
@@ -883,5 +945,215 @@ export function ProcurementDialog({
         </Tabs>
       </DialogContent>
     </Dialog>
+
+    {/* ══════════ Supplier statement dialog (printable A4) ══════════ */}
+    <Dialog open={!!stmtSup} onOpenChange={(o) => !o && setStmtSup(null)}>
+      <DialogContent className="rounded-[20px] sm:max-w-[720px]">
+        <DialogHeader>
+          <DialogTitle className="font-display">Supplier statement</DialogTitle>
+          <DialogDescription>
+            {stmtSup ? `${stmtSup.name} • reconciliation of purchase orders, debit notes & negotiated prices` : ""}
+          </DialogDescription>
+        </DialogHeader>
+
+        {stmtLoading || !stmtData ? (
+          <div className="flex h-56 items-center justify-center">
+            <Loader2 className="h-6 w-6 animate-spin text-[#0052CC]" />
+          </div>
+        ) : (
+          <>
+            <div className="df-scroll max-h-[60vh] overflow-y-auto pr-1">
+              {/* the sheet — printable A4 area */}
+              <div className="df-print-area df-print-area-a4 df-statement overflow-hidden rounded-xl border border-[#DFE1E6] shadow-sm">
+                {/* navy gradient header band */}
+                <div className="flex items-center justify-between bg-gradient-to-r from-[#172B4D] to-[#0E1B33] px-6 py-4 text-white">
+                  <div>
+                    <p className="font-display text-[16px] font-bold">DukaFlow Ltd</p>
+                    <p className="text-[11px] text-white/80">Thika Road, Nairobi • +254 700 123 456</p>
+                    <p className="font-mono text-[10px] text-white/70">KRA PIN: P051234567A</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-display text-[14px] font-bold tracking-wide">SUPPLIER STATEMENT</p>
+                    <p className="text-[11px] text-white/80">
+                      Generated {new Date(stmtData.summary.generatedAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
+                    </p>
+                  </div>
+                </div>
+
+                {/* supplier + reconciliation summary */}
+                <div className="grid grid-cols-2 gap-4 px-6 py-4">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-[#6B778C]">Supplier</p>
+                    <p className="font-display mt-1 flex items-center gap-2 text-[14px] font-bold text-[#172B4D]">
+                      <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#E9F2FF] text-[#0052CC]"><Building2 size={13} /></span>
+                      {stmtData.supplier.name}
+                    </p>
+                    <p className="font-mono text-[12px] text-[#6B778C]">{stmtData.supplier.phone || "—"}</p>
+                    <div className="mt-1 flex items-center gap-2">
+                      <span className="rounded-full bg-[#F4F5F7] px-2 py-0.5 text-[10px] font-bold text-[#6B778C]">{stmtData.supplier.category}</span>
+                      <span className="rounded-full bg-[#E9F2FF] px-2 py-0.5 text-[10px] font-bold text-[#0052CC]">{stmtData.supplier.leadDays}d lead</span>
+                      {stmtData.supplier.kraPin && (
+                        <span className="rounded-full bg-[#F4F5F7] px-2 py-0.5 font-mono text-[10px] font-semibold text-[#6B778C]">{stmtData.supplier.kraPin}</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="space-y-1 text-right text-[12px]">
+                    <p className="text-[#6B778C]">Purchase orders: <b className="text-[#172B4D]">{stmtData.summary.poCount}</b> ({stmtData.summary.openPos} open)</p>
+                    <p className="text-[#6B778C]">Debit notes: <b className="text-[#172B4D]">{stmtData.summary.rtvCount}</b></p>
+                    <p className="text-[#6B778C]">Price list items: <b className="text-[#172B4D]">{stmtData.summary.priceListCount}</b></p>
+                    <p className="text-[#6B778C]">
+                      Net position: <b className={cn("font-mono", stmtData.summary.netTraded >= 0 ? "text-[#1B7A2E]" : "text-[#C62828]")}>{KES(stmtData.summary.netTraded, true)}</b>
+                    </p>
+                  </div>
+                </div>
+
+                {/* reconciliation tiles */}
+                <div className="mx-6 mb-4 grid grid-cols-2 gap-2 @xl:grid-cols-4">
+                  <div className="rounded-xl bg-[#E9F2FF] px-3 py-2.5">
+                    <p className="text-[9px] font-bold uppercase tracking-widest text-[#0052CC]/70">Goods received</p>
+                    <p className="font-display mt-0.5 text-[16px] font-extrabold tabular-nums text-[#0052CC]">{KES(stmtData.summary.purchasedValue, true)}</p>
+                    <p className="text-[9.5px] text-[#0052CC]/60">of {KES(stmtData.summary.orderedValue, true)} ordered</p>
+                  </div>
+                  <div className="rounded-xl bg-[#FFEBE8] px-3 py-2.5">
+                    <p className="text-[9px] font-bold uppercase tracking-widest text-[#C62828]/70">Returned (RTV)</p>
+                    <p className="font-display mt-0.5 text-[16px] font-extrabold tabular-nums text-[#C62828]">−{KES(stmtData.summary.returnedValue, true)}</p>
+                    <p className="text-[9.5px] text-[#C62828]/60">{KES(stmtData.summary.creditedValue, true)} credited</p>
+                  </div>
+                  <div className="rounded-xl bg-[#FFF8E1] px-3 py-2.5">
+                    <p className="text-[9px] font-bold uppercase tracking-widest text-[#B8860B]/80">Open orders</p>
+                    <p className="font-display mt-0.5 text-[16px] font-extrabold tabular-nums text-[#B8860B]">{KES(stmtData.summary.openOrdersValue, true)}</p>
+                    <p className="text-[9.5px] text-[#B8860B]/70">awaiting delivery</p>
+                  </div>
+                  <div className="rounded-xl bg-[#E8F5E9] px-3 py-2.5">
+                    <p className="text-[9px] font-bold uppercase tracking-widest text-[#1B7A2E]/80">Price savings</p>
+                    <p className="font-display mt-0.5 text-[16px] font-extrabold tabular-nums text-[#1B7A2E]">{KES(stmtData.summary.priceListSavings, true)}</p>
+                    <p className="text-[9.5px] text-[#1B7A2E]/60">per reorder cycle</p>
+                  </div>
+                </div>
+
+                {/* pending credit alert */}
+                {stmtData.summary.pendingCreditValue > 0 && (
+                  <div className="mx-6 mb-4 flex items-center justify-between rounded-xl border border-[#FFE0B2] bg-[#FFF8E1] px-4 py-2.5">
+                    <p className="text-[11.5px] font-semibold text-[#8D6708]">
+                      ⚠ {KES(stmtData.summary.pendingCreditValue, true)} of debit notes not yet credited by the supplier
+                    </p>
+                    <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-[#B8860B]">follow up</span>
+                  </div>
+                )}
+
+                {/* purchase orders */}
+                <div className="px-6 pb-2">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#6B778C]">Purchase orders</p>
+                  <table className="mt-2 w-full text-[12px]">
+                    <thead>
+                      <tr className="border-b border-[#DFE1E6] text-left text-[10px] uppercase tracking-wider text-[#6B778C]">
+                        <th className="py-1.5 font-semibold">PO</th>
+                        <th className="py-1.5 font-semibold">Date</th>
+                        <th className="py-1.5 font-semibold">Store</th>
+                        <th className="py-1.5 font-semibold">Status</th>
+                        <th className="py-1.5 text-right font-semibold">Received</th>
+                        <th className="py-1.5 text-right font-semibold">Outstanding</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {stmtData.pos.length === 0 ? (
+                        <tr><td colSpan={6} className="py-2 text-[11px] text-[#6B778C]">No purchase orders yet.</td></tr>
+                      ) : (
+                        stmtData.pos.map((po) => (
+                          <tr key={po.id} className="border-b border-[#F4F5F7]">
+                            <td className="py-1.5 font-mono font-semibold text-[#172B4D]">{po.poNo}</td>
+                            <td className="py-1.5 text-[#6B778C]">{fmtDate(po.orderedAt)}</td>
+                            <td className="py-1.5 text-[#6B778C]">{po.storeName}</td>
+                            <td className="py-1.5">
+                              <span className={cn("rounded-full px-1.5 py-0.5 text-[9px] font-bold", STATUS_CLS[po.status] ?? "bg-[#F4F5F7] text-[#6B778C]")}>{po.status}</span>
+                            </td>
+                            <td className="py-1.5 text-right font-bold tabular-nums text-[#172B4D]">{KES(po.receivedValue)}</td>
+                            <td className={cn("py-1.5 text-right font-semibold tabular-nums", po.outstandingValue > 0 ? "text-[#B8860B]" : "text-[#6B778C]")}>{KES(po.outstandingValue)}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* debit notes */}
+                {stmtData.rtvs.length > 0 && (
+                  <div className="px-6 pb-2">
+                    <p className="mt-2 text-[10px] font-bold uppercase tracking-widest text-[#6B778C]">Debit notes (returns to vendor)</p>
+                    <table className="mt-2 w-full text-[12px]">
+                      <thead>
+                        <tr className="border-b border-[#DFE1E6] text-left text-[10px] uppercase tracking-wider text-[#6B778C]">
+                          <th className="py-1.5 font-semibold">DN</th>
+                          <th className="py-1.5 font-semibold">Date</th>
+                          <th className="py-1.5 font-semibold">Reason</th>
+                          <th className="py-1.5 font-semibold">Credit</th>
+                          <th className="py-1.5 text-right font-semibold">Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {stmtData.rtvs.map((r) => (
+                          <tr key={r.id} className="border-b border-[#F4F5F7]">
+                            <td className="py-1.5 font-mono font-bold text-[#C62828]">{r.debitNoteNo}</td>
+                            <td className="py-1.5 text-[#6B778C]">{fmtDate(r.createdAt)}</td>
+                            <td className="py-1.5 text-[#6B778C]">{r.reason}</td>
+                            <td className="py-1.5">
+                              <span className={cn("rounded-full px-1.5 py-0.5 text-[9px] font-bold", STATUS_CLS[r.status] ?? "bg-[#F4F5F7] text-[#6B778C]")}>{r.status}</span>
+                            </td>
+                            <td className="py-1.5 text-right font-bold tabular-nums text-[#C62828]">−{KES(r.total)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* negotiated price list */}
+                {stmtData.prices.length > 0 && (
+                  <div className="px-6 pb-2">
+                    <p className="mt-2 text-[10px] font-bold uppercase tracking-widest text-[#6B778C]">Negotiated price list</p>
+                    <table className="mt-2 w-full text-[12px]">
+                      <thead>
+                        <tr className="border-b border-[#DFE1E6] text-left text-[10px] uppercase tracking-wider text-[#6B778C]">
+                          <th className="py-1.5 font-semibold">Product</th>
+                          <th className="py-1.5 text-right font-semibold">Catalog</th>
+                          <th className="py-1.5 text-right font-semibold">Negotiated</th>
+                          <th className="py-1.5 text-right font-semibold">Saving/unit</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {stmtData.prices.map((p) => (
+                          <tr key={p.productId} className="border-b border-[#F4F5F7]">
+                            <td className="py-1.5 font-semibold text-[#172B4D]">{p.emoji} {p.name}</td>
+                            <td className="py-1.5 text-right tabular-nums text-[#6B778C] line-through decoration-[#C62828]/40">{KES(p.catalogCost)}</td>
+                            <td className="py-1.5 text-right font-bold tabular-nums text-[#0052CC]">{KES(p.negotiatedCost)}</td>
+                            <td className="py-1.5 text-right font-bold tabular-nums text-[#1B7A2E]">−{KES(p.savingPerUnit)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* footer */}
+                <div className="border-t border-dashed border-[#DFE1E6] px-6 py-3 text-[10px] text-[#6B778C]">
+                  Net traded = goods received − goods returned. Reconcile against the supplier&apos;s invoice and confirm pending credits. Generated by DukaFlow ERP.
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter className="mt-1">
+              <Button
+                onClick={printStatement}
+                disabled={stmtBusy}
+                className="rounded-xl bg-[#172B4D] font-semibold hover:bg-[#0F1E38]"
+              >
+                {stmtBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />} Print / Save PDF
+              </Button>
+            </DialogFooter>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

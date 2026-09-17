@@ -24,6 +24,7 @@ import {
   Landmark,
   Loader2,
   Lock,
+  Mail,
   Minus,
   MonitorSmartphone,
   Package,
@@ -32,6 +33,7 @@ import {
   RotateCcw,
   ScanBarcode,
   Search,
+  Send,
   Shield,
   ShoppingBag,
   ShoppingCart,
@@ -256,6 +258,13 @@ export default function PosScreen() {
   const [stk, setStk] = useState<StkState>({ open: false, phase: "pending", phone: "", id: null, message: null });
   const [blocked, setBlocked] = useState<{ reason: string; overdueDays: number } | null>(null);
   const [success, setSuccess] = useState<SuccessState | null>(null);
+  /* email the e-invoice right from the success modal (mirrors Receipts) */
+  const [emailOpen, setEmailOpen] = useState(false);
+  const [emailTo, setEmailTo] = useState("");
+  const [emailSubject, setEmailSubject] = useState("");
+  const [emailBody, setEmailBody] = useState("");
+  const [emailLoading, setEmailLoading] = useState(false);
+  const [emailSending, setEmailSending] = useState(false);
   /* quick-return at the till (F4) */
   const [quickReturnOpen, setQuickReturnOpen] = useState(false);
 
@@ -519,6 +528,7 @@ export default function PosScreen() {
 
   const resetTransaction = () => {
     setSuccess(null);
+    setEmailOpen(false);
     setCart([]);
     setCustomer(null);
     setPromo(null);
@@ -526,6 +536,47 @@ export default function PosScreen() {
     setBillDiscount("");
     setUsePoints(false);
     setPaymentMethod("Cash");
+  };
+
+  /* ── email the e-invoice straight from the success modal ───── */
+  const openSuccessEmail = async () => {
+    if (!success || success.offline) return;
+    setEmailOpen(true);
+    setEmailLoading(true);
+    setEmailTo(customer?.email ?? "");
+    try {
+      const r = await api.get<{ ok: boolean; subject: string; body: string; to: string }>(
+        `/api/sales/${success.sale.id}/email`
+      );
+      setEmailSubject(r.subject);
+      setEmailBody(r.body);
+      if (r.to) setEmailTo(r.to);
+    } catch {
+      setEmailSubject(`Tax Invoice ${success.sale.receiptNo}`);
+      setEmailBody("Could not preview the e-invoice — try again.");
+    } finally {
+      setEmailLoading(false);
+    }
+  };
+
+  const sendSuccessEmail = async () => {
+    if (!success || success.offline) return;
+    setEmailSending(true);
+    try {
+      const r = await api.post<{ ok: boolean; to: string }>(`/api/sales/${success.sale.id}/email`, {
+        to: emailTo.trim(),
+      });
+      toast({ title: "E-invoice sent ✉️", description: `${success.sale.receiptNo} → ${r.to}` });
+      setEmailOpen(false);
+    } catch (e) {
+      toast({
+        title: "Could not send",
+        description: e instanceof Error ? e.message : "Try again",
+        variant: "destructive",
+      });
+    } finally {
+      setEmailSending(false);
+    }
   };
 
   const handlePay = async () => {
@@ -1484,7 +1535,7 @@ export default function PosScreen() {
                   </p>
                 )}
               </div>
-              <div className="grid grid-cols-2 gap-2 border-t border-[#DFE1E6] bg-[#FAFBFC] p-4">
+              <div className="grid grid-cols-3 gap-2 border-t border-[#DFE1E6] bg-[#FAFBFC] p-4">
                 <Button
                   variant="outline"
                   onClick={() => window.print()}
@@ -1492,6 +1543,23 @@ export default function PosScreen() {
                 >
                   <Printer size={14} /> Print 80mm
                 </Button>
+                {!success.offline && success.sale.kraStatus === "Verified" ? (
+                  <Button
+                    onClick={() => void openSuccessEmail()}
+                    className="h-10 rounded-xl border border-[#C5CAE9] bg-[#E8EAF6] text-[13px] font-semibold text-[#283593] hover:bg-[#DCDFF5]"
+                  >
+                    <Mail size={14} /> Email
+                  </Button>
+                ) : (
+                  <Button
+                    variant="outline"
+                    disabled
+                    title={success.offline ? "Sync the queued sale first — offline sales have no KRA invoice yet" : "Retry eTIMS on the Receipts screen once online"}
+                    className="h-10 rounded-xl border-dashed border-[#DFE1E6] bg-white text-[13px] font-semibold text-[#6B778C]"
+                  >
+                    <Mail size={14} /> Email
+                  </Button>
+                )}
                 <Button
                   onClick={resetTransaction}
                   className="h-10 rounded-xl bg-[#172B4D] text-[13px] font-bold text-white hover:bg-[#0F1E38]"
@@ -1501,6 +1569,75 @@ export default function PosScreen() {
               </div>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── POS e-invoice email dialog ─────────────────────── */}
+      <Dialog open={emailOpen} onOpenChange={setEmailOpen}>
+        <DialogContent className="rounded-2xl sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 font-display text-[15px] font-bold text-[#172B4D]">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#E8EAF6] text-[#283593]">
+                <Mail size={15} />
+              </span>
+              Email KRA e-invoice
+            </DialogTitle>
+            <DialogDescription className="text-[12px]">
+              {success?.sale.receiptNo} — verified electronic tax invoice (mock mailer, audited in Messages).
+            </DialogDescription>
+          </DialogHeader>
+
+          {emailLoading ? (
+            <div className="flex items-center justify-center gap-2 py-10 text-[12px] text-[#6B778C]">
+              <Loader2 size={14} className="animate-spin" /> Preparing invoice email…
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="pos-email-to" className="text-[10px] font-bold uppercase tracking-wide text-[#6B778C]">
+                  To
+                </Label>
+                <Input
+                  id="pos-email-to"
+                  value={emailTo}
+                  onChange={(e) => setEmailTo(e.target.value)}
+                  placeholder="customer@email.com"
+                  type="email"
+                  className="h-9 rounded-xl border-[#DFE1E6] bg-[#FAFBFC] text-[13px]"
+                />
+                <p className="text-[10px] text-[#6B778C]">
+                  {customer?.email
+                    ? "Customer has an email on file — future verified invoices auto-send to it."
+                    : `No email on file for ${customer?.name ?? "this customer"} — the address you send to will be saved.`}
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-bold uppercase tracking-wide text-[#6B778C]">Subject</Label>
+                <p className="rounded-xl border border-[#DFE1E6] bg-[#FAFBFC] px-3 py-2 text-[12px] font-semibold text-[#172B4D]">
+                  {emailSubject}
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-bold uppercase tracking-wide text-[#6B778C]">Preview</Label>
+                <pre className="df-scroll max-h-[200px] overflow-auto whitespace-pre-wrap rounded-xl border border-[#DFE1E6] bg-white p-3 font-mono text-[11px] leading-relaxed text-[#172B4D]">
+                  {emailBody}
+                </pre>
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setEmailOpen(false)} className="h-9 rounded-xl text-[12px] font-bold text-[#172B4D]">
+              Cancel
+            </Button>
+            <Button
+              disabled={emailLoading || emailSending || !emailTo.trim()}
+              onClick={() => void sendSuccessEmail()}
+              className="h-9 rounded-xl bg-[#283593] px-5 text-[12px] font-bold text-white hover:bg-[#1A237E]"
+            >
+              {emailSending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />} Send email
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 

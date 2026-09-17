@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  BellRing, CalendarClock, Download, Eye, FileText, HandCoins, Landmark, Loader2, MoreHorizontal,
-  Plus, Printer, ShieldAlert, Smartphone, TrendingUp, TriangleAlert,
+  BellRing, CalendarClock, Download, Eye, FileText, HandCoins, Landmark, Loader2, Mail, MoreHorizontal,
+  Plus, Printer, Send, ShieldAlert, Smartphone, TrendingUp, TriangleAlert,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { CustomerDto, DebtPlanDto, KES } from "@/types";
@@ -139,6 +139,14 @@ export default function DebtsScreen() {
   const [stmtLoading, setStmtLoading] = useState(false);
   const [stmtBusy, setStmtBusy] = useState(false);
 
+  /* statement email (mock mailer — audited in Messages) */
+  const [stmtEmailOpen, setStmtEmailOpen] = useState(false);
+  const [stmtEmailTo, setStmtEmailTo] = useState("");
+  const [stmtEmailSubject, setStmtEmailSubject] = useState("");
+  const [stmtEmailBody, setStmtEmailBody] = useState("");
+  const [stmtEmailLoading, setStmtEmailLoading] = useState(false);
+  const [stmtEmailSending, setStmtEmailSending] = useState(false);
+
   const load = useCallback(async () => {
     try {
       const [debt, custs] = await Promise.all([
@@ -247,6 +255,43 @@ export default function DebtsScreen() {
       window.print();
       setStmtBusy(false);
     }, 60);
+  };
+
+  /* ── statement email: preview → send ─────────────────── */
+  const openStatementEmail = async () => {
+    if (!stmtPlan) return;
+    setStmtEmailOpen(true);
+    setStmtEmailLoading(true);
+    setStmtEmailTo(stmtData?.customer.email ?? "");
+    try {
+      const r = await api.get<{ ok: boolean; subject: string; body: string; to: string; customerName: string }>(
+        `/api/debt-plans/${stmtPlan.id}/statement/email`
+      );
+      setStmtEmailSubject(r.subject);
+      setStmtEmailBody(r.body);
+      if (r.to) setStmtEmailTo(r.to);
+    } catch {
+      setStmtEmailSubject(`Account Statement — ${stmtPlan.customerName}`);
+      setStmtEmailBody("Could not preview the statement — try again.");
+    } finally {
+      setStmtEmailLoading(false);
+    }
+  };
+
+  const sendStatementEmail = async () => {
+    if (!stmtPlan) return;
+    setStmtEmailSending(true);
+    try {
+      const r = await api.post<{ ok: boolean; to: string }>(`/api/debt-plans/${stmtPlan.id}/statement/email`, {
+        to: stmtEmailTo.trim(),
+      });
+      toast({ title: "Statement emailed ✉️", description: `${stmtPlan.customerName} → ${r.to} (audited in Messages)` });
+      setStmtEmailOpen(false);
+    } catch (e) {
+      toast({ title: "Could not send", description: e instanceof Error ? e.message : "Try again", variant: "destructive" });
+    } finally {
+      setStmtEmailSending(false);
+    }
   };
 
   const downloadStatementCsv = () => {
@@ -1015,9 +1060,15 @@ export default function DebtsScreen() {
                 </div>
               </div>
 
-              <DialogFooter className="mt-1">
+              <DialogFooter className="mt-1 gap-2">
                 <Button variant="outline" onClick={downloadStatementCsv} className="rounded-xl">
                   <Download className="h-4 w-4" /> CSV
+                </Button>
+                <Button
+                  onClick={() => void openStatementEmail()}
+                  className="rounded-xl border border-[#C5CAE9] bg-[#E8EAF6] text-[13px] font-semibold text-[#283593] hover:bg-[#DCDFF5]"
+                >
+                  <Mail className="h-4 w-4" /> Email statement
                 </Button>
                 <Button
                   onClick={printStatement}
@@ -1029,6 +1080,75 @@ export default function DebtsScreen() {
               </DialogFooter>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ══════════ Statement email dialog ══════════ */}
+      <Dialog open={stmtEmailOpen} onOpenChange={setStmtEmailOpen}>
+        <DialogContent className="rounded-2xl sm:max-w-[560px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 font-display text-[15px] font-bold text-[#172B4D]">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#E8EAF6] text-[#283593]">
+                <Mail size={15} />
+              </span>
+              Email account statement
+            </DialogTitle>
+            <DialogDescription className="text-[12px]">
+              Sends the full statement (invoices, payments, balance) to the debtor — mock mailer, audited in Messages.
+            </DialogDescription>
+          </DialogHeader>
+
+          {stmtEmailLoading ? (
+            <div className="flex items-center justify-center gap-2 py-10 text-[12px] text-[#6B778C]">
+              <Loader2 size={14} className="animate-spin" /> Preparing statement email…
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="stmt-email-to" className="text-[10px] font-bold uppercase tracking-wide text-[#6B778C]">
+                  To
+                </Label>
+                <Input
+                  id="stmt-email-to"
+                  value={stmtEmailTo}
+                  onChange={(e) => setStmtEmailTo(e.target.value)}
+                  placeholder="customer@email.com"
+                  type="email"
+                  className="h-9 rounded-xl border-[#DFE1E6] bg-[#FAFBFC] text-[13px]"
+                />
+                <p className="text-[10px] text-[#6B778C]">
+                  {stmtData?.customer.email
+                    ? "Customer has an email on file — the address you send to will be kept for future statements."
+                    : `No email on file for ${stmtData?.customer.name ?? "this customer"} — the address you send to will be saved.`}
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-bold uppercase tracking-wide text-[#6B778C]">Subject</Label>
+                <p className="rounded-xl border border-[#DFE1E6] bg-[#FAFBFC] px-3 py-2 text-[12px] font-semibold text-[#172B4D]">
+                  {stmtEmailSubject}
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-bold uppercase tracking-wide text-[#6B778C]">Preview</Label>
+                <pre className="df-scroll max-h-[220px] overflow-auto whitespace-pre-wrap rounded-xl border border-[#DFE1E6] bg-white p-3 font-mono text-[11px] leading-relaxed text-[#172B4D]">
+                  {stmtEmailBody}
+                </pre>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setStmtEmailOpen(false)} className="h-9 rounded-xl text-[12px] font-bold text-[#172B4D]">
+              Cancel
+            </Button>
+            <Button
+              disabled={stmtEmailLoading || stmtEmailSending || !stmtEmailTo.trim() || !stmtPlan}
+              onClick={() => void sendStatementEmail()}
+              className="h-9 rounded-xl bg-[#283593] px-5 text-[12px] font-bold text-white hover:bg-[#1A237E]"
+            >
+              {stmtEmailSending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />} Send statement
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

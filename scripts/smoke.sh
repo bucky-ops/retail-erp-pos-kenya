@@ -89,6 +89,26 @@ else FAIL=$((FAIL+1)); echo "❌ RTV over-return guard (HTTP $CODE)"; fi
 # 4. cron/daily answers and reports expense digest shape ────────────────────────
 expect_field "cron/daily expenses digest" POST /api/cron/daily "d['expenses'] is not None"
 
+# 5. supplier statement (procurement reconciliation) ─────────────────────────────
+SUP_ID=$(req GET /api/suppliers)
+SUP_ID="$(echo "$SUP_ID" | sed '$d' | json "d[0]['id']")"
+if [ -n "$SUP_ID" ] && [ "$SUP_ID" != "None" ]; then
+  expect_field "supplier statement summary" GET "/api/suppliers/$SUP_ID/statement" \
+    "d['summary'] is not None and d['supplier']['id']==$SUP_ID"
+else
+  FAIL=$((FAIL+1)); echo "❌ supplier statement (no suppliers found)"
+fi
+
+# 6. debtor statement email preview (GET only — never sends) ────────────────────
+PLAN_ID=$(req GET /api/debt-plans)
+PLAN_ID="$(echo "$PLAN_ID" | sed '$d' | json "d['plans'][0]['id']")"
+if [ -n "$PLAN_ID" ] && [ "$PLAN_ID" != "None" ]; then
+  expect_field "statement email preview" GET "/api/debt-plans/$PLAN_ID/statement/email" \
+    "str(d['subject'])[:30]"
+else
+  FAIL=$((FAIL+1)); echo "❌ statement email preview (no plans found)"
+fi
+
 echo "──────────────────────────────"
 echo "Smoke result: $PASS passed, $FAIL failed"
 [ "$FAIL" = "0" ] || exit 1
