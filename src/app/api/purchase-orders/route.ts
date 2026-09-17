@@ -32,6 +32,11 @@ export async function GET(req: NextRequest) {
     low.sort((a, b) => a.qty / Math.max(1, a.reorderPoint) - b.qty / Math.max(1, b.reorderPoint));
 
     const suppliers = await db.supplier.findMany({ where: { active: true } });
+    // Negotiated per-product costs (supplier price lists) override catalog cost
+    // so buyers see the real number for the pre-picked supplier.
+    const priceList = await db.supplierPrice.findMany();
+    const priceKey = (supplierId: number, productId: number) => `${supplierId}:${productId}`;
+    const priceMap = new Map(priceList.map((p) => [priceKey(p.supplierId, p.productId), p.cost]));
 
     const suggestions = low.map((l) => {
       // Cover roughly 3 reorder cycles, rounded to a sane pack size (min 4).
@@ -41,6 +46,8 @@ export async function GET(req: NextRequest) {
         suppliers.find((s) => s.category === l.product.category) ??
         suppliers.find((s) => s.category === "General") ??
         suppliers[0] ?? null;
+      const unitCost =
+        (supplier ? priceMap.get(priceKey(supplier.id, l.productId)) : undefined) ?? l.product.cost;
       return {
         stockLevelId: l.id,
         productId: l.productId,
@@ -53,8 +60,8 @@ export async function GET(req: NextRequest) {
         qty: l.qty,
         reorderPoint: l.reorderPoint,
         suggestedQty,
-        unitCost: l.product.cost,
-        lineTotal: suggestedQty * l.product.cost,
+        unitCost,
+        lineTotal: suggestedQty * unitCost,
         supplierId: supplier?.id ?? null,
         supplierName: supplier?.name ?? null,
         leadDays: supplier?.leadDays ?? 3,

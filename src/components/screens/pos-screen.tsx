@@ -29,6 +29,7 @@ import {
   Package,
   Plus,
   Printer,
+  RotateCcw,
   ScanBarcode,
   Search,
   Shield,
@@ -57,6 +58,7 @@ import {
 } from "@/types";
 import { StockBadge, TierBadge } from "@/components/df/badges";
 import { DukaMark } from "@/components/df/logo";
+import { PosQuickReturn } from "@/components/df/pos-quick-return";
 import { QrImage } from "@/components/df/qr";
 import { offlineQueue, syncPendingSales } from "@/lib/offline";
 import {
@@ -254,6 +256,8 @@ export default function PosScreen() {
   const [stk, setStk] = useState<StkState>({ open: false, phase: "pending", phone: "", id: null, message: null });
   const [blocked, setBlocked] = useState<{ reason: string; overdueDays: number } | null>(null);
   const [success, setSuccess] = useState<SuccessState | null>(null);
+  /* quick-return at the till (F4) */
+  const [quickReturnOpen, setQuickReturnOpen] = useState(false);
 
   const vatRate = settings?.vatRate ?? 0.16;
   const pointValue = settings?.loyaltyPointValue ?? 1;
@@ -293,12 +297,15 @@ export default function PosScreen() {
     return () => clearTimeout(t);
   }, [search]);
 
-  /* F2 focuses the scan/search field */
+  /* F2 focuses the scan/search field, F4 opens the quick-return dialog */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "F2") {
         e.preventDefault();
         searchRef.current?.focus();
+      } else if (e.key === "F4") {
+        e.preventDefault();
+        setQuickReturnOpen(true);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -701,6 +708,15 @@ export default function PosScreen() {
           >
             <Landmark size={12} /> Till
             {tillSessionLive && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#00C853]" aria-hidden />}
+          </button>
+          {/* Quick return — scan a receipt at the till (F4) */}
+          <button
+            onClick={() => setQuickReturnOpen(true)}
+            className="inline-flex h-7 items-center gap-1.5 rounded-full border border-[#FFCDD2] bg-[#FFEBEE] px-3 text-[11px] font-bold text-[#C62828] transition hover:border-[#FF5630]/60 hover:bg-[#ffe3e0]"
+            aria-label="Process a quick return — scan or type a receipt number"
+          >
+            <RotateCcw size={12} /> Quick Return
+            <kbd className="rounded border border-[#F4B8B0] bg-white/70 px-1 font-sans text-[9px] font-bold text-[#C62828]">F4</kbd>
           </button>
           <span
             className={cn(
@@ -1519,6 +1535,9 @@ export default function PosScreen() {
         storeName={activeStore?.name ?? "Thika Road (HQ)"}
         userName={user?.name ?? "Counter 1"}
       />
+
+      {/* ── quick return at the till (F4) ─────────────────────── */}
+      <PosQuickReturn open={quickReturnOpen} onOpenChange={setQuickReturnOpen} />
     </div>
   );
 }

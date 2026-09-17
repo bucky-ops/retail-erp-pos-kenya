@@ -16,8 +16,8 @@
  * posting a digest to #stock-alerts and emitting stocktake:approved live.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, ClipboardCheck, Loader2, Minus, Plus, Search, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Check, ClipboardCheck, Loader2, Minus, Plus, ScanBarcode, Search, X } from "lucide-react";
 import { api } from "@/lib/api";
 import { KES } from "@/types";
 import { toast } from "@/hooks/use-toast";
@@ -46,7 +46,7 @@ interface SessionStat {
 interface TakeItem {
   id: number; productId: number; systemQty: number; countedQty: number | null;
   unitCost: number; counted: boolean; countedBy: string;
-  product: { id: number; name: string; sku: string; emoji: string; unit: string; category: string };
+  product: { id: number; name: string; sku: string; emoji: string; unit: string; category: string; barcode: string | null };
 }
 
 interface FullSession {
@@ -91,6 +91,10 @@ export function StockTakeDialog({
   const [session, setSession] = useState<FullSession | null>(null);
   const [counts, setCounts] = useState<Record<number, number>>({}); // itemId → counted qty (edited locally)
   const [q, setQ] = useState("");
+  /* scan-to-count: each barcode gun burst (Enter-terminated) = +1 physical unit */
+  const [scan, setScan] = useState("");
+  const [scanFlash, setScanFlash] = useState<number | null>(null); // itemId just scanned
+  const scanRef = useRef<HTMLInputElement>(null);
   const [result, setResult] = useState<{ applied: { name: string; delta: number; value: number }[]; shortageValue: number; surplusValue: number; netValue: number; stNo: string } | null>(null);
 
   /* new-count form */
@@ -152,6 +156,36 @@ export function StockTakeDialog({
       toast({ title: "Count not saved", description: err(e) });
     }
   }, [session]);
+
+  /* scan-to-count: a scanned label (barcode gun fires Enter) bumps that line's
+   * counted qty by 1 — the counter just scans every physical unit on the
+   * shelf. Matches barcode first, then SKU. Unknown codes toast amber. */
+  const handleScan = useCallback(
+    async (raw: string) => {
+      const code = raw.trim();
+      if (!session || !code) return;
+      const needle = code.toLowerCase();
+      const item = session.items.find(
+        (i) => (i.product.barcode ?? "").toLowerCase() === needle || i.product.sku.toLowerCase() === needle
+      );
+      if (!item) {
+        toast({ title: `Unknown code: ${code}`, description: "Not a line in this count session", variant: "destructive" });
+        return;
+      }
+      const next = (counts[item.id] ?? 0) + 1;
+      await saveCount(item, next);
+      setScanFlash(item.id);
+      setTimeout(() => setScanFlash((f) => (f === item.id ? null : f)), 1200);
+    },
+    [session, counts, saveCount]
+  );
+
+  const onScanKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      void handleScan(scan).then(() => setScan(""));
+    }
+  };
 
   const approve = async () => {
     if (!session) return;
@@ -298,6 +332,27 @@ export function StockTakeDialog({
                   </div>
                 </div>
 
+                {/* scan-to-count (barcode gun types + Enter) */}
+                <div className="df-scan-bar flex items-center gap-2 rounded-xl border border-[#B2DFDB] bg-[#E0F2F1] px-3 py-2">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#00695C] text-white">
+                    <ScanBarcode size={14} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <Input
+                      ref={scanRef}
+                      value={scan}
+                      onChange={(e) => setScan(e.target.value)}
+                      onKeyDown={onScanKey}
+                      placeholder="Scan a shelf label (or type barcode + Enter) — each scan = +1 unit counted"
+                      className="h-8 rounded-lg border-[#B2DFDB] bg-white font-mono text-[12px]"
+                      aria-label="Barcode scan to count"
+                    />
+                  </div>
+                  <span className="shrink-0 rounded-full bg-[#00695C] px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-wide text-white">
+                    Scan mode
+                  </span>
+                </div>
+
                 {/* search */}
                 <div className="relative">
                   <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#6B778C]" />
@@ -314,7 +369,7 @@ export function StockTakeDialog({
                     return (
                       <div key={it.id} className={cn(
                         "flex flex-wrap items-center gap-2 rounded-lg px-2 py-1.5 transition-colors",
-                        isCounted ? "bg-[#F0F7F0]" : "hover:bg-[#F4F5F7]"
+                        scanFlash === it.id ? "df-scan-flash" : isCounted ? "bg-[#F0F7F0]" : "hover:bg-[#F4F5F7]"
                       )}>
                         <span className="text-[16px]">{it.product.emoji}</span>
                         <div className="min-w-0 flex-1">

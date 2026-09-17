@@ -28,7 +28,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
       store: { select: { id: true, name: true, location: true } },
       items: {
         orderBy: { id: "asc" },
-        include: { product: { select: { id: true, name: true, sku: true, emoji: true, unit: true, category: true, price: true } } },
+        include: { product: { select: { id: true, name: true, sku: true, emoji: true, unit: true, category: true, price: true, barcode: true } } },
       },
     },
   });

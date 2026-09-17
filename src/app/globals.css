@@ -292,6 +292,32 @@
 /* Statement / A4 print sheet look inside dialogs. */
 .df-statement { background: #fff; color: #172B4D; }
 
+/* Stock-take scan flash — a scanned line pops teal then settles into the counted tint. */
+@keyframes df-scan-pop {
+  0% { background-color: rgba(0, 105, 92, 0.28); transform: translateX(0); }
+  30% { background-color: rgba(0, 105, 92, 0.16); transform: translateX(3px); }
+  60% { transform: translateX(-2px); }
+  100% { background-color: rgba(240, 247, 240, 1); transform: translateX(0); }
+}
+.df-scan-flash { animation: df-scan-pop 1.2s ease-out both; outline: 1.5px solid rgba(0, 105, 92, 0.45); outline-offset: -1.5px; border-radius: 8px; }
+/* Scan-mode bar: soft sheen sweep + breathing outline so the counter knows the gun is live. */
+@keyframes df-scan-sheen {
+  0% { transform: translateX(-130%) skewX(-18deg); }
+  100% { transform: translateX(260%) skewX(-18deg); }
+}
+.df-scan-bar { position: relative; overflow: hidden; }
+.df-scan-bar::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 34%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.5), transparent);
+  animation: df-scan-sheen 2.6s ease-in-out infinite;
+  pointer-events: none;
+}
+
 /* settings scroll area rhythm */
 .df-settings-nav::-webkit-scrollbar { width: 6px; }
 .df-settings-nav::-webkit-scrollbar-thumb { background: #DFE1E6; border-radius: 999px; }

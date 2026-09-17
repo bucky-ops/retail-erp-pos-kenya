@@ -85,6 +85,7 @@ model Product {
   purchaseOrderItems  PurchaseOrderItem[]
   stockTakeItems      StockTakeItem[]
   supplierReturnItems SupplierReturnItem[]
+  supplierPrices      SupplierPrice[]
 }
 
 model StockLevel {
@@ -228,6 +229,22 @@ model Supplier {
   active          Boolean          @default(true)
   purchaseOrders  PurchaseOrder[]
   supplierReturns SupplierReturn[]
+  prices          SupplierPrice[]
+}
+
+/// Negotiated per-product cost from a supplier's price list. When present it
+/// overrides Product.cost on reorder suggestions and new PO lines, so buyers
+/// always quote the real negotiated price for that supplier.
+model SupplierPrice {
+  id         Int      @id @default(autoincrement())
+  supplierId Int
+  supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  productId  Int
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  cost       Float
+  updatedAt  DateTime @updatedAt
+
+  @@unique([supplierId, productId])
 }
 
 model PurchaseOrder {

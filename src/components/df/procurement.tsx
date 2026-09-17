@@ -16,9 +16,9 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Building2, Check, ChevronDown, Loader2, PackageMinus, Plus, Send, ShoppingCart, Truck, Undo2, X } from "lucide-react";
+import { Building2, Check, ChevronDown, Loader2, PackageMinus, Plus, Send, ShoppingCart, Tag, Truck, Undo2, X } from "lucide-react";
 import { api } from "@/lib/api";
-import { KES } from "@/types";
+import { KES, type ProductDto } from "@/types";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -117,6 +117,13 @@ export function ProcurementDialog({
 
   /* supplier add form */
   const [supForm, setSupForm] = useState({ name: "", phone: "", category: "General", leadDays: "3" });
+
+  /* supplier price list editor (negotiated per-product costs) */
+  const [priceSup, setPriceSup] = useState<Sup | null>(null);
+  const [priceQ, setPriceQ] = useState("");
+  const [priceEdits, setPriceEdits] = useState<Record<number, string>>({}); // productId → negotiated cost ("" clears)
+  const [priceCatalog, setPriceCatalog] = useState<ProductDto[] | null>(null);
+  const [priceBusy, setPriceBusy] = useState(false);
 
   /* return-to-vendor form */
   const [rtvs, setRtvs] = useState<RTV[] | null>(null);
@@ -262,6 +269,63 @@ export function ProcurementDialog({
       setBusy(false);
     }
   };
+
+  /* ── supplier price list editor ─────────────────────────────── */
+
+  const openPriceList = async (s: Sup) => {
+    setPriceSup(s);
+    setPriceQ("");
+    setPriceBusy(true);
+    try {
+      const [catalog, rows] = await Promise.all([
+        api.get<ProductDto[]>("/api/products"),
+        api.get<{ productId: number; cost: number }[]>(`/api/suppliers/prices?supplierId=${s.id}`),
+      ]);
+      setPriceCatalog(catalog);
+      const edits: Record<number, string> = {};
+      for (const r of rows) edits[r.productId] = String(r.cost);
+      setPriceEdits(edits);
+    } catch (e) {
+      toast({ title: "Could not load price list", description: err(e) });
+      setPriceSup(null);
+    } finally {
+      setPriceBusy(false);
+    }
+  };
+
+  const savePriceList = async () => {
+    if (!priceSup) return;
+    setPriceBusy(true);
+    try {
+      const prices = Object.entries(priceEdits).map(([pid, cost]) => ({
+        productId: Number(pid),
+        cost: cost.trim() === "" ? null : Number(cost),
+      }));
+      const d = await api.put<{ ok: boolean; saved: number; cleared: number; supplierName: string }>(
+        "/api/suppliers/prices",
+        { supplierId: priceSup.id, prices }
+      );
+      toast({
+        title: `Price list saved — ${d.supplierName}`,
+        description: `${d.saved} negotiated cost${d.saved === 1 ? "" : "s"} set • ${d.cleared} cleared`,
+      });
+      setPriceSup(null);
+      await loadAll(); // suggestions re-quote with the new negotiated costs
+    } catch (e) {
+      toast({ title: "Save failed", description: err(e), variant: "destructive" });
+    } finally {
+      setPriceBusy(false);
+    }
+  };
+
+  const priceFiltered = useMemo(() => {
+    const needle = priceQ.trim().toLowerCase();
+    return (priceCatalog ?? []).filter(
+      (p) => !needle || p.name.toLowerCase().includes(needle) || p.sku.toLowerCase().includes(needle)
+    );
+  }, [priceCatalog, priceQ]);
+
+  const priceSetCount = Object.values(priceEdits).filter((v) => v.trim() !== "" && Number(v) > 0).length;
 
   const suggTotal = selectedLines.reduce(
     (s, l) => s + (qtyOv[l.stockLevelId] ?? 0) * l.unitCost,
@@ -534,9 +598,101 @@ export function ProcurementDialog({
                   </div>
                   <Badge variant="outline" className="rounded-full border-[#DFE1E6] text-[10px] font-semibold text-[#6B778C]">{s.category}</Badge>
                   <span className="text-[10px] text-[#6B778C]">{s.leadDays}d lead • {s.poCount} POs</span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void openPriceList(s)}
+                    className="h-7 rounded-lg px-2 text-[10.5px] font-bold text-[#0052CC] hover:border-[#0052CC] hover:bg-[#E9F2FF]"
+                  >
+                    <Tag className="h-3 w-3" /> Price list
+                  </Button>
                 </div>
               ))}
             </div>
+
+            {/* negotiated price list editor */}
+            {priceSup && (
+              <div className="rounded-xl border border-[#0052CC]/40 bg-[#F7FAFF] p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#0052CC] text-white">
+                    <Tag size={13} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[12.5px] font-bold text-[#172B4D]">Price list — {priceSup.name}</p>
+                    <p className="text-[10px] text-[#6B778C]">
+                      Negotiated costs override the catalog on reorder suggestions &amp; new POs. Blank = fall back to catalog.
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-[#E9F2FF] px-2 py-0.5 text-[10px] font-bold text-[#0052CC]">{priceSetCount} set</span>
+                  <Button size="sm" variant="ghost" onClick={() => setPriceSup(null)} className="h-7 rounded-lg px-2 text-[11px] font-bold text-[#6B778C] hover:bg-white">
+                    <X className="h-3 w-3" /> Close
+                  </Button>
+                </div>
+                <div className="mt-2">
+                  <Input
+                    value={priceQ}
+                    onChange={(e) => setPriceQ(e.target.value)}
+                    placeholder="Search products…"
+                    className="h-8 rounded-lg bg-white text-[12px]"
+                  />
+                </div>
+                {priceBusy && !priceCatalog ? (
+                  <div className="flex items-center justify-center py-6 text-[#6B778C]">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  </div>
+                ) : (
+                  <div className="df-scroll mt-2 max-h-56 space-y-1 overflow-y-auto pr-1">
+                    {priceFiltered.map((p) => {
+                      const edit = priceEdits[p.id] ?? "";
+                      const negotiated = edit.trim() !== "" && Number(edit) > 0;
+                      const saving = negotiated ? Math.round((p.cost - Number(edit)) * 100) / 100 : 0;
+                      return (
+                        <div key={p.id} className="flex flex-wrap items-center gap-2 rounded-lg bg-white px-2 py-1.5 shadow-sm">
+                          <span className="text-[14px]">{p.emoji}</span>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-[11.5px] font-semibold text-[#172B4D]">{p.name}</p>
+                            <p className="text-[9.5px] text-[#6B778C]">catalog cost {KES(p.cost)} / {p.unit}</p>
+                          </div>
+                          {negotiated && saving !== 0 && (
+                            <span className={cn(
+                              "rounded-full px-1.5 py-0.5 font-mono text-[9px] font-bold",
+                              saving > 0 ? "bg-[#E8F5E9] text-[#1B7A2E]" : "bg-[#FFEBE8] text-[#C62828]"
+                            )}>
+                              {saving > 0 ? "−" : "+"}{KES(Math.abs(saving), true)} vs catalog
+                            </span>
+                          )}
+                          <div className="relative w-24">
+                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-[#6B778C]">KES</span>
+                            <input
+                              value={edit}
+                              onChange={(e) => setPriceEdits((m) => ({ ...m, [p.id]: e.target.value.replace(/[^\d.]/g, "") }))}
+                              inputMode="decimal"
+                              placeholder="—"
+                              aria-label={`Negotiated cost for ${p.name} from ${priceSup.name}`}
+                              className={cn(
+                                "h-7 w-full rounded-lg border pl-9 pr-1 text-center font-mono text-[11.5px] font-bold tabular-nums outline-none",
+                                negotiated ? "border-[#0052CC]/50 text-[#0052CC]" : "border-[#DFE1E6] text-[#172B4D]"
+                              )}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {priceFiltered.length === 0 && (
+                      <p className="py-4 text-center text-[11px] text-[#6B778C]">No products match.</p>
+                    )}
+                  </div>
+                )}
+                <div className="mt-2 flex items-center justify-end gap-2">
+                  <Button size="sm" variant="outline" onClick={() => setPriceSup(null)} className="h-8 rounded-lg px-3 text-[11px] font-bold text-[#172B4D]">
+                    Cancel
+                  </Button>
+                  <Button size="sm" disabled={priceBusy} onClick={() => void savePriceList()} className="h-8 rounded-lg bg-[#0052CC] px-4 text-[11px] font-bold text-white hover:bg-[#0041A8]">
+                    {priceBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />} Save price list
+                  </Button>
+                </div>
+              </div>
+            )}
 
             {/* quick add */}
             <div className="rounded-xl border border-[#DFE1E6] bg-white p-3">
