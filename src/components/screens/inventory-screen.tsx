@@ -2,13 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ArrowRight, Boxes, ClipboardList, Loader2, Package, PackageX, ScanBarcode, Search, ShoppingBag, SlidersHorizontal, TriangleAlert, Wallet, ArrowLeftRight,
+  ArrowRight, Boxes, ClipboardList, FileUp, Loader2, Package, PackageX, ScanBarcode, Search, ShoppingBag, SlidersHorizontal, TriangleAlert, Wallet, ArrowLeftRight,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useApp } from "@/lib/store";
 import { ProcurementDialog } from "@/components/df/procurement";
 import { StockTakeDialog } from "@/components/df/stock-take";
 import { LabelPrinter } from "@/components/df/label-printer";
+import { BulkImportDialog } from "@/components/df/bulk-import";
 import { KES } from "@/types";
 import { ScreenHeader, KpiCard, EmptyState, TableSkeleton } from "@/components/df/shared";
 import { toast } from "@/hooks/use-toast";
@@ -130,6 +131,8 @@ export default function InventoryScreen() {
   const [stOpen, setStOpen] = useState(false);
   /* barcode label printer (shelf stickers) */
   const [labelsOpen, setLabelsOpen] = useState(false);
+  /* bulk stock import (spreadsheet paste) */
+  const [importOpen, setImportOpen] = useState(false);
   const [tfProducts, setTfProducts] = useState<InvRow[] | null>(null);
   const [tfProduct, setTfProduct] = useState<number | null>(null);
   const [tfFrom, setTfFrom] = useState<number | null>(null);
@@ -291,6 +294,14 @@ export default function InventoryScreen() {
         storeId={storeId}
         storeName={storeId === "all" ? "All Stores" : (stores.find((s) => s.id === storeId)?.name ?? "store")}
       />
+      {/* bulk stock import (spreadsheet paste → preview → apply) */}
+      <BulkImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        stores={stores.map((s) => ({ id: s.id, name: s.name }))}
+        defaultStoreId={storeId === "all" ? (stores[0]?.id ?? 1) : storeId}
+        onDone={load}
+      />
       <ScreenHeader
         title="Inventory"
         subtitle="Multi-store stock, margins & transfers"
@@ -313,6 +324,12 @@ export default function InventoryScreen() {
               className="h-9 rounded-xl border border-[#DFE1E6] bg-white px-4 text-[13px] font-semibold text-[#172B4D] shadow-sm hover:border-[#0052CC] hover:text-[#0052CC]"
             >
               <ScanBarcode size={15} /> Labels
+            </Button>
+            <Button
+              onClick={() => setImportOpen(true)}
+              className="h-9 rounded-xl border border-[#DFE1E6] bg-white px-4 text-[13px] font-semibold text-[#172B4D] shadow-sm hover:border-[#00C853] hover:text-[#1B7A2E]"
+            >
+              <FileUp size={15} /> Import
             </Button>
             <Button
               onClick={() => setProcOpen(true)}

@@ -269,6 +269,28 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // ── 11b. Auto e-invoice email on KRA verify ──────────
+    // When eTIMS stamped the invoice and the customer has an email on file,
+    // deliver the electronic tax invoice automatically (best-effort — a mail
+    // hiccup must never fail a committed sale).
+    if (customer?.email && kraStatus === "Verified") {
+      try {
+        const { buildInvoiceEmailForSale } = await import("@/lib/invoice-email");
+        const email = await buildInvoiceEmailForSale(sale.id);
+        if (email) {
+          await db.smsLog.create({
+            data: {
+              customerId: customer.id, phone: customer.email,
+              message: email.body, channel: "Email", type: "Invoice",
+              status: "Delivered", cost: 0,
+            },
+          });
+        }
+      } catch {
+        /* auto email is best-effort */
+      }
+    }
+
     // ── 12. Realtime broadcast + low-stock watchdog ─────
     // Push the committed sale to every open dashboard (socket.io via the
     // live-feed service). Best-effort — must never fail the sale.

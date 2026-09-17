@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Gift, Landmark, Nfc, Phone, Printer, QrCode, Receipt, Smartphone, Sparkles, Tag, Loader2, Undo2,
+  Gift, Landmark, Mail, Nfc, Phone, Printer, QrCode, Receipt, Send, Smartphone, Sparkles, Tag, Loader2, Undo2,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { CustomerDto, GiftCardDto, KES, SaleDto, SettingsDto } from "@/types";
@@ -79,6 +79,14 @@ export default function ReceiptsScreen() {
   const [printTarget, setPrintTarget] = useState<"thermal" | "a4" | null>(null);
   const [pngBusy, setPngBusy] = useState(false);
   const [etimsBusy, setEtimsBusy] = useState(false);
+
+  /* e-invoice email dialog state */
+  const [emailOpen, setEmailOpen] = useState(false);
+  const [emailTo, setEmailTo] = useState("");
+  const [emailSubject, setEmailSubject] = useState("");
+  const [emailBody, setEmailBody] = useState("");
+  const [emailLoading, setEmailLoading] = useState(false);
+  const [emailSending, setEmailSending] = useState(false);
 
   /* returns workspace state */
   const [returns, setReturns] = useState<ReturnDto[] | null>(null);
@@ -559,6 +567,29 @@ export default function ReceiptsScreen() {
                     <Printer className="h-4 w-4" /> Print 80mm
                   </Button>
                   <Button
+                    onClick={async () => {
+                      setEmailOpen(true);
+                      setEmailLoading(true);
+                      setEmailTo(customers.find((c) => c.id === selected.customerId)?.email ?? "");
+                      try {
+                        const r = await api.get<{ ok: boolean; subject: string; body: string; to: string }>(
+                          `/api/sales/${selected.id}/email`
+                        );
+                        setEmailSubject(r.subject);
+                        setEmailBody(r.body);
+                        if (r.to) setEmailTo(r.to);
+                      } catch {
+                        setEmailSubject(`Tax Invoice ${selected.receiptNo}`);
+                        setEmailBody("Could not preview the e-invoice — try again.");
+                      } finally {
+                        setEmailLoading(false);
+                      }
+                    }}
+                    className="h-9 rounded-xl border border-[#C5CAE9] bg-[#E8EAF6] text-[13px] font-semibold text-[#283593] hover:bg-[#DCDFf5]"
+                  >
+                    <Mail className="h-4 w-4" /> Email e-invoice
+                  </Button>
+                  <Button
                     variant="outline"
                     onClick={() => void downloadThermalPng(selected)}
                     disabled={pngBusy}
@@ -1028,6 +1059,96 @@ export default function ReceiptsScreen() {
           </Tabs>
         </div>
       </div>
+
+      {/* ══════════ e-invoice email dialog ══════════ */}
+      <Dialog open={emailOpen} onOpenChange={setEmailOpen}>
+        <DialogContent className="rounded-2xl sm:max-w-[560px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 font-display text-[15px] font-bold text-[#172B4D]">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#E8EAF6] text-[#283593]">
+                <Mail size={15} />
+              </span>
+              Email KRA e-invoice
+            </DialogTitle>
+            <DialogDescription className="text-[12px]">
+              Sends the eTIMS-verified electronic tax invoice to the customer (mock mailer — audited in Messages).
+            </DialogDescription>
+          </DialogHeader>
+
+          {emailLoading ? (
+            <div className="flex items-center justify-center gap-2 py-10 text-[12px] text-[#6B778C]">
+              <Loader2 size={14} className="animate-spin" /> Preparing invoice email…
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="ein-to" className="text-[10px] font-bold uppercase tracking-wide text-[#6B778C]">
+                  To
+                </Label>
+                <Input
+                  id="ein-to"
+                  value={emailTo}
+                  onChange={(e) => setEmailTo(e.target.value)}
+                  placeholder="customer@email.com"
+                  type="email"
+                  className="h-9 rounded-xl border-[#DFE1E6] bg-[#FAFBFC] text-[13px]"
+                />
+                {selected?.customerId && (
+                  <p className="text-[10px] text-[#6B778C]">
+                    {(() => {
+                      const c = customers.find((x) => x.id === selected.customerId);
+                      return c?.email
+                        ? `Customer has an email on file — future verified invoices auto-send to it.`
+                        : `No email on file for ${c?.name ?? "this customer"} — the address you send to will be saved.`;
+                    })()}
+                  </p>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-bold uppercase tracking-wide text-[#6B778C]">Subject</Label>
+                <p className="rounded-xl border border-[#DFE1E6] bg-[#FAFBFC] px-3 py-2 text-[12px] font-semibold text-[#172B4D]">
+                  {emailSubject}
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-bold uppercase tracking-wide text-[#6B778C]">Preview</Label>
+                <pre className="df-scroll max-h-[220px] overflow-auto whitespace-pre-wrap rounded-xl border border-[#DFE1E6] bg-white p-3 font-mono text-[11px] leading-relaxed text-[#172B4D]">
+                  {emailBody}
+                </pre>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setEmailOpen(false)} className="h-9 rounded-xl text-[12px] font-bold text-[#172B4D]">
+              Cancel
+            </Button>
+            <Button
+              disabled={emailLoading || emailSending || !emailTo.trim() || !selected}
+              onClick={async () => {
+                if (!selected) return;
+                setEmailSending(true);
+                try {
+                  const r = await api.post<{ ok: boolean; to: string }>(`/api/sales/${selected.id}/email`, { to: emailTo.trim() });
+                  toast({ title: "E-invoice sent ✉️", description: `${selected.receiptNo} → ${r.to}` });
+                  setEmailOpen(false);
+                } catch (e) {
+                  toast({
+                    title: "Could not send",
+                    description: e instanceof Error ? e.message : "Try again",
+                    variant: "destructive",
+                  });
+                } finally {
+                  setEmailSending(false);
+                }
+              }}
+              className="h-9 rounded-xl bg-[#283593] px-5 text-[12px] font-bold text-white hover:bg-[#1A237E]"
+            >
+              {emailSending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />} Send email
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ══════════ New gift card dialog ══════════ */}
       <Dialog open={gcOpen} onOpenChange={setGcOpen}>

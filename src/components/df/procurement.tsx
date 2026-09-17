@@ -169,6 +169,18 @@ export function ProcurementDialog({
   );
   const selectedLines = filteredSugg.filter((s) => (qtyOv[s.stockLevelId] ?? 0) > 0 && supOv[s.stockLevelId]);
 
+  /* checkbox include/exclude — unchecking zeroes the line's qty, checking
+   * restores the suggested qty, so the draft-PO logic stays untouched. */
+  const toggleLine = (stockLevelId: number, included: boolean, suggestedQty: number) =>
+    setQtyOv((m) => ({ ...m, [stockLevelId]: included ? suggestedQty : 0 }));
+  const allSelected = filteredSugg.length > 0 && filteredSugg.every((s) => (qtyOv[s.stockLevelId] ?? 0) > 0);
+  const toggleAll = () =>
+    setQtyOv((m) => {
+      const next = { ...m };
+      for (const s of filteredSugg) next[s.stockLevelId] = allSelected ? 0 : s.suggestedQty;
+      return next;
+    });
+
   /* create POs grouped per supplier — mirrors how buyers actually send POs */
   const createPOs = async () => {
     if (!selectedLines.length || !sups?.length) return;
@@ -445,6 +457,18 @@ export function ProcurementDialog({
               <span className="text-[11px] text-[#6B778C]">
                 {filteredSugg.length} lines at/below reorder point
               </span>
+              {filteredSugg.length > 0 && (
+                <label className="ml-auto flex cursor-pointer items-center gap-1.5 text-[11px] font-bold text-[#0052CC]">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    onChange={toggleAll}
+                    className="h-3.5 w-3.5 accent-[#0052CC]"
+                    aria-label="Select every suggested line"
+                  />
+                  {allSelected ? "Deselect all" : "Select all"}
+                </label>
+              )}
             </div>
 
             <div className="max-h-72 space-y-1.5 overflow-y-auto rounded-xl border border-[#DFE1E6] p-2">
@@ -454,7 +478,17 @@ export function ProcurementDialog({
                 <p className="py-6 text-center text-[12px] text-[#6B778C]">All stock is healthy — nothing to reorder. 🎉</p>
               ) : (
                 filteredSugg.map((s) => (
-                  <div key={s.stockLevelId} className="flex flex-wrap items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-[#F4F5F7]">
+                  <div key={s.stockLevelId} className={cn(
+                    "flex flex-wrap items-center gap-2 rounded-lg px-2 py-1.5 transition-colors",
+                    (qtyOv[s.stockLevelId] ?? 0) > 0 ? "bg-[#F0F7F0]" : "bg-[#FAFBFC] opacity-70 hover:opacity-100"
+                  )}>
+                    <input
+                      type="checkbox"
+                      checked={(qtyOv[s.stockLevelId] ?? 0) > 0}
+                      onChange={(e) => toggleLine(s.stockLevelId, e.target.checked, s.suggestedQty)}
+                      className="h-3.5 w-3.5 shrink-0 accent-[#0052CC]"
+                      aria-label={`Include ${s.name} in the purchase order draft`}
+                    />
                     <span className="text-[16px]">{s.emoji}</span>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-[12px] font-semibold text-[#172B4D]">{s.name}</p>
