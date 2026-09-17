@@ -22,6 +22,9 @@ model Store {
   sales     Sale[]
   staff     Staff[]
   tillSessions TillSession[]
+  purchaseOrders PurchaseOrder[]
+  expenses  Expense[]
+  salesReturns SalesReturn[]
 }
 
 model Staff {
@@ -58,6 +61,7 @@ model Customer {
   debtPayments    DebtPayment[]
   giftCards       GiftCard[]
   smsLogs         SmsLog[]
+  salesReturns    SalesReturn[]
 }
 
 // ─── Catalog & multi-store stock ─────────────────────────────────────────────
@@ -75,6 +79,8 @@ model Product {
   active    Boolean      @default(true)
   stocks    StockLevel[]
   saleItems SaleItem[]
+  saleReturnItems SaleReturnItem[]
+  purchaseOrderItems PurchaseOrderItem[]
 }
 
 model StockLevel {
@@ -145,6 +151,7 @@ model Sale {
   syncedAt        DateTime?
   createdAt       DateTime   @default(now())
   items           SaleItem[]
+  returns         SalesReturn[]
   store           Store      @relation(fields: [storeId], references: [id])
   customer        Customer?  @relation(fields: [customerId], references: [id])
 
@@ -165,7 +172,99 @@ model SaleItem {
   product   Product? @relation(fields: [productId], references: [id])
 }
 
-// ─── Sales pipeline (Quotation → Proforma → Order → Invoiced → Paid) ─────────
+// ─── Sales returns & refunds (credit notes, restock, till impact) ────────────
+
+// A return references the original receipt; qty per line is validated against
+// what has ALREADY been returned so the same item can never be refunded twice.
+model SalesReturn {
+  id           Int       @id @default(autoincrement())
+  returnNo     String    @unique // RET-0001
+  saleId       Int
+  sale         Sale      @relation(fields: [saleId], references: [id])
+  storeId      Int
+  store        Store     @relation(fields: [storeId], references: [id])
+  customerId   Int?
+  customer     Customer? @relation(fields: [customerId], references: [id])
+  staffName    String    @default("Counter 1")
+  reason       String    @default("") // Damaged | Wrong item | Customer changed mind | Expired | Other
+  refundMethod String    @default("Cash refund") // Cash refund | M-Pesa B2C | Credit note | Gift card
+  restocked    Boolean   @default(true)
+  total        Float     // refund value incl. VAT
+  creditNoteNo String? // CN-0001 when refundMethod = Credit note
+  giftCardCode String? // GC-xxxx when refundMethod = Gift card (store credit)
+  status       String    @default("Completed")
+  createdAt    DateTime  @default(now())
+  items        SaleReturnItem[]
+}
+
+model SaleReturnItem {
+  id        Int          @id @default(autoincrement())
+  returnId  Int
+  returnRef SalesReturn  @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  saleItemId Int? // line on the original receipt
+  productId Int?
+  name      String
+  emoji     String       @default("📦")
+  qty       Float
+  unitPrice Float
+  total     Float
+  product   Product?     @relation(fields: [productId], references: [id])
+}
+
+// ─── Procurement: suppliers & purchase orders (reorder → receive) ────────────
+
+model Supplier {
+  id       Int    @id @default(autoincrement())
+  name     String
+  phone    String @default("")
+  email    String @default("")
+  kraPin   String @default("")
+  category String @default("General") // Cement | Paint | Plumbing | Tools | General
+  leadDays Int    @default(3)
+  active   Boolean @default(true)
+  purchaseOrders PurchaseOrder[]
+}
+
+model PurchaseOrder {
+  id         Int       @id @default(autoincrement())
+  poNo       String    @unique // PO-0001
+  supplierId Int
+  supplier   Supplier  @relation(fields: [supplierId], references: [id])
+  storeId    Int
+  store      Store     @relation(fields: [storeId], references: [id])
+  status     String    @default("Draft") // Draft | Sent | Received | Cancelled
+  total      Float     @default(0)
+  note       String    @default("")
+  orderedAt  DateTime  @default(now())
+  receivedAt DateTime?
+  items      PurchaseOrderItem[]
+}
+
+model PurchaseOrderItem {
+  id        Int      @id @default(autoincrement())
+  poId      Int
+  po        PurchaseOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
+  productId Int
+  product   Product  @relation(fields: [productId], references: [id])
+  qty       Float
+  unitCost  Float
+  received  Float    @default(0)
+}
+
+// ─── Operating expenses (petty cash / bills) ──────────────────────────────────
+
+model Expense {
+  id        Int      @id @default(autoincrement())
+  storeId   Int
+  store     Store    @relation(fields: [storeId], references: [id])
+  category  String   @default("Other") // Rent | Electricity | Salaries | Transport | Supplies | Marketing | Repairs | Other
+  note      String   @default("")
+  amount    Float
+  paidVia   String   @default("Cash") // Cash | M-Pesa | Bank
+  refNo     String?  // receipt / voucher ref
+  staffName String   @default("Owner")
+  spentAt   DateTime @default(now())
+}
 
 model PipelineDeal {
   id            String   @id @default(cuid())

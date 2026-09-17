@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Gift, Landmark, Nfc, Phone, Printer, QrCode, Receipt, Smartphone, Sparkles, Tag, Loader2,
+  Gift, Landmark, Nfc, Phone, Printer, QrCode, Receipt, Smartphone, Sparkles, Tag, Loader2, Undo2,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { CustomerDto, GiftCardDto, KES, SaleDto, SettingsDto } from "@/types";
@@ -18,6 +18,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import {
@@ -30,6 +31,15 @@ import {
 /* ── contracts & helpers ──────────────────────────────────── */
 
 type GiftCardWithQr = GiftCardDto & { qr?: string };
+
+/* Sales-return contracts (server: /api/returns) */
+interface ReturnItemDto { id: number; name: string; emoji: string; qty: number; unitPrice: number; total: number; saleItemId?: number | null }
+interface ReturnDto {
+  id: number; returnNo: string; saleId: number; receiptNo: string; storeName: string; customerName: string;
+  reason: string; refundMethod: string; restocked: boolean; total: number;
+  creditNoteNo: string | null; giftCardCode: string | null; status: string; createdAt: string;
+  items: ReturnItemDto[];
+}
 
 const GRADIENTS = ["blue-green", "navy", "gold", "blue", "green", "navy-gold"] as const;
 type Gradient = (typeof GRADIENTS)[number];
@@ -69,6 +79,15 @@ export default function ReceiptsScreen() {
   const [printTarget, setPrintTarget] = useState<"thermal" | "a4" | null>(null);
   const [pngBusy, setPngBusy] = useState(false);
   const [etimsBusy, setEtimsBusy] = useState(false);
+
+  /* returns workspace state */
+  const [returns, setReturns] = useState<ReturnDto[] | null>(null);
+  const [retQty, setRetQty] = useState<Record<number, number>>({}); // saleItemId → qty to return
+  const [retReason, setRetReason] = useState("Customer changed mind");
+  const [retMethod, setRetMethod] = useState("Cash refund");
+  const [retRestock, setRetRestock] = useState(true);
+  const [retBusy, setRetBusy] = useState(false);
+  const [retDone, setRetDone] = useState<{ returnNo: string; total: number; method: string; creditNoteNo: string | null; giftCardCode: string | null; tillUpdated: boolean } | null>(null);
 
   /* branding form */
   const [branding, setBranding] = useState({ primary: "#0052CC", secondary: "#00C853", promoFooter: "" });
@@ -110,16 +129,94 @@ export default function ReceiptsScreen() {
     }
   }, []);
 
+  /* return history — also powers the per-line "already returned" math */
+  const loadReturns = useCallback(async () => {
+    try {
+      setReturns(await api.get<ReturnDto[]>("/api/returns?limit=200"));
+    } catch {
+      setReturns([]);
+    }
+  }, []);
+
   useEffect(() => {
     void load();
     void loadCards();
-  }, [load, loadCards]);
+    void loadReturns();
+  }, [load, loadCards, loadReturns]);
+
+  /* reset the return form whenever the selected receipt changes */
+  useEffect(() => {
+    setRetQty({});
+    setRetDone(null);
+  }, [selectedId]);
 
   const selected = useMemo(() => sales?.find((s) => s.id === selectedId) ?? null, [sales, selectedId]);
   const loyaltyBal = useMemo(() => {
     if (!selected?.customerId) return null;
     return customers.find((c) => c.id === selected.customerId)?.loyaltyPoints ?? null;
   }, [customers, selected]);
+
+  /* refundable qty per line = sold − already returned (any prior return on this receipt) */
+  const returnedByItem = useMemo(() => {
+    const m = new Map<number, number>();
+    for (const r of returns ?? []) {
+      if (r.saleId !== selectedId) continue;
+      for (const it of r.items) {
+        if (it.saleItemId != null) m.set(it.saleItemId, (m.get(it.saleItemId) ?? 0) + it.qty);
+      }
+    }
+    return m;
+  }, [returns, selectedId]);
+  const saleHasReturns = useMemo(() => (returns ?? []).some((r) => r.saleId === selectedId), [returns, selectedId]);
+  const myReturns = useMemo(() => (returns ?? []).filter((r) => r.saleId === selectedId), [returns, selectedId]);
+  /* estimated refund total — mirrors the server's "actually paid" math:
+   * line shelf price × (receipt total / receipt subtotal), which folds VAT in
+   * and bill-level discounts / redeemed points out, per line. */
+  const paidRatio = selected && selected.subtotal > 0 ? selected.total / selected.subtotal : 1;
+  const retTotal = useMemo(
+    () => (selected ? selected.items.reduce((s, it) => s + (retQty[it.id] ?? 0) * it.unitPrice * paidRatio, 0) : 0),
+    [selected, retQty, paidRatio]
+  );
+  const retAny = Object.values(retQty).some((q) => q > 0);
+
+  const submitReturn = async () => {
+    if (!selected) return;
+    const items = Object.entries(retQty)
+      .filter(([, q]) => q > 0)
+      .map(([id, qty]) => ({ saleItemId: Number(id), qty }));
+    if (!items.length) return;
+    setRetBusy(true);
+    try {
+      const d = await api.post<{
+        ok: boolean; return: { returnNo: string; total: number }; receiptNo: string;
+        giftCardCode: string | null; creditNoteNo: string | null; tillUpdated: boolean;
+      }>("/api/returns", {
+        saleId: selected.id,
+        items,
+        reason: retReason,
+        refundMethod: retMethod,
+        restock: retRestock,
+      });
+      setRetDone({
+        returnNo: d.return.returnNo,
+        total: d.return.total,
+        method: retMethod,
+        creditNoteNo: d.creditNoteNo,
+        giftCardCode: d.giftCardCode,
+        tillUpdated: d.tillUpdated,
+      });
+      setRetQty({});
+      toast({
+        title: `${d.return.returnNo} processed ✓`,
+        description: `${KES(d.return.total)} via ${retMethod}${d.creditNoteNo ? ` • ${d.creditNoteNo}` : ""}${d.giftCardCode ? ` • ${d.giftCardCode} issued` : ""}${retRestock ? " • restocked" : ""}`,
+      });
+      void loadReturns();
+    } catch (e) {
+      toast({ title: "Return failed", description: err(e) });
+    } finally {
+      setRetBusy(false);
+    }
+  };
 
   const handlePrint = (target: "thermal" | "a4") => {
     setPrintTarget(target);
@@ -351,6 +448,11 @@ export default function ReceiptsScreen() {
                       <div className="mt-1 flex items-center justify-between gap-2">
                         <span className="truncate text-[11px] text-[#6B778C]">{s.customerName ?? "Walk-in"}</span>
                         <span className="inline-flex shrink-0 items-center gap-1.5">
+                          {(returns ?? []).some((r) => r.saleId === s.id) && (
+                            <span className="inline-flex items-center gap-0.5 rounded-full bg-[#FFEBE8] px-1.5 py-0.5 text-[9px] font-bold text-[#FF5630]">
+                              <Undo2 className="h-2.5 w-2.5" /> RET
+                            </span>
+                          )}
                           <span className="rounded-full bg-[#F4F5F7] px-2 py-0.5 text-[10px] font-semibold text-[#6B778C]">{s.paymentMethod}</span>
                           <KraBadge status={s.kraStatus} />
                         </span>
@@ -372,6 +474,7 @@ export default function ReceiptsScreen() {
                 ["thermal", "80mm Thermal"],
                 ["a4", "A4 Invoice"],
                 ["gift", "Gift Card"],
+                ["returns", "Returns"],
               ].map(([v, l]) => (
                 <TabsTrigger key={v} value={v} className="rounded-full px-4 text-[13px] font-semibold data-[state=active]:bg-[#172B4D] data-[state=active]:text-white">
                   {l}
@@ -739,6 +842,188 @@ export default function ReceiptsScreen() {
                   </Panel>
                 </div>
               </div>
+            </TabsContent>
+
+            {/* ── RETURNS & REFUNDS ─────────────────────────────────────── */}
+            <TabsContent value="returns" className="space-y-4">
+              {!selected ? (
+                <Panel>
+                  <EmptyState icon={<Undo2 className="h-6 w-6" />} title="Select a receipt" sub="Pick a receipt from the gallery to process a return or refund against it." />
+                </Panel>
+              ) : (
+                <div className="grid grid-cols-1 gap-4 @2xl:grid-cols-2">
+                  {/* ── NEW RETURN ── */}
+                  <Panel>
+                    <div className="mb-3 flex items-center justify-between">
+                      <h3 className="font-display flex items-center gap-2 text-[14px] font-bold text-[#172B4D]">
+                        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#FFEBE8] text-[#FF5630]">
+                          <Undo2 size={14} />
+                        </span>
+                        Return items — {selected.receiptNo}
+                      </h3>
+                      {saleHasReturns && (
+                        <Badge className="rounded-full bg-[#FFEBE8] text-[10px] font-bold text-[#FF5630] hover:bg-[#FFEBE8]">
+                          partially returned
+                        </Badge>
+                      )}
+                    </div>
+
+                    {retDone ? (
+                      /* success card */
+                      <div className="space-y-3">
+                        <div className="rounded-xl border border-[#C8E6C9] bg-[#E8F5E9] p-4">
+                          <p className="flex items-center gap-2 text-[14px] font-bold text-[#1B7A2E]">
+                            ✓ {retDone.returnNo} — {KES(retDone.total)} refunded
+                          </p>
+                          <p className="mt-1 text-[12px] text-[#1B7A2E]">
+                            Method: {retDone.method}
+                            {retDone.creditNoteNo ? ` • Credit note ${retDone.creditNoteNo} issued` : ""}
+                            {retDone.giftCardCode ? ` • Gift card ${retDone.giftCardCode} activated with the refund balance` : ""}
+                            {retDone.method === "Cash refund" ? (retDone.tillUpdated ? " • open till adjusted" : " • no till shift open — drawer payout logged") : ""}
+                          </p>
+                        </div>
+                        <Button variant="outline" onClick={() => setRetDone(null)} className="h-9 w-full rounded-xl text-[13px] font-semibold">
+                          Process another return on this receipt
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {/* line pickers */}
+                        <div className="max-h-52 space-y-1.5 overflow-y-auto rounded-xl border border-[#DFE1E6] p-2">
+                          {selected.items.map((it) => {
+                            const returned = returnedByItem.get(it.id) ?? 0;
+                            const refundable = it.qty - returned;
+                            const fullyDone = refundable <= 0;
+                            return (
+                              <div
+                                key={it.id}
+                                className={cn(
+                                  "flex items-center gap-2.5 rounded-lg px-2 py-1.5",
+                                  fullyDone ? "opacity-45" : "hover:bg-[#F4F5F7]"
+                                )}
+                              >
+                                <span className="text-[15px]">{it.emoji}</span>
+                                <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-[#172B4D]">{it.name}</span>
+                                <span className="shrink-0 font-mono text-[11px] tabular-nums text-[#6B778C]">
+                                  sold {Math.round(it.qty)}{returned > 0 ? ` · ret ${Math.round(returned)}` : ""}
+                                </span>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={refundable}
+                                  value={retQty[it.id] ?? 0}
+                                  disabled={fullyDone}
+                                  onChange={(e) => {
+                                    const v = Math.max(0, Math.min(refundable, Number(e.target.value) || 0));
+                                    setRetQty((q) => ({ ...q, [it.id]: v }));
+                                  }}
+                                  className="h-7 w-16 rounded-lg border border-[#DFE1E6] bg-white text-center font-mono text-[12px] font-bold tabular-nums text-[#172B4D] outline-none focus:border-[#0052CC] disabled:cursor-not-allowed"
+                                  aria-label={`Qty to return for ${it.name}`}
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* reason + method + restock */}
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-1">
+                            <Label className="text-[11px] font-semibold text-[#6B778C]">Reason</Label>
+                            <Select value={retReason} onValueChange={setRetReason}>
+                              <SelectTrigger className="h-8 rounded-lg text-[12px]"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                {["Customer changed mind", "Damaged / defective", "Wrong item sold", "Expired", "Overcharged", "Other"].map((r) => (
+                                  <SelectItem key={r} value={r}>{r}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-[11px] font-semibold text-[#6B778C]">Refund method</Label>
+                            <Select value={retMethod} onValueChange={setRetMethod}>
+                              <SelectTrigger className="h-8 rounded-lg text-[12px]"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Cash refund">Cash refund (from drawer)</SelectItem>
+                                <SelectItem value="M-Pesa B2C">M-Pesa B2C payout</SelectItem>
+                                <SelectItem value="Credit note">Credit note {selected.paymentMethod === "Credit Sale" ? "(reduces debt)" : ""}</SelectItem>
+                                <SelectItem value="Gift card">Gift card (store credit)</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between rounded-xl border border-[#DFE1E6] bg-[#FAFBFC] px-3 py-2">
+                          <div>
+                            <p className="text-[12px] font-bold text-[#172B4D]">Restock returned goods</p>
+                            <p className="text-[10px] text-[#6B778C]">Off for damaged/expired stock (written off)</p>
+                          </div>
+                          <Switch checked={retRestock} onCheckedChange={setRetRestock} aria-label="Toggle restock" />
+                        </div>
+
+                        {/* total + submit */}
+                        <div className="flex items-center justify-between rounded-xl bg-[#172B4D] px-4 py-3">
+                          <div>
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-white/60">Refund total</p>
+                            <p className="font-display text-[18px] font-bold text-white">{KES(retTotal)}</p>
+                          </div>
+                          <Button
+                            onClick={() => void submitReturn()}
+                            disabled={retBusy || !retAny || retTotal <= 0}
+                            className="h-10 rounded-xl bg-[#FF5630] px-5 text-[13px] font-bold text-white hover:bg-[#E64526] disabled:opacity-40"
+                          >
+                            {retBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Undo2 className="h-4 w-4" />}
+                            Process return
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </Panel>
+
+                  {/* ── HISTORY: this receipt + global ── */}
+                  <Panel>
+                    <h3 className="font-display mb-3 text-[14px] font-bold text-[#172B4D]">
+                      Return history
+                      <span className="ml-2 text-[11px] font-semibold text-[#6B778C]">{(returns ?? []).length} all-time</span>
+                    </h3>
+                    <div className="df-scroll max-h-[420px] space-y-2 overflow-y-auto pr-1">
+                      {returns === null ? (
+                        <TableSkeleton rows={4} cols={2} />
+                      ) : returns.length === 0 ? (
+                        <EmptyState icon={<Undo2 className="h-6 w-6" />} title="No returns yet" sub="Processed refunds will appear here with their credit notes and payout methods." />
+                      ) : (
+                        [...myReturns, ...(returns ?? []).filter((r) => r.saleId !== selectedId)].map((r) => (
+                          <div key={r.id} className="rounded-xl border border-[#DFE1E6] bg-[#FAFBFC] p-3">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-mono text-[12px] font-bold text-[#172B4D]">{r.returnNo}</span>
+                              <span className="font-display text-[13px] font-bold text-[#FF5630]">−{KES(r.total)}</span>
+                            </div>
+                            <p className="mt-0.5 truncate text-[11px] text-[#6B778C]">
+                              {r.receiptNo} • {r.customerName} • {r.storeName}
+                            </p>
+                            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                              <span className="rounded-full bg-[#F4F5F7] px-2 py-0.5 text-[10px] font-semibold text-[#6B778C]">{r.reason}</span>
+                              <span className="rounded-full bg-[#E9F2FF] px-2 py-0.5 text-[10px] font-bold text-[#0052CC]">{r.refundMethod}</span>
+                              {r.creditNoteNo && (
+                                <span className="rounded-full bg-[#172B4D] px-2 py-0.5 font-mono text-[10px] font-bold text-white">{r.creditNoteNo}</span>
+                              )}
+                              {r.giftCardCode && (
+                                <span className="rounded-full bg-[#E8F5E9] px-2 py-0.5 font-mono text-[10px] font-bold text-[#1B7A2E]">{r.giftCardCode}</span>
+                              )}
+                              <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-bold", r.restocked ? "bg-[#E8F5E9] text-[#1B7A2E]" : "bg-[#FFEBE8] text-[#FF5630]")}>
+                                {r.restocked ? "restocked" : "written off"}
+                              </span>
+                              <span className="ml-auto text-[10px] text-[#6B778C]">{fmtDateTime(r.createdAt)}</span>
+                            </div>
+                            <p className="mt-1 text-[11px] text-[#6B778C]">
+                              {r.items.map((it) => `${it.qty} × ${it.name}`).join(", ")}
+                            </p>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </Panel>
+                </div>
+              )}
             </TabsContent>
           </Tabs>
         </div>

@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ArrowRight, Boxes, Loader2, Package, PackageX, Search, SlidersHorizontal, TriangleAlert, Wallet, ArrowLeftRight,
+  ArrowRight, Boxes, Loader2, Package, PackageX, Search, ShoppingBag, SlidersHorizontal, TriangleAlert, Wallet, ArrowLeftRight,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useApp } from "@/lib/store";
+import { ProcurementDialog } from "@/components/df/procurement";
 import { KES } from "@/types";
 import { ScreenHeader, KpiCard, EmptyState, TableSkeleton } from "@/components/df/shared";
 import { toast } from "@/hooks/use-toast";
@@ -121,6 +122,8 @@ export default function InventoryScreen() {
 
   /* transfer dialog */
   const [transferOpen, setTransferOpen] = useState(false);
+  /* procurement workspace (suppliers / reorder suggestions / POs) */
+  const [procOpen, setProcOpen] = useState(false);
   const [tfProducts, setTfProducts] = useState<InvRow[] | null>(null);
   const [tfProduct, setTfProduct] = useState<number | null>(null);
   const [tfFrom, setTfFrom] = useState<number | null>(null);
@@ -261,6 +264,13 @@ export default function InventoryScreen() {
 
   return (
     <div className="space-y-4">
+      {/* procurement workspace (reorder suggestions → POs → receive) */}
+      <ProcurementDialog
+        open={procOpen}
+        onOpenChange={setProcOpen}
+        stores={stores.map((s) => ({ id: s.id, name: s.name }))}
+        onDone={load}
+      />
       <ScreenHeader
         title="Inventory"
         subtitle="Multi-store stock, margins & transfers"
@@ -272,6 +282,17 @@ export default function InventoryScreen() {
             <span className="hidden rounded-full border border-[#DFE1E6] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#6B778C] @md:inline-flex">
               <b className="mr-1 text-[#172B4D]">{summary.skuCount}</b> SKUs
             </span>
+            <Button
+              onClick={() => setProcOpen(true)}
+              className="h-9 rounded-xl bg-[#00C853] px-4 text-[13px] font-semibold text-[#052E14] shadow-sm hover:bg-[#00B34A]"
+            >
+              <ShoppingBag size={15} /> Procurement
+              {summary.lowStock > 0 && (
+                <span className="ml-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#FF5630] px-1 text-[10px] font-bold text-white">
+                  {summary.lowStock}
+                </span>
+              )}
+            </Button>
             <Button
               onClick={() => void openTransfer()}
               className="h-9 rounded-xl bg-[#0052CC] px-4 text-[13px] font-semibold text-white shadow-sm hover:bg-[#0041A8]"

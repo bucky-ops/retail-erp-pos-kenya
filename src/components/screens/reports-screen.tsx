@@ -3,13 +3,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Building2, CalendarClock, ChartColumn, Download, HandCoins, Landmark,
-  Package, PieChart as PieChartIcon, RefreshCw, Smartphone, TrendingUp, Users,
+  Package, PieChart as PieChartIcon, Plus, RefreshCw, Smartphone, TrendingDown, TrendingUp, Users, Wallet,
 } from "lucide-react";
 import {
   Area, Bar, BarChart, CartesianGrid, Cell, ComposedChart, Legend, Line, LineChart,
   Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import { api } from "@/lib/api";
+import { useApp } from "@/lib/store";
 import { KES, SettingsDto } from "@/types";
 import { Panel, ScreenHeader, TableSkeleton } from "@/components/df/shared";
 import { toast } from "@/hooks/use-toast";
@@ -54,7 +55,18 @@ interface ReportsPayload {
   generatedAt: string;
 }
 
-type ReportId = "store" | "pnl" | "stock" | "debtors" | "loyalty" | "staff" | "kra" | "mpesa";
+/* Operating expenses (petty cash, bills) — served by /api/expenses */
+interface ExpRow {
+  id: number; storeId: number; storeName: string; category: string; note: string;
+  amount: number; paidVia: string; refNo: string | null; staffName: string; spentAt: string;
+}
+interface ExpPayload {
+  expenses: ExpRow[];
+  summary: { total: number; today: number; month: number; count: number; byCategory: { category: string; amount: number }[] };
+}
+
+const EXP_CATEGORIES = ["Rent", "Electricity", "Salaries", "Transport", "Supplies", "Marketing", "Repairs", "Other"];
+type ReportId = "store" | "pnl" | "stock" | "debtors" | "loyalty" | "staff" | "kra" | "mpesa" | "expenses";
 
 const err = (e: unknown) => (e instanceof Error ? e.message : "Something went wrong");
 
@@ -67,6 +79,7 @@ const REPORTS: { id: ReportId; title: string; desc: string; icon: typeof ChartCo
   { id: "staff", title: "Staff Performance", desc: "Sales per staff this week", icon: Users },
   { id: "kra", title: "KRA eTIMS Submissions", desc: "Verified vs pending invoices", icon: Landmark },
   { id: "mpesa", title: "M-Pesa Reconciliation", desc: "Mobile money vs cash trend", icon: Smartphone },
+  { id: "expenses", title: "Operating Expenses", desc: "Petty cash, bills, rent & net P&L", icon: Wallet },
 ];
 
 const rel = (iso: string) => {
@@ -86,6 +99,7 @@ const kesTooltip = (v: number | string) => KES(Number(v));
 
 export default function ReportsScreen() {
   const [data, setData] = useState<ReportsPayload | null>(null);
+  const [exp, setExp] = useState<ExpPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [drill, setDrill] = useState<ReportId | null>(null);
   const [scheduleOpen, setScheduleOpen] = useState(false);
@@ -101,9 +115,18 @@ export default function ReportsScreen() {
     }
   }, []);
 
+  const loadExp = useCallback(async () => {
+    try {
+      setExp(await api.get<ExpPayload>("/api/expenses?days=30"));
+    } catch {
+      setExp(null);
+    }
+  }, []);
+
   useEffect(() => {
     void load();
-  }, [load]);
+    void loadExp();
+  }, [load, loadExp]);
 
   /* derived datasets ─────────────────────────────────────── */
 
@@ -211,9 +234,17 @@ export default function ReportsScreen() {
             cols: ["Day", "M-Pesa (KES)", "Cash (KES)", "Other (KES)"],
             rows: mpesaRows.map((r) => [r.day, r.mpesa, r.cash, r.other]),
           };
+        case "expenses":
+          return {
+            cols: ["Category", "Spend (KES)", "Share of 30-day total"],
+            rows: (exp?.summary.byCategory ?? []).map((c) => [
+              c.category, c.amount,
+              exp?.summary.total ? `${Math.round((c.amount / exp.summary.total) * 100)}%` : "—",
+            ]),
+          };
       }
     },
-    [data, stockAging, debtorRows, loyaltyRows, kraRows, mpesaRows]
+    [data, stockAging, debtorRows, loyaltyRows, kraRows, mpesaRows, exp]
   );
 
   const exportCsv = (id: ReportId) => {
@@ -326,9 +357,18 @@ export default function ReportsScreen() {
             <LineChart data={mpesaRows}>
               <Tooltip formatter={kesTooltip} />
               <Line dataKey="mpesa" stroke="#00C853" strokeWidth={2} dot={false} />
-              <Line dataKey="cash" stroke="#0052CC" strokeWidth={2} dot={false} strokeDasharray="4 3" />
+              <Line dataKey="cash" stroke="#0052CC" strokeWidth={2} dot={false} />
               <Line dataKey="other" stroke="#FFAB00" strokeWidth={2} dot={false} />
             </LineChart>
+          </ResponsiveContainer>
+        );
+      case "expenses":
+        return (
+          <ResponsiveContainer width="100%" height={96}>
+            <BarChart data={exp?.summary.byCategory.slice(0, 5) ?? []} layout="vertical">
+              <Tooltip formatter={kesTooltip} cursor={{ fill: "rgba(255,86,48,0.06)" }} />
+              <Bar dataKey="amount" fill="#FF5630" radius={[0, 6, 6, 0]} barSize={10} />
+            </BarChart>
           </ResponsiveContainer>
         );
     }
@@ -457,6 +497,18 @@ export default function ReportsScreen() {
             </LineChart>
           </ResponsiveContainer>
         );
+      case "expenses":
+        return (
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={exp?.summary.byCategory ?? []} layout="vertical">
+              <CartesianGrid strokeDasharray="3 3" stroke="#DFE1E6" horizontal={false} />
+              <XAxis type="number" tick={axis} axisLine={false} tickLine={false} tickFormatter={compact} />
+              <YAxis type="category" dataKey="category" width={90} tick={{ fontSize: 11, fill: "#172B4D" }} axisLine={false} tickLine={false} />
+              <Tooltip formatter={kesTooltip} cursor={{ fill: "rgba(255,86,48,0.06)" }} />
+              <Bar dataKey="amount" name="Spend" fill="#FF5630" radius={[0, 6, 6, 0]} barSize={16} />
+            </BarChart>
+          </ResponsiveContainer>
+        );
     }
   };
 
@@ -524,6 +576,111 @@ export default function ReportsScreen() {
           </DialogHeader>
 
           <div className="h-64">{drill && bigChart(drill)}</div>
+
+          {/* expenses: summary tiles + record-expense form + recent ledger */}
+          {drill === "expenses" && exp && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-2 @2xl:grid-cols-4">
+                {[
+                  { label: "30-day spend", value: exp.summary.total, color: "#FF5630" },
+                  { label: "This month", value: exp.summary.month, color: "#FF5630" },
+                  { label: "Today", value: exp.summary.today, color: "#FFAB00" },
+                  { label: "Entries", value: exp.summary.count, color: "#172B4D", plain: true },
+                ].map((t) => (
+                  <div key={t.label} className="rounded-xl border border-[#DFE1E6] bg-[#FAFBFC] p-3">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-[#6B778C]">{t.label}</p>
+                    <p className="font-display mt-0.5 text-[16px] font-bold tabular-nums" style={{ color: t.color }}>
+                      {t.plain ? t.value : KES(t.value)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              {/* net P&L strip — revenue vs expenses tells the owner the real story */}
+              {data && (() => {
+                const revenue7 = data.daily.reduce((s, d) => s + d.revenue, 0);
+                const profit7 = data.daily.reduce((s, d) => s + d.profit, 0);
+                const net = profit7 - (exp.summary.total / 30) * 7; // rough weekly operating cost
+                return (
+                  <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-xl border border-[#DFE1E6] bg-white p-3">
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-[#6B778C]">Revenue (7d)</p>
+                      <p className="font-display text-[14px] font-bold text-[#0052CC]">{KES(revenue7)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-[#6B778C]">Est. gross profit (7d)</p>
+                      <p className="font-display text-[14px] font-bold text-[#00C853]">{KES(profit7)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-[#6B778C]">Est. weekly op. cost</p>
+                      <p className="font-display text-[14px] font-bold text-[#FF5630]">{KES((exp.summary.total / 30) * 7)}</p>
+                    </div>
+                    <div className="ml-auto text-right">
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-[#6B778C]">Net operating profit (7d)</p>
+                      <p className={cn("font-display text-[16px] font-bold", net >= 0 ? "text-[#00C853]" : "text-[#FF5630]")}>
+                        {KES(net)}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <RecordExpenseForm onRecorded={loadExp} />
+
+              {/* recent expense ledger */}
+              {exp.expenses.length > 0 && (
+                <div className="max-h-40 overflow-y-auto rounded-xl border border-[#DFE1E6]">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-[#FAFBFC]">
+                        <TableHead className="text-[11px] font-bold uppercase tracking-wide text-[#6B778C]">When</TableHead>
+                        <TableHead className="text-[11px] font-bold uppercase tracking-wide text-[#6B778C]">Category</TableHead>
+                        <TableHead className="text-[11px] font-bold uppercase tracking-wide text-[#6B778C]">Note</TableHead>
+                        <TableHead className="text-[11px] font-bold uppercase tracking-wide text-[#6B778C]">Store</TableHead>
+                        <TableHead className="text-right text-[11px] font-bold uppercase tracking-wide text-[#6B778C]">Amount</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {exp.expenses.slice(0, 12).map((e) => (
+                        <TableRow key={e.id}>
+                          <TableCell className="text-[11px] text-[#6B778C]">
+                            {new Date(e.spentAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}
+                          </TableCell>
+                          <TableCell>
+                            <span className="rounded-full bg-[#F4F5F7] px-2 py-0.5 text-[11px] font-bold text-[#172B4D]">{e.category}</span>
+                          </TableCell>
+                          <TableCell className="max-w-44 truncate text-[12px] text-[#172B4D]" title={e.note}>{e.note}</TableCell>
+                          <TableCell className="text-[11px] text-[#6B778C]">{e.storeName}</TableCell>
+                          <TableCell className="text-right font-mono text-[12px] font-bold tabular-nums text-[#FF5630]">
+                            −{KES(e.amount)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* P&L: operating-expense context (monthly spend from Expense ledger) */}
+          {drill === "pnl" && exp && (
+            <div className="flex items-center justify-between rounded-xl border border-[#DFE1E6] bg-[#FAFBFC] p-3">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wide text-[#6B778C]">Operating expenses (this month, all stores)</p>
+                <p className="font-display text-[14px] font-bold text-[#FF5630]">{KES(exp.summary.month)}</p>
+                <p className="mt-0.5 text-[10px] text-[#6B778C]">Top: {exp.summary.byCategory.slice(0, 2).map((c) => `${c.category} ${KES(c.amount)}`).join(" • ")}</p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setDrill("expenses")}
+                className="rounded-xl border-[#DFE1E6] text-[12px] font-bold text-[#172B4D]"
+              >
+                <TrendingDown size={13} /> Break down
+              </Button>
+            </div>
+          )}
 
           {/* stock aging: real inventory-batch breakdown — heaviest items per bucket */}
           {drill === "stock" && stockAgingItems.length > 0 && (
@@ -777,5 +934,143 @@ function ScheduleDialog({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/* ── Record expense (petty cash / bills) ──────────────────────
+   Inline form inside the Expenses drill-down. Persists to the
+   Expense ledger via POST /api/expenses and refreshes the chart. */
+function RecordExpenseForm({ onRecorded }: { onRecorded: () => void | Promise<void> }) {
+  const stores = useApp((s) => s.stores);
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [form, setForm] = useState({
+    storeId: "", category: "Rent", amount: "", paidVia: "Cash", note: "", refNo: "",
+  });
+
+  const submit = async () => {
+    const storeId = Number(form.storeId || stores[0]?.id || 0);
+    const amount = Number(form.amount);
+    if (!storeId || !amount || amount <= 0) {
+      toast({ title: "Pick a store and an amount", description: "Both are required to record an expense." });
+      return;
+    }
+    setBusy(true);
+    try {
+      const d = await api.post<{ ok: boolean; expense: ExpRow }>("/api/expenses", {
+        storeId,
+        category: form.category,
+        amount,
+        paidVia: form.paidVia,
+        note: form.note.trim(),
+        refNo: form.refNo.trim() || undefined,
+      });
+      toast({
+        title: "Expense recorded ✓",
+        description: `${form.category} — ${KES(amount)} at ${d.expense.storeName} (${form.paidVia}).`,
+      });
+      setForm({ storeId: "", category: "Rent", amount: "", paidVia: "Cash", note: "", refNo: "" });
+      setOpen(false);
+      await onRecorded();
+    } catch (e) {
+      toast({ title: "Could not record expense", description: err(e) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-[#DFE1E6] bg-white p-3">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center justify-between text-left"
+      >
+        <span className="flex items-center gap-2 text-[12px] font-bold text-[#172B4D]">
+          <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-[#FFEBE8] text-[#FF5630]">
+            <Plus size={13} />
+          </span>
+          Record an expense
+        </span>
+        <span className="text-[11px] font-semibold text-[#0052CC]">{open ? "Hide −" : "Show +"}
+        </span>
+      </button>
+
+      {open && (
+        <div className="mt-3 space-y-2.5 border-t border-[#DFE1E6] pt-3">
+          <div className="grid grid-cols-2 gap-2 @2xl:grid-cols-4">
+            <div className="space-y-1">
+              <Label className="text-[11px] font-semibold text-[#6B778C]">Store</Label>
+              <Select value={form.storeId} onValueChange={(v) => setForm((f) => ({ ...f, storeId: v }))}>
+                <SelectTrigger className="h-8 rounded-lg text-[12px]"><SelectValue placeholder={stores[0]?.name ?? "Store"} /></SelectTrigger>
+                <SelectContent>
+                  {stores.map((s) => (
+                    <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-[11px] font-semibold text-[#6B778C]">Category</Label>
+              <Select value={form.category} onValueChange={(v) => setForm((f) => ({ ...f, category: v }))}>
+                <SelectTrigger className="h-8 rounded-lg text-[12px]"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {EXP_CATEGORIES.map((c) => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-[11px] font-semibold text-[#6B778C]">Amount (KES)</Label>
+              <Input
+                type="number" min="1" value={form.amount}
+                onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
+                placeholder="0" className="h-8 rounded-lg text-[12px] font-bold"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-[11px] font-semibold text-[#6B778C]">Paid via</Label>
+              <Select value={form.paidVia} onValueChange={(v) => setForm((f) => ({ ...f, paidVia: v }))}>
+                <SelectTrigger className="h-8 rounded-lg text-[12px]"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {["Cash", "M-Pesa", "Bank"].map((m) => (
+                    <SelectItem key={m} value={m}>{m}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2 @2xl:grid-cols-4">
+            <div className="col-span-2 space-y-1">
+              <Label className="text-[11px] font-semibold text-[#6B778C]">Note</Label>
+              <Input
+                value={form.note}
+                onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))}
+                placeholder="e.g. KPLC tokens — September"
+                className="h-8 rounded-lg text-[12px]"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-[11px] font-semibold text-[#6B778C]">Ref / voucher</Label>
+              <Input
+                value={form.refNo}
+                onChange={(e) => setForm((f) => ({ ...f, refNo: e.target.value }))}
+                placeholder="optional"
+                className="h-8 rounded-lg text-[12px]"
+              />
+            </div>
+            <div className="flex items-end">
+              <Button
+                onClick={submit} disabled={busy}
+                className="h-8 w-full rounded-lg bg-[#FF5630] text-[12px] font-bold text-white hover:bg-[#E64526]"
+              >
+                {busy ? "Saving…" : "Record expense"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
