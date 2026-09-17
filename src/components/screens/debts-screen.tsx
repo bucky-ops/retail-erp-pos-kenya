@@ -2,13 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  BellRing, CalendarClock, Eye, HandCoins, Landmark, Loader2, MoreHorizontal,
-  Plus, ShieldAlert, Smartphone, TrendingUp, TriangleAlert,
+  BellRing, CalendarClock, Download, Eye, FileText, HandCoins, Landmark, Loader2, MoreHorizontal,
+  Plus, Printer, ShieldAlert, Smartphone, TrendingUp, TriangleAlert,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { CustomerDto, DebtPlanDto, KES } from "@/types";
 import { ScreenHeader, KpiCard, Panel, EmptyState, TableSkeleton } from "@/components/df/shared";
-import { TierBadge, OverdueBadge } from "@/components/df/badges";
+import { TierBadge, OverdueBadge, KraBadge } from "@/components/df/badges";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -59,6 +59,22 @@ interface Creditor {
   overdueDays: number;
   paid: boolean;
   terms: string;
+}
+
+/* ── debtor statement (printable / CSV) ─────────────────── */
+
+interface StatementData {
+  customer: { id: number; name: string; phone: string; email: string | null; tier: string };
+  plan: {
+    id: number; invoiceNo: string | null; installmentType: string; installmentAmount: number;
+    nextDueDate: string; status: string; overdueDays: number; balance: number;
+  };
+  invoices: { id: number; receiptNo: string; createdAt: string; total: number; status: string }[];
+  payments: { id: number; amount: number; method: string; note: string | null; createdAt: string }[];
+  summary: {
+    invoicedTotal: number; paidTotal: number; balance: number; creditLimit: number;
+    availableCredit: number; oldestInvoiceAgeDays: number; generatedAt: string;
+  };
 }
 
 /** Creditors ledger — seed subset matching the prototype (Bamburi / Sadolin / Twiga). */
@@ -116,6 +132,12 @@ export default function DebtsScreen() {
   /* supplier payment confirm */
   const [payCreditor, setPayCreditor] = useState<Creditor | null>(null);
   const [creditorBusy, setCreditorBusy] = useState(false);
+
+  /* debtor statement dialog */
+  const [stmtPlan, setStmtPlan] = useState<PlanRow | null>(null);
+  const [stmtData, setStmtData] = useState<StatementData | null>(null);
+  const [stmtLoading, setStmtLoading] = useState(false);
+  const [stmtBusy, setStmtBusy] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -201,6 +223,54 @@ export default function DebtsScreen() {
   const openRecordPayment = (plan: PlanRow) => {
     setPayPlan(plan);
     setPayAmount(String(plan.installmentAmount || ""));
+  };
+
+  /* ── debtor statement: load → render → print / CSV ────── */
+  const openStatement = async (plan: PlanRow) => {
+    setStmtPlan(plan);
+    setStmtData(null);
+    setStmtLoading(true);
+    try {
+      const d = await api.get<StatementData>(`/api/debt-plans/${plan.id}/statement`);
+      setStmtData(d);
+    } catch (e) {
+      toast({ title: "Could not load statement", description: err(e) });
+      setStmtPlan(null);
+    } finally {
+      setStmtLoading(false);
+    }
+  };
+
+  const printStatement = () => {
+    setStmtBusy(true);
+    window.setTimeout(() => {
+      window.print();
+      setStmtBusy(false);
+    }, 60);
+  };
+
+  const downloadStatementCsv = () => {
+    if (!stmtData) return;
+    const esc = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
+    const rows: string[] = [
+      ["Type", "Date", "Reference", "Method", "Amount (KES)"].map(esc).join(","),
+      ...stmtData.invoices.map((i) =>
+        ["Invoice", i.createdAt.slice(0, 10), i.receiptNo, "Credit Sale", i.total].map(esc).join(",")
+      ),
+      ...stmtData.payments.map((p) =>
+        ["Payment", p.createdAt.slice(0, 10), `Plan #${stmtData.plan.id}`, p.method, -p.amount].map(esc).join(",")
+      ),
+      "",
+      ["", "", "", "Balance", stmtData.summary.balance].map(esc).join(","),
+    ];
+    const blob = new Blob([rows.join("\n")], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `statement-${stmtData.customer.name.replace(/\s+/g, "-").toLowerCase()}-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast({ title: "Statement CSV downloaded", description: `${stmtData.customer.name} • ${stmtData.invoices.length} invoices • ${stmtData.payments.length} payments` });
   };
 
   const submitPayment = async () => {
@@ -561,6 +631,9 @@ export default function DebtsScreen() {
                               <DropdownMenuItem onClick={() => openEdit(p)}>
                                 <CalendarClock className="h-4 w-4 text-[#B8860B]" /> Edit plan
                               </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => void openStatement(p)}>
+                                <FileText className="h-4 w-4 text-[#0052CC]" /> Account statement
+                              </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
                                 onClick={() =>
@@ -788,6 +861,174 @@ export default function DebtsScreen() {
               {editBusy && <Loader2 className="h-4 w-4 animate-spin" />} Save changes
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ══════════ Account Statement dialog (printable A4) ══════════ */}
+      <Dialog open={!!stmtPlan} onOpenChange={(o) => !o && setStmtPlan(null)}>
+        <DialogContent className="rounded-[20px] sm:max-w-[700px]">
+          <DialogHeader>
+            <DialogTitle className="font-display">Account statement</DialogTitle>
+            <DialogDescription>
+              {stmtPlan ? `${stmtPlan.customerName} • plan #${stmtPlan.id} • ${stmtPlan.installmentType.toLowerCase()} installments` : ""}
+            </DialogDescription>
+          </DialogHeader>
+
+          {stmtLoading || !stmtData ? (
+            <div className="flex h-56 items-center justify-center">
+              <Loader2 className="h-6 w-6 animate-spin text-[#0052CC]" />
+            </div>
+          ) : (
+            <>
+              <div className="df-scroll max-h-[60vh] overflow-y-auto pr-1">
+                {/* the sheet — printable A4 area */}
+                <div className="df-print-area df-print-area-a4 df-statement overflow-hidden rounded-xl border border-[#DFE1E6] shadow-sm">
+                  {/* navy gradient header band */}
+                  <div className="flex items-center justify-between bg-gradient-to-r from-[#0052CC] to-[#003d99] px-6 py-4 text-white">
+                    <div>
+                      <p className="font-display text-[16px] font-bold">DukaFlow Ltd</p>
+                      <p className="text-[11px] text-white/80">Thika Road, Nairobi • +254 700 123 456</p>
+                      <p className="font-mono text-[10px] text-white/70">KRA PIN: P051234567A</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-display text-[14px] font-bold tracking-wide">ACCOUNT STATEMENT</p>
+                      <p className="text-[11px] text-white/80">
+                        Generated {new Date(stmtData.summary.generatedAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* customer + plan summary */}
+                  <div className="grid grid-cols-2 gap-4 px-6 py-4">
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-[#6B778C]">Billed to</p>
+                      <p className="font-display mt-1 text-[14px] font-bold text-[#172B4D]">{stmtData.customer.name}</p>
+                      <p className="font-mono text-[12px] text-[#6B778C]">{stmtData.customer.phone}</p>
+                      <div className="mt-1 flex items-center gap-2">
+                        <TierBadge tier={stmtData.customer.tier} />
+                        {stmtData.summary.oldestInvoiceAgeDays > 60 && (
+                          <span className="rounded-full bg-[#FFEBEE] px-2 py-0.5 text-[10px] font-bold text-[#C62828]">
+                            Oldest {stmtData.summary.oldestInvoiceAgeDays}d
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="space-y-1 text-right text-[12px]">
+                      <p className="text-[#6B778C]">
+                        Installment:{" "}
+                        <b className="text-[#172B4D]">
+                          {KES(stmtData.plan.installmentAmount)} / {stmtData.plan.installmentType.toLowerCase()}
+                        </b>
+                      </p>
+                      <p className="text-[#6B778C]">
+                        Next due: <b className="text-[#172B4D]">{fmtDay(stmtData.plan.nextDueDate)}</b>
+                      </p>
+                      <p className="text-[#6B778C]">
+                        Credit limit: <b className="text-[#172B4D]">{KES(stmtData.summary.creditLimit, true)}</b>
+                      </p>
+                      <p className="text-[#6B778C]">
+                        Available credit: <b className="text-[#1B7A2E]">{KES(stmtData.summary.availableCredit, true)}</b>
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* balance hero */}
+                  <div className="mx-6 mb-4 flex items-center justify-between rounded-xl bg-[#172B4D] px-5 py-3 text-white">
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-white/70">Balance due</p>
+                      <p className="font-display text-[22px] font-bold">{KES(stmtData.summary.balance)}</p>
+                    </div>
+                    <div className="text-right text-[11px] text-white/80">
+                      <p>Invoiced {KES(stmtData.summary.invoicedTotal, true)}</p>
+                      <p>Paid <span className="text-[#7DE8A2]">−{KES(stmtData.summary.paidTotal, true)}</span></p>
+                      <p className={cn("font-bold", stmtData.plan.overdueDays > 7 ? "text-[#FF8A80]" : "text-white")}>
+                        {stmtData.plan.overdueDays > 0 ? `${stmtData.plan.overdueDays} days overdue` : "Not overdue"}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* invoices */}
+                  <div className="px-6 pb-2">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-[#6B778C]">Credit invoices</p>
+                    <table className="mt-2 w-full text-[12px]">
+                      <thead>
+                        <tr className="border-b border-[#DFE1E6] text-left text-[10px] uppercase tracking-wider text-[#6B778C]">
+                          <th className="py-1.5 font-semibold">Invoice</th>
+                          <th className="py-1.5 font-semibold">Date</th>
+                          <th className="py-1.5 font-semibold">KRA</th>
+                          <th className="py-1.5 text-right font-semibold">Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {stmtData.invoices.length === 0 ? (
+                          <tr><td colSpan={4} className="py-2 text-[11px] text-[#6B778C]">No credit invoices on record.</td></tr>
+                        ) : (
+                          stmtData.invoices.map((i) => (
+                            <tr key={i.id} className="border-b border-[#F4F5F7]">
+                              <td className="py-1.5 font-mono font-semibold text-[#172B4D]">{i.receiptNo}</td>
+                              <td className="py-1.5 text-[#6B778C]">{fmtDay(i.createdAt)}</td>
+                              <td className="py-1.5">
+                                <KraBadge status={i.status} />
+                              </td>
+                              <td className="py-1.5 text-right font-bold text-[#172B4D]">{KES(i.total)}</td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* payments ledger */}
+                  <div className="px-6 pb-4">
+                    <p className="mt-2 text-[10px] font-bold uppercase tracking-widest text-[#6B778C]">Payments received</p>
+                    <table className="mt-2 w-full text-[12px]">
+                      <thead>
+                        <tr className="border-b border-[#DFE1E6] text-left text-[10px] uppercase tracking-wider text-[#6B778C]">
+                          <th className="py-1.5 font-semibold">Date</th>
+                          <th className="py-1.5 font-semibold">Method</th>
+                          <th className="py-1.5 font-semibold">Note</th>
+                          <th className="py-1.5 text-right font-semibold">Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {stmtData.payments.length === 0 ? (
+                          <tr><td colSpan={4} className="py-2 text-[11px] text-[#6B778C]">No payments recorded yet.</td></tr>
+                        ) : (
+                          stmtData.payments.map((p) => (
+                            <tr key={p.id} className="border-b border-[#F4F5F7]">
+                              <td className="py-1.5 text-[#6B778C]">{fmtDay(p.createdAt)}</td>
+                              <td className="py-1.5 font-semibold text-[#172B4D]">{p.method}</td>
+                              <td className="max-w-[180px] truncate py-1.5 text-[11px] text-[#6B778C]">{p.note ?? "—"}</td>
+                              <td className="py-1.5 text-right font-bold text-[#1B7A2E]">−{KES(p.amount)}</td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* footer */}
+                  <div className="border-t border-dashed border-[#DFE1E6] px-6 py-3 text-[10px] text-[#6B778C]">
+                    This statement is generated by DukaFlow ERP and reflects the account position at the time of printing.
+                    Questions? Call +254 700 123 456 or email accounts@dukaflow.co.ke — Asante!
+                  </div>
+                </div>
+              </div>
+
+              <DialogFooter className="mt-1">
+                <Button variant="outline" onClick={downloadStatementCsv} className="rounded-xl">
+                  <Download className="h-4 w-4" /> CSV
+                </Button>
+                <Button
+                  onClick={printStatement}
+                  disabled={stmtBusy}
+                  className="rounded-xl bg-[#0052CC] font-semibold hover:bg-[#0041A8]"
+                >
+                  {stmtBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />} Print / Save PDF
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
 

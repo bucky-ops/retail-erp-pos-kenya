@@ -34,6 +34,7 @@ import {
 } from "recharts";
 import { api } from "@/lib/api";
 import { useApp } from "@/lib/store";
+import { useLive, type LiveLowStock, type LiveSale } from "@/lib/live";
 import { KES } from "@/types";
 import { KraBadge, TierBadge } from "@/components/df/badges";
 import { EmptyState, KpiCard, Panel, ScreenHeader, TableSkeleton } from "@/components/df/shared";
@@ -116,6 +117,10 @@ export default function DashboardScreen() {
   const stores = useApp((s) => s.stores);
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  // Realtime (socket.io): rows broadcast after the page load + KPI bump.
+  const [liveRows, setLiveRows] = useState<FeedRow[]>([]);
+  const [liveTotals, setLiveTotals] = useState({ sales: 0, count: 0 });
+  const [freshIds, setFreshIds] = useState<string[]>([]);
 
   const activeStore = activeStoreId !== "all" ? stores.find((s) => s.id === activeStoreId) : undefined;
 
@@ -124,6 +129,10 @@ export default function DashboardScreen() {
     try {
       const qs = activeStoreId === "all" ? "" : `?storeId=${activeStoreId}`;
       setData(await api.get<DashboardData>(`/api/dashboard${qs}`));
+      // Server is now authoritative — clear optimistic live deltas so a
+      // manual refresh never double-counts a sale.
+      setLiveTotals({ sales: 0, count: 0 });
+      setLiveRows([]);
     } catch (e) {
       toast({
         title: "Could not load dashboard",
@@ -137,6 +146,46 @@ export default function DashboardScreen() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // ── Realtime event bus ────────────────────────────────────────────
+  const liveStatus = useLive((event, payload) => {
+    if (event === "sale:new") {
+      const s = payload as LiveSale;
+      const row: FeedRow = {
+        receipt: s.receiptNo,
+        customer: s.customerName,
+        tier: s.customerTier,
+        store: s.storeName,
+        amount: s.total,
+        pay: s.paymentMethod,
+        kra: s.kraStatus,
+        time: new Date(s.createdAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
+      };
+      setLiveRows((prev) => [row, ...prev.filter((r) => r.receipt !== row.receipt)].slice(0, 12));
+      setLiveTotals((t) => ({ sales: t.sales + s.total, count: t.count + 1 }));
+      setFreshIds((prev) => [row.receipt, ...prev].slice(0, 10));
+      window.setTimeout(() => setFreshIds((prev) => prev.filter((id) => id !== row.receipt)), 6000);
+      if (s.total >= 10000) {
+        toast({ title: "Big sale! 🎉", description: `${s.receiptNo} • ${KES(s.total)} • ${s.customerName}` });
+      }
+    } else if (event === "stock:low") {
+      const ls = payload as LiveLowStock;
+      toast({
+        title: "Low stock alert",
+        description: `${ls.emoji} ${ls.productName} at ${ls.storeName}: ${ls.qty} left (reorder at ${ls.reorderPoint})`,
+      });
+      void load();
+    }
+  });
+
+  // Combined feed: realtime rows first, then the fetched history (deduped).
+  const feedRows: FeedRow[] = [];
+  const seenReceipts = new Set<string>();
+  for (const row of [...liveRows, ...(data?.feed ?? [])]) {
+    if (seenReceipts.has(row.receipt)) continue;
+    seenReceipts.add(row.receipt);
+    feedRows.push(row);
+  }
 
   const today = new Date().toLocaleDateString("en-KE", { year: "numeric", month: "short", day: "numeric" });
 
@@ -191,10 +240,11 @@ export default function DashboardScreen() {
         <KpiCard
           icon={<TrendingUp size={16} />}
           label="Today's Sales"
-          value={KES(data?.kpis.todaySales ?? 0)}
+          value={KES((data?.kpis.todaySales ?? 0) + liveTotals.sales)}
           delta="+12%"
-          sub={`${data?.kpis.todayCount ?? 0} receipts today`}
+          sub={`${(data?.kpis.todayCount ?? 0) + liveTotals.count} receipts today`}
           loading={loading}
+          className={cn(liveTotals.count > 0 && "df-live-flash")}
           chart={
             <div className="h-8 w-full">
               <ResponsiveContainer width="100%" height="100%">
@@ -390,12 +440,27 @@ export default function DashboardScreen() {
       {/* ── Row 3: live feed + right rail ────────────────── */}
       <div className="grid grid-cols-12 gap-5">
         <Panel padding={false} className="col-span-12 overflow-hidden @6xl:col-span-8">
-          <div className="flex items-center justify-between border-b border-[#DFE1E6] p-4 md:p-5">
+          <div className="flex items-center justify-between border-b border-[#DFE1E6] p-4 @md:p-5">
             <div className="flex items-center gap-2">
-              <span className="h-2 w-2 animate-pulse rounded-full bg-[#00C853]" />
-              <h3 className="font-display text-[15px] font-bold text-[#172B4D]">Live Sales Feed</h3>
+              {liveStatus === "live" ? (
+                <>
+                  <span className="df-live-dot h-2 w-2 rounded-full bg-[#00C853]" />
+                  <h3 className="font-display text-[15px] font-bold text-[#172B4D]">Live Sales Feed</h3>
+                  <span className="rounded-full bg-[#E8F5E9] px-2 py-0.5 text-[10px] font-bold tracking-wide text-[#1B7A2E]">
+                    LIVE
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="h-2 w-2 animate-pulse rounded-full bg-[#FFAB00]" />
+                  <h3 className="font-display text-[15px] font-bold text-[#172B4D]">Live Sales Feed</h3>
+                  <span className="rounded-full bg-[#FFF8E1] px-2 py-0.5 text-[10px] font-bold tracking-wide text-[#B8860B]">
+                    {liveStatus === "connecting" ? "CONNECTING…" : "RECONNECTING…"}
+                  </span>
+                </>
+              )}
             </div>
-            <span className="rounded-full bg-[#E3F2FD] px-3 py-1 text-[11px] font-bold text-[#0052CC]">
+            <span className="hidden rounded-full bg-[#E3F2FD] px-3 py-1 text-[11px] font-bold text-[#0052CC] @md:inline">
               Conversion 68%
             </span>
           </div>
@@ -413,8 +478,14 @@ export default function DashboardScreen() {
                 </tr>
               </thead>
               <tbody>
-                {(data?.feed ?? []).map((f) => (
-                  <tr key={f.receipt} className="border-t border-[#F4F5F7] hover:bg-[#FAFBFC]">
+                {feedRows.map((f) => (
+                  <tr
+                    key={f.receipt}
+                    className={cn(
+                      "border-t border-[#F4F5F7] hover:bg-[#FAFBFC]",
+                      freshIds.includes(f.receipt) && "df-feed-new"
+                    )}
+                  >
                     <td className="whitespace-nowrap p-3 text-[#6B778C]">{f.time}</td>
                     <td className="whitespace-nowrap p-3 font-mono font-semibold text-[#172B4D]">{f.receipt}</td>
                     <td className="p-3">

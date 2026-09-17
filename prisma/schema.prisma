@@ -55,6 +55,7 @@ model Customer {
   createdAt       DateTime   @default(now())
   sales           Sale[]
   debtPlans       DebtPlan[]
+  debtPayments    DebtPayment[]
   giftCards       GiftCard[]
   smsLogs         SmsLog[]
 }
@@ -209,7 +210,22 @@ model DebtPlan {
   autoBlockPosOverdue Boolean  @default(true)
   overdueDays         Int      @default(0)
   customer            Customer @relation(fields: [customerId], references: [id])
+  payments            DebtPayment[]
   createdAt           DateTime @default(now())
+}
+
+// Payment ledger for debt plans — every installment recorded against a plan
+// lands here so the debtor statement can list invoices vs receipts truthfully.
+model DebtPayment {
+  id         Int      @id @default(autoincrement())
+  debtPlanId Int
+  plan       DebtPlan @relation(fields: [debtPlanId], references: [id], onDelete: Cascade)
+  customerId Int
+  customer   Customer @relation(fields: [customerId], references: [id])
+  amount     Float
+  method     String   @default("Cash") // Cash | M-Pesa | Bank | Cheque
+  note       String?
+  createdAt  DateTime @default(now())
 }
 
 // ─── HR & Kenya payroll ──────────────────────────────────────────────────────

@@ -37,6 +37,16 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       where: { id: plan.customerId },
       data: { debtBalance: { decrement: paid } },
     });
+    // payment ledger row — powers the printable debtor statement
+    await db.debtPayment.create({
+      data: {
+        debtPlanId: plan.id,
+        customerId: plan.customerId,
+        amount,
+        method: body.method ?? "Cash",
+        note: body.note?.slice(0, 200) ?? null,
+      },
+    });
     // payment SMS receipt
     await db.smsLog.create({
       data: {

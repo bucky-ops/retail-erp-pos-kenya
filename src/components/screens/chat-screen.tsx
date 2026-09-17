@@ -8,6 +8,7 @@ import { api } from "@/lib/api";
 import { ChatChannelDto, ChatMessageDto } from "@/types";
 import { TableSkeleton } from "@/components/df/shared";
 import { useApp } from "@/lib/store";
+import { useLive, type LiveChatMessage } from "@/lib/live";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -127,6 +128,24 @@ export default function ChatScreen() {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages]);
+
+  /* realtime (socket.io): append incoming messages, bump unread badges */
+  const liveStatus = useLive((event, payload) => {
+    if (event !== "chat:new") return;
+    const m = payload as LiveChatMessage;
+    if (m.channelId === selectedId) {
+      // Own posts are already appended by send() — dedupe by real id.
+      setMessages((ms) =>
+        m.id > 0 && ms.some((x) => x.id === m.id)
+          ? ms
+          : [...ms, { id: m.id || -Date.now(), channelId: m.channelId, author: m.author, initials: m.initials, content: m.content, docLink: m.docLink ? String(m.docLink) : null, createdAt: m.createdAt }]
+      );
+    } else {
+      setChannels((cs) =>
+        cs.map((c) => (c.id === m.channelId ? { ...c, unread: c.unread + 1 } : c))
+      );
+    }
+  });
 
   const openChannel = async (id: number) => {
     if (id === selectedId) return;
@@ -270,9 +289,27 @@ export default function ChatScreen() {
               {active?.members ?? 0} members{active?.description ? ` • ${active.description}` : ""}
             </p>
           </div>
-          <span className="hidden shrink-0 rounded-full bg-[#F4F5F7] px-2.5 py-1 text-[10px] font-bold text-[#6B778C] @md:block">
-            {messages.length} messages
-          </span>
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="hidden shrink-0 rounded-full bg-[#F4F5F7] px-2.5 py-1 text-[10px] font-bold text-[#6B778C] @md:block">
+              {messages.length} messages
+            </span>
+            <span
+              className={cn(
+                "flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[10px] font-bold",
+                liveStatus === "live"
+                  ? "bg-[#E8F5E9] text-[#1B7A2E]"
+                  : "bg-[#FFF8E1] text-[#B8860B]"
+              )}
+            >
+              <span
+                className={cn(
+                  "h-1.5 w-1.5 rounded-full",
+                  liveStatus === "live" ? "df-live-dot bg-[#00C853]" : "animate-pulse bg-[#FFAB00]"
+                )}
+              />
+              {liveStatus === "live" ? "LIVE" : "OFFLINE"}
+            </span>
+          </div>
         </div>
 
         <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto bg-[#FAFBFC] p-4">
@@ -292,7 +329,7 @@ export default function ChatScreen() {
             messages.map((m) => {
               const doc = parseDoc(m.docLink);
               return (
-                <div key={m.id} className="flex gap-2.5">
+                <div key={m.id} className={cn("flex gap-2.5", m.id < 0 && "df-fade-in")}>
                   <div
                     className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white"
                     style={{ background: colorFor(m.initials || m.author) }}

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { emitLive } from "@/lib/live-emit";
 
 export const dynamic = "force-dynamic";
 
@@ -55,6 +56,14 @@ export async function POST(req: NextRequest) {
       content: body.content.trim(),
       docLink: body.docLink ? JSON.stringify(body.docLink) : null,
     },
+  });
+  // Realtime: push the message to every open Raven client.
+  const chan = await db.chatChannel.findUnique({ where: { id: Number(body.channelId) } });
+  emitLive("chat:new", {
+    channelId: msg.channelId, channelName: chan?.name ?? "", id: msg.id,
+    author: msg.author, initials: msg.initials, content: msg.content,
+    docLink: msg.docLink,
+    createdAt: msg.createdAt.toISOString(),
   });
   return NextResponse.json({ ok: true, message: { ...msg, createdAt: msg.createdAt.toISOString() } });
 }

@@ -11,12 +11,14 @@
 | Module | Highlights |
 | --- | --- |
 | **Multi-store POS (offline-first)** | Per-store stock, barcode scanning, customer picker (tier / points / debt / gift card / credit limit in one strip), 6 payment modes (Cash, **M-Pesa STK Push**, Till, Paybill, Gift Card, Credit Sale), promo codes, bill discounts, points redemption, VAT 16%, **Happy Hour auto-pricing** (time-boxed % off a category, till banner + server-authoritative pricing). Sales are written to **IndexedDB first** and auto-sync when connectivity returns (`src/lib/offline.ts`). |
+| **Realtime event bus (socket.io)** | A dedicated mini-service (`mini-services/live-feed`, socket.io :3003 + HTTP emit bridge :3004) pushes `sale:new`, `stock:low`, `chat:new` and `till:z` to every open browser. The dashboard **Live Sales Feed** renders committed sales instantly (green flash rows, KPI glow, big-sale toast, LIVE/RECONNECTING status), Raven appends messages live with unread bumps, and low-stock crossings raise instant toasts + `#stock-alerts` bot posts. New connections replay the last 25 events. |
+| **Low-stock watchdog** | When a sale or adjustment takes an item **at/below its reorder point**, the API posts a ⚠️ bot message to `#stock-alerts`, broadcasts `stock:low` (live dashboard toast), and only fires on the crossing itself so a run of sales never spams the channel. |
 | **Cash drawer — X & Z reports** | Open a shift with a KES opening float, live **expected-drawer** figure (float + cash sales), payment-split takings, **X-Report** mid-shift snapshot, and a **Z-Report close** that reconciles counted cash vs expected and records the variance (`/api/till`). Shift history with color-coded variance lives in the POS › Till dialog — the button pulses green while a shift is open. |
 | **Scheduled report email** | "Schedule email" on Reports opens a real persisted schedule (Daily / Weekly Monday / Monthly, 08:00 EAT) — `GET /api/cron/report` aggregates revenue, VAT, top products, per-store split and payment mix from live sales and emails the owner (mock mailer logged to Messages). Manageable from Reports and Settings › Backup & Restore. |
 | **Installable PWA offline shell** | Service worker (`public/sw.js`) caches the app shell so the till **boots with zero network** (network-first navigations, cache-first static assets, `/api` never cached), web app manifest + maskable icons, install prompt, and a **Settings › Device & Offline** panel (install button, SW status, offline queue replay). In dev the SW registers only with `?sw=1` to keep hot-reload sane. |
 | **Sales pipeline** | Kanban **Quotation → Proforma → Sales Order → Invoiced → Paid** with drag & drop, one-click stage maturing, full stage timeline, auto Sales Invoice creation at "Invoiced". |
 | **Loyalty & gift cards** | Configurable earn rules (1 pt / KES 100 by default), Gold 10% / Silver 5% auto tier discounts, 12-month expiry, gift cards with **real QR codes**, partial redemption, top-ups, six designer gradients. |
-| **Creditors / debtors / debt plans** | Aging buckets (0-30 / 31-60 / 60+), payment-plan builder (Weekly/Monthly installments, **auto reminder SMS**, **auto-block POS when overdue > 7 days**), record payments with SMS receipts. Credit sales auto-create debt plans. |
+| **Creditors / debtors / debt plans** | Aging buckets (0-30 / 31-60 / 60+), payment-plan builder (Weekly/Monthly installments, **auto reminder SMS**, **auto-block POS when overdue > 7 days**), record payments with SMS receipts. Credit sales auto-create debt plans. Every recorded payment lands in a real **`DebtPayment` ledger**, and each plan has a printable **Account statement** (A4 sheet: balance hero, credit invoices with KRA status, payments received, credit availability) with **CSV export** and print-to-PDF (`/api/debt-plans/[id]/statement`). |
 | **KRA eTIMS** | Every sale is submitted to the eTIMS simulator → **CU invoice number** + QR payload (`KRA PIN;INV;DATE;TOTAL;CU;DEVICE`) rendered as a real PNG QR stored on the invoice. Fields: `cuInvoiceNumber`, `qrCodeBase64`, `kraStatus`. |
 | **M-Pesa (Daraja simulator)** | STK Push flow with polling (`POST /api/mpesa/stk` → `GET ?id=`), till numbers, B2C bulk CSV export for payroll. Swap the simulator for live Daraja keys in Settings. |
 | **Receipts & print** | 80 mm **thermal** receipt (zig-zag paper, mono type, KRA QR, blue loyalty block, red promo footer) + **A4 coloured tax invoice** (blue brand header, tax breakdown, bank/M-Pesa footer, signature) + gift-card art. Both print-optimised via `.df-print-area` / `.df-print-area-a4`. |
@@ -46,6 +48,11 @@ bun prisma/seed.ts
 
 # 5. run
 bun run dev            # http://localhost:3000
+
+# 6. (optional but recommended) realtime event bus — live sales feed,
+#    Raven live messages, low-stock toasts. Without it the app still
+#    works; feeds just show a RECONNECTING pill instead of LIVE.
+cd mini-services/live-feed && bun install && bun run dev
 ```
 
 Or use the one-shot installer: `bash install.sh`
@@ -66,7 +73,8 @@ Or use the one-shot installer: `bash install.sh`
 3. Apply promo **GOLD10**, toggle **Use points**, pay with **M-PESA STK PUSH** → confirm the simulated STK dialog.
 4. Success modal shows the **KRA verification QR** + loyalty QR. Visit **Receipts** for the 80 mm thermal & A4 renders.
 5. Toggle your browser to offline (DevTools → Network) and ring another sale — it queues in IndexedDB and syncs automatically when you're back online.
-6. Explore **Debts → Payment Plan builder** (auto-SMS + auto-block toggles), **Payroll → Run Payroll**, **Messages → Birthday blast**, **Raven Chat** doc cards.
+6. Explore **Debts → Payment Plan builder** (auto-SMS + auto-block toggles), **Debts → row menu → Account statement** (print / CSV), **Payroll → Run Payroll**, **Messages → Birthday blast**, **Raven Chat** doc cards.
+7. With the live-feed service running, keep the **Dashboard** open in one tab and ring a sale in POS from another tab — the feed row, KPI glow and (for low-stock crossings) the ⚠️ toast fire instantly over socket.io.
 
 ## 🏗 Project Structure
 

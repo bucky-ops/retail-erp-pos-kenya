@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { emitLive } from "@/lib/live-emit";
 
 export const dynamic = "force-dynamic";
 
@@ -46,15 +47,29 @@ export async function POST(req: NextRequest) {
   // audit + chat notification
   const channel = await db.chatChannel.findFirst({ where: { name: "stock-alerts" } });
   if (channel) {
+    const note = `📝 Stock adjustment: ${delta > 0 ? "+" : ""}${delta} × ${product?.name} at ${store?.name} (${reason}). New qty: ${newQty}.`;
     await db.chatMessage.create({
       data: {
         channelId: channel.id,
         author: "System Bot",
         initials: "SB",
-        content: `📝 Stock adjustment: ${delta > 0 ? "+" : ""}${delta} × ${product?.name} at ${store?.name} (${reason}). New qty: ${newQty}.`,
+        content: note,
       },
     });
     await db.chatChannel.update({ where: { id: channel.id }, data: { unread: { increment: 1 } } });
+    emitLive("chat:new", {
+      channelId: channel.id, channelName: channel.name, id: 0,
+      author: "System Bot", initials: "SB", content: note,
+      createdAt: new Date().toISOString(),
+    });
+  }
+
+  // Live low-stock alert when an adjustment leaves the item at/below reorder.
+  if (product && store && newQty <= level.reorderPoint) {
+    emitLive("stock:low", {
+      productName: product.name, emoji: product.emoji,
+      storeName: store.name, qty: newQty, reorderPoint: level.reorderPoint,
+    });
   }
 
   return NextResponse.json({ ok: true, level: updated, product: product?.name, store: store?.name });

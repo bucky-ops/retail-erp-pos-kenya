@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { emitLive } from "@/lib/live-emit";
 
 export const dynamic = "force-dynamic";
 
@@ -150,6 +151,13 @@ export async function POST(req: NextRequest) {
         variance: countedCash - report.expectedCash,
         note: body.note?.slice(0, 300) ?? null,
       },
+    });
+    // Realtime: dashboards see the Z-report immediately (cash drawer closed).
+    const zStore = await db.store.findUnique({ where: { id: storeId } });
+    emitLive("till:z", {
+      storeName: zStore?.name ?? "Store", sessionId: closed.id,
+      variance: closed.variance, countedCash: closed.countedCash,
+      closedAt: closed.closedAt,
     });
 
     return NextResponse.json({ ok: true, type: "Z", session: closed, report: { ...report, to: now } });

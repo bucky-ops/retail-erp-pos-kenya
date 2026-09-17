@@ -268,6 +268,30 @@
   pointer-events: none;
 }
 
+/* ── Live feed (socket.io) ─────────────────────────────────────────────── */
+/* A freshly broadcast sale row slides in with a green flash that fades. */
+@keyframes df-feed-in {
+  0% { opacity: 0; transform: translateY(-10px); background-color: rgba(0, 200, 83, 0.16); }
+  25% { opacity: 1; background-color: rgba(0, 200, 83, 0.12); }
+  100% { opacity: 1; transform: translateY(0); background-color: transparent; }
+}
+.df-feed-new { animation: df-feed-in 2.8s ease-out both; }
+/* KPI card glow when a live sale bumps the number. */
+@keyframes df-kpi-flash {
+  0% { box-shadow: 0 0 0 0 rgba(0, 200, 83, 0.38); }
+  100% { box-shadow: 0 0 0 16px rgba(0, 200, 83, 0); }
+}
+.df-live-flash { animation: df-kpi-flash 1.4s ease-out 2; border-color: rgba(0, 200, 83, 0.55) !important; }
+/* Green LIVE pill — mirror of the amber reconnect pill. */
+.df-live-pill { position: relative; }
+@keyframes df-live-ring {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(0, 200, 83, 0.5); }
+  55% { box-shadow: 0 0 0 5px rgba(0, 200, 83, 0); }
+}
+.df-live-dot { animation: df-live-ring 1.6s ease-out infinite; }
+/* Statement / A4 print sheet look inside dialogs. */
+.df-statement { background: #fff; color: #172B4D; }
+
 /* settings scroll area rhythm */
 .df-settings-nav::-webkit-scrollbar { width: 6px; }
 .df-settings-nav::-webkit-scrollbar-thumb { background: #DFE1E6; border-radius: 999px; }

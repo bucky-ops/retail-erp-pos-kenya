@@ -1,0 +1,13 @@
+{
+  "name": "dukaflow-live-feed",
+  "version": "1.0.0",
+  "private": true,
+  "description": "DukaFlow real-time event bus — broadcasts sale:new / stock:low / chat:new to connected dashboards",
+  "scripts": {
+    "dev": "bun --hot index.ts",
+    "start": "bun index.ts"
+  },
+  "dependencies": {
+    "socket.io": "^4.7.5"
+  }
+}

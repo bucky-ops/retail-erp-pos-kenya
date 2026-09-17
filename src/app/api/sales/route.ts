@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { submitToEtims, generateInvoiceQr } from "@/lib/etims";
 import { happyHourMatchesCategory, isHappyHourActive } from "@/lib/happy-hour";
+import { emitLive } from "@/lib/live-emit";
 import { SalePayload } from "@/types";
 
 export const dynamic = "force-dynamic";
@@ -148,7 +149,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ── 5. Stock decrement ───────────────────────────────
+    // ── 5. Stock decrement (capture pre-sale qty for reorder crossing) ──
+    const prevQty = new Map<number, number>();
     for (const item of items) {
       const stock = await db.stockLevel.findUnique({
         where: { productId_storeId: { productId: item.productId, storeId } },
@@ -160,6 +162,7 @@ export async function POST(req: NextRequest) {
         const p = priceMap.get(item.productId);
         return NextResponse.json({ ok: false, error: `Insufficient stock: ${p?.name ?? "Item"} (have ${stock.qty})` }, { status: 400 });
       }
+      prevQty.set(item.productId, stock.qty);
     }
     for (const item of items) {
       await db.stockLevel.update({
@@ -255,7 +258,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ── 11. Receipt SMS ──────────────────────────────────
+    // ── 11. Receipt SMS ──────────────────────────────
     if (customer && paymentMethod !== "Credit Sale") {
       await db.smsLog.create({
         data: {
@@ -266,9 +269,69 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // ── 12. Realtime broadcast + low-stock watchdog ─────
+    // Push the committed sale to every open dashboard (socket.io via the
+    // live-feed service). Best-effort — must never fail the sale.
+    const store = await db.store.findUnique({ where: { id: storeId } });
+    emitLive("sale:new", {
+      receiptNo,
+      storeName: store?.name ?? "Store",
+      customerName: customer?.name ?? "Walk-in",
+      customerTier: customer?.tier ?? null,
+      total,
+      paymentMethod,
+      kraStatus,
+      staffName: sale.staffName,
+      offlineCreated: sale.offlineCreated,
+      createdAt: sale.createdAt,
+    });
+
+    // Low-stock watchdog: when a sale takes an item AT/BELOW its reorder
+    // point, alert #stock-alerts in Raven and push a stock:low event so open
+    // dashboards toast immediately. Only fires on the crossing itself so a
+    // run of sales never spams the channel.
+    for (const item of items) {
+      const fresh = await db.stockLevel.findUnique({
+        where: { productId_storeId: { productId: item.productId, storeId } },
+      });
+      const before = prevQty.get(item.productId);
+      const p = priceMap.get(item.productId);
+      if (!fresh || !p || before === undefined) continue;
+      if (before > fresh.reorderPoint && fresh.qty <= fresh.reorderPoint) {
+        const channel = await db.chatChannel.findFirst({ where: { name: "stock-alerts" } });
+        if (channel) {
+          await db.chatMessage.create({
+            data: {
+              channelId: channel.id,
+              author: "Stock Bot",
+              initials: "SB",
+              content: `⚠️ Low stock: ${p.emoji} ${p.name} at ${store?.name ?? "store"} is down to ${fresh.qty} (reorder at ${fresh.reorderPoint}). Raised by sale ${receiptNo}.`,
+            },
+          });
+          await db.chatChannel.update({ where: { id: channel.id }, data: { unread: { increment: 1 } } });
+          emitLive("chat:new", {
+            channelId: channel.id,
+            channelName: channel.name,
+            id: 0,
+            author: "Stock Bot",
+            initials: "SB",
+            content: `⚠️ Low stock: ${p.emoji} ${p.name} at ${store?.name ?? "store"} is down to ${fresh.qty} (reorder at ${fresh.reorderPoint}). Raised by sale ${receiptNo}.`,
+            createdAt: new Date().toISOString(),
+          });
+        }
+        emitLive("stock:low", {
+          productName: p.name,
+          emoji: p.emoji,
+          storeName: store?.name ?? "Store",
+          qty: fresh.qty,
+          reorderPoint: fresh.reorderPoint,
+        });
+      }
+    }
+
     return NextResponse.json({
       ok: true,
-      sale: { ...sale, storeName: (await db.store.findUnique({ where: { id: storeId } }))?.name, customerName: customer?.name ?? "Walk-in" },
+      sale: { ...sale, storeName: store?.name, customerName: customer?.name ?? "Walk-in" },
       loyalty: { earned: pointsEarned, balance: loyaltyBalance, redeemed: pointsRedeemed },
     });
   } catch (err) {
