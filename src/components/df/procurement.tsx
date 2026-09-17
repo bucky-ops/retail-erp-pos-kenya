@@ -16,7 +16,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Building2, Check, ChevronDown, FileText, Loader2, PackageMinus, Plus, Printer, Send, ShoppingCart, Tag, Truck, Undo2, X } from "lucide-react";
+import { Building2, Check, ChevronDown, ClipboardList, FileText, Loader2, Mail, PackageMinus, Plus, Printer, Send, ShoppingCart, Store as StoreIcon, Tag, Truck, Undo2, X } from "lucide-react";
 import { api } from "@/lib/api";
 import { KES, type ProductDto } from "@/types";
 import { toast } from "@/hooks/use-toast";
@@ -153,6 +153,14 @@ export function ProcurementDialog({
   const [stmtData, setStmtData] = useState<SupStmt | null>(null);
   const [stmtLoading, setStmtLoading] = useState(false);
   const [stmtBusy, setStmtBusy] = useState(false);
+
+  /* supplier statement email dialog */
+  const [stmtEmailOpen, setStmtEmailOpen] = useState(false);
+  const [stmtEmailTo, setStmtEmailTo] = useState("");
+  const [stmtEmailSubject, setStmtEmailSubject] = useState("");
+  const [stmtEmailBody, setStmtEmailBody] = useState("");
+  const [stmtEmailLoading, setStmtEmailLoading] = useState(false);
+  const [stmtEmailSending, setStmtEmailSending] = useState(false);
 
   /* return-to-vendor form */
   const [rtvs, setRtvs] = useState<RTV[] | null>(null);
@@ -373,6 +381,27 @@ export function ProcurementDialog({
     0
   );
 
+  /* ── PO basket: the exact grouping createPOs commits, rendered for review ── */
+  const [basketOpen, setBasketOpen] = useState(false);
+  const basketGroups = useMemo(() => {
+    const bySupplier = new Map<number, { supplierName: string; leadDays: number; stores: { storeId: number; storeName: string; lines: { s: Sugg; qty: number }[]; subtotal: number }[]; subtotal: number }>();
+    for (const s of selectedLines) {
+      const sid = supOv[s.stockLevelId] ?? s.supplierId;
+      if (!sid) continue;
+      const sup = (sups ?? []).find((x) => x.id === sid);
+      const qty = qtyOv[s.stockLevelId] ?? 0;
+      const g = bySupplier.get(sid) ?? { supplierName: sup?.name ?? s.supplierName ?? "Unknown supplier", leadDays: sup?.leadDays ?? s.leadDays ?? 0, stores: [], subtotal: 0 };
+      let store = g.stores.find((st) => st.storeId === s.storeId);
+      if (!store) { store = { storeId: s.storeId, storeName: s.storeName, lines: [], subtotal: 0 }; g.stores.push(store); }
+      store.lines.push({ s, qty });
+      store.subtotal += qty * s.unitCost;
+      g.subtotal += qty * s.unitCost;
+      bySupplier.set(sid, g);
+    }
+    return [...bySupplier.entries()].map(([supplierId, g]) => ({ supplierId, ...g }));
+  }, [selectedLines, supOv, qtyOv, sups]);
+  const basketPoCount = basketGroups.reduce((n, g) => n + g.stores.length, 0);
+
   /* ── return-to-vendor ── */
 
   /* load stock for the picked store when the RTV tab store changes */
@@ -465,6 +494,43 @@ export function ProcurementDialog({
       window.print();
       setStmtBusy(false);
     }, 60);
+  };
+
+  /* ── supplier statement email: preview → send ───────── */
+  const openStatementEmail = async () => {
+    if (!stmtSup) return;
+    setStmtEmailOpen(true);
+    setStmtEmailLoading(true);
+    setStmtEmailTo(stmtData?.supplier.email ?? stmtSup.email ?? "");
+    try {
+      const r = await api.get<{ ok: boolean; subject: string; body: string; to: string; supplierName: string }>(
+        `/api/suppliers/${stmtSup.id}/statement/email`
+      );
+      setStmtEmailSubject(r.subject);
+      setStmtEmailBody(r.body);
+      if (r.to) setStmtEmailTo(r.to);
+    } catch {
+      setStmtEmailSubject(`Supplier Statement — ${stmtSup.name}`);
+      setStmtEmailBody("Could not preview the statement — try again.");
+    } finally {
+      setStmtEmailLoading(false);
+    }
+  };
+
+  const sendStatementEmail = async () => {
+    if (!stmtSup) return;
+    setStmtEmailSending(true);
+    try {
+      const r = await api.post<{ ok: boolean; to: string }>(`/api/suppliers/${stmtSup.id}/statement/email`, {
+        to: stmtEmailTo.trim(),
+      });
+      toast({ title: "Statement emailed ✉️", description: `${stmtSup.name} → ${r.to} (audited in Messages)` });
+      setStmtEmailOpen(false);
+    } catch (e) {
+      toast({ title: "Could not send", description: err(e) });
+    } finally {
+      setStmtEmailSending(false);
+    }
   };
 
   return (
@@ -584,14 +650,23 @@ export function ProcurementDialog({
                 </p>
                 <p className="font-display text-[16px] font-bold text-white">{KES(suggTotal)}</p>
               </div>
-              <Button
-                onClick={() => void createPOs()}
-                disabled={busy || selectedLines.length === 0}
-                className="h-10 rounded-xl bg-[#00C853] px-5 text-[13px] font-bold text-[#052E14] hover:bg-[#00B34A] disabled:opacity-40"
-              >
-                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShoppingCart className="h-4 w-4" />}
-                Create purchase orders
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  onClick={() => setBasketOpen(true)}
+                  disabled={busy || selectedLines.length === 0}
+                  className="h-10 rounded-xl border border-white/25 bg-white/10 px-4 text-[12px] font-bold text-white hover:bg-white/20 disabled:opacity-40"
+                >
+                  <ClipboardList className="h-4 w-4" /> Preview basket
+                </Button>
+                <Button
+                  onClick={() => void createPOs()}
+                  disabled={busy || selectedLines.length === 0}
+                  className="h-10 rounded-xl bg-[#00C853] px-5 text-[13px] font-bold text-[#052E14] hover:bg-[#00B34A] disabled:opacity-40"
+                >
+                  {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShoppingCart className="h-4 w-4" />}
+                  Create purchase orders
+                </Button>
+              </div>
             </div>
           </TabsContent>
 
@@ -1141,7 +1216,13 @@ export function ProcurementDialog({
               </div>
             </div>
 
-            <DialogFooter className="mt-1">
+            <DialogFooter className="mt-1 gap-2">
+              <Button
+                onClick={() => void openStatementEmail()}
+                className="rounded-xl border border-[#C5CAE9] bg-[#E8EAF6] text-[13px] font-semibold text-[#283593] hover:bg-[#DCDFF5]"
+              >
+                <Mail className="h-4 w-4" /> Email statement
+              </Button>
               <Button
                 onClick={printStatement}
                 disabled={stmtBusy}
@@ -1152,6 +1233,167 @@ export function ProcurementDialog({
             </DialogFooter>
           </>
         )}
+      </DialogContent>
+
+      {/* ══════════ Supplier statement email dialog ══════════ */}
+      <Dialog open={stmtEmailOpen} onOpenChange={setStmtEmailOpen}>
+        <DialogContent className="rounded-2xl sm:max-w-[560px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 font-display text-[15px] font-bold text-[#172B4D]">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#E8EAF6] text-[#283593]">
+                <Mail size={15} />
+              </span>
+              Email supplier statement
+            </DialogTitle>
+            <DialogDescription className="text-[12px]">
+              Sends the reconciliation (net traded, open orders, debit-note credits) to the supplier — mock mailer, audited in Messages.
+            </DialogDescription>
+          </DialogHeader>
+
+          {stmtEmailLoading ? (
+            <div className="flex items-center justify-center gap-2 py-10 text-[12px] text-[#6B778C]">
+              <Loader2 size={14} className="animate-spin" /> Preparing statement email…
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="sup-stmt-email-to" className="text-[10px] font-bold uppercase tracking-wide text-[#6B778C]">
+                  To
+                </Label>
+                <Input
+                  id="sup-stmt-email-to"
+                  value={stmtEmailTo}
+                  onChange={(e) => setStmtEmailTo(e.target.value)}
+                  placeholder="supplier@email.com"
+                  type="email"
+                  className="h-9 rounded-xl border-[#DFE1E6] bg-[#FAFBFC] text-[13px]"
+                />
+                <p className="text-[10px] text-[#6B778C]">
+                  {stmtData?.supplier.email
+                    ? "Supplier has an email on file — the address you send to will be kept for future statements."
+                    : `No email on file for ${stmtData?.supplier.name ?? "this supplier"} — the address you send to will be saved.`}
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-bold uppercase tracking-wide text-[#6B778C]">Subject</Label>
+                <p className="rounded-xl border border-[#DFE1E6] bg-[#FAFBFC] px-3 py-2 text-[12px] font-semibold text-[#172B4D]">
+                  {stmtEmailSubject}
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-bold uppercase tracking-wide text-[#6B778C]">Preview</Label>
+                <pre className="df-scroll max-h-[220px] overflow-auto whitespace-pre-wrap rounded-xl border border-[#DFE1E6] bg-white p-3 font-mono text-[11px] leading-relaxed text-[#172B4D]">
+                  {stmtEmailBody}
+                </pre>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setStmtEmailOpen(false)} className="h-9 rounded-xl text-[12px] font-bold text-[#172B4D]">
+              Cancel
+            </Button>
+            <Button
+              disabled={stmtEmailLoading || stmtEmailSending || !stmtEmailTo.trim() || !stmtSup}
+              onClick={() => void sendStatementEmail()}
+              className="h-9 rounded-xl bg-[#283593] px-5 text-[12px] font-bold text-white hover:bg-[#1A237E]"
+            >
+              {stmtEmailSending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />} Send statement
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Dialog>
+
+    {/* ══════════ PO basket drawer — grouped draft preview before commit ══════════ */}
+    <Dialog open={basketOpen} onOpenChange={setBasketOpen}>
+      <DialogContent className="rounded-[20px] sm:max-w-[620px]">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 font-display text-[15px] font-bold text-[#172B4D]">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#E9F2FF] text-[#0052CC]">
+              <ClipboardList size={15} />
+            </span>
+            PO basket — {basketPoCount} order{basketPoCount === 1 ? "" : "s"}, {basketGroups.length} supplier{basketGroups.length === 1 ? "" : "s"}
+          </DialogTitle>
+          <DialogDescription className="text-[12px]">
+            Exactly what “Create purchase orders” will commit — one PO per supplier per store. Adjust quantities or suppliers on the left, then confirm here.
+          </DialogDescription>
+        </DialogHeader>
+
+        {basketGroups.length === 0 ? (
+          <p className="py-8 text-center text-[12px] text-[#6B778C]">The basket is empty — include some reorder lines first.</p>
+        ) : (
+          <div className="df-scroll max-h-[52vh] space-y-3 overflow-y-auto pr-1">
+            {basketGroups.map((g) => (
+              <div key={g.supplierId} className="overflow-hidden rounded-xl border border-[#DFE1E6] bg-white shadow-sm">
+                {/* supplier band */}
+                <div className="flex items-center justify-between border-b border-dashed border-[#DFE1E6] bg-[#FAFBFC] px-4 py-2.5">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#E9F2FF] text-[#0052CC]">
+                      <Building2 size={13} />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate text-[13px] font-bold text-[#172B4D]">{g.supplierName}</p>
+                      <p className="text-[10px] font-semibold text-[#6B778C]">
+                        {g.leadDays}-day lead • PO{g.stores.length === 1 ? "" : "s"} to {g.stores.length} store{g.stores.length === 1 ? "" : "s"}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="font-display shrink-0 text-[14px] font-extrabold tabular-nums text-[#0052CC]">{KES(g.subtotal, true)}</p>
+                </div>
+
+                {/* per-store POs */}
+                {g.stores.map((st) => (
+                  <div key={st.storeId} className="px-4 py-2.5">
+                    <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-[#6B778C]">
+                      <StoreIcon size={11} className="text-[#00C853]" /> {st.storeName}
+                      <span className="ml-auto rounded-full bg-[#E8F5E9] px-2 py-0.5 text-[9px] font-bold normal-case tracking-normal text-[#1B7A2E]">
+                        1 PO • {KES(st.subtotal, true)}
+                      </span>
+                    </p>
+                    <table className="mt-1.5 w-full text-[12px]">
+                      <tbody>
+                        {st.lines.map(({ s, qty }) => (
+                          <tr key={s.stockLevelId} className="border-b border-[#F4F5F7] last:border-0">
+                            <td className="w-6 py-1">{s.emoji}</td>
+                            <td className="py-1 font-semibold text-[#172B4D]">{s.name}</td>
+                            <td className="py-1 text-right font-mono tabular-nums text-[#6B778C]">{qty} × {KES(s.unitCost)}</td>
+                            <td className="py-1 pl-2 text-right font-bold tabular-nums text-[#172B4D]">{KES(qty * s.unitCost)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ))}
+              </div>
+            ))}
+
+            {/* grand total */}
+            <div className="flex items-center justify-between rounded-xl border border-[#C8E6C9] bg-[#E8F5E9] px-4 py-3">
+              <p className="text-[11px] font-bold uppercase tracking-widest text-[#1B7A2E]">
+                Basket total — {basketPoCount} PO{basketPoCount === 1 ? "" : "s"} • {selectedLines.length} lines
+              </p>
+              <p className="font-display text-[16px] font-extrabold tabular-nums text-[#1B7A2E]">{KES(suggTotal)}</p>
+            </div>
+          </div>
+        )}
+
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={() => setBasketOpen(false)} className="h-9 rounded-xl text-[12px] font-bold text-[#172B4D]">
+            Keep editing
+          </Button>
+          <Button
+            disabled={busy || basketGroups.length === 0}
+            onClick={() => {
+              setBasketOpen(false);
+              void createPOs();
+            }}
+            className="h-9 rounded-xl bg-[#00C853] px-5 text-[12px] font-bold text-[#052E14] hover:bg-[#00B34A]"
+          >
+            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShoppingCart className="h-3.5 w-3.5" />}
+            Confirm &amp; create {basketPoCount} PO{basketPoCount === 1 ? "" : "s"}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
     </>

@@ -109,6 +109,14 @@ else
   FAIL=$((FAIL+1)); echo "❌ statement email preview (no plans found)"
 fi
 
+# 7. supplier statement email preview (GET only — never sends) ──────────────────
+if [ -n "$SUP_ID" ] && [ "$SUP_ID" != "None" ]; then
+  expect_field "supplier statement email preview" GET "/api/suppliers/$SUP_ID/statement/email" \
+    "'Supplier Statement' in str(d['subject']) and 'NET TRADED' in d['body']"
+else
+  FAIL=$((FAIL+1)); echo "❌ supplier statement email preview (no suppliers found)"
+fi
+
 echo "──────────────────────────────"
 echo "Smoke result: $PASS passed, $FAIL failed"
 [ "$FAIL" = "0" ] || exit 1

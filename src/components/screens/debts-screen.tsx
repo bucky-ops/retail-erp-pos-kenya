@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  BellRing, CalendarClock, Download, Eye, FileText, HandCoins, Landmark, Loader2, Mail, MoreHorizontal,
-  Plus, Printer, Send, ShieldAlert, Smartphone, TrendingUp, TriangleAlert,
+  BellRing, CalendarClock, ChartNoAxesColumnIncreasing, Download, Eye, FileText, HandCoins, Landmark, Loader2, Mail, MoreHorizontal,
+  Plus, Printer, Send, ShieldAlert, Smartphone, TrendingUp, TriangleAlert, X,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { CustomerDto, DebtPlanDto, KES } from "@/types";
@@ -94,7 +94,7 @@ const CREDITOR_AGING: { label: string; value: number }[] = [
 
 const TO_PAY_BASE = 210000; // static payable book used for net cashflow estimate
 
-type DebtFilter = "all" | "overdue" | "blocked" | "active";
+type DebtFilter = "all" | "overdue" | "blocked" | "active" | "cur" | "b1_30" | "b31_60" | "b60p";
 
 const err = (e: unknown) => (e instanceof Error ? e.message : "Something went wrong");
 const initials = (name: string) =>
@@ -177,16 +177,47 @@ export default function DebtsScreen() {
         return plans.filter((p) => p.autoBlockPosOverdue && p.overdueDays > 7);
       case "active":
         return plans.filter((p) => p.status === "Active");
+      case "cur":
+        return plans.filter((p) => p.status === "Active" && p.overdueDays === 0);
+      case "b1_30":
+        return plans.filter((p) => p.status === "Active" && p.overdueDays >= 1 && p.overdueDays <= 30);
+      case "b31_60":
+        return plans.filter((p) => p.status === "Active" && p.overdueDays >= 31 && p.overdueDays <= 60);
+      case "b60p":
+        return plans.filter((p) => p.status === "Active" && p.overdueDays > 60);
       default:
         return plans;
     }
   }, [plans, filter]);
+
+  /* ── receivables aging buckets from the live ledger ── */
+  const agingBuckets = useMemo(() => {
+    const active = plans.filter((p) => p.status === "Active");
+    const inBucket = (p: (typeof active)[number], lo: number, hi: number) =>
+      p.overdueDays >= lo && p.overdueDays <= hi;
+    const mk = (key: DebtFilter, label: string, color: string, bg: string, lo: number, hi: number) => {
+      const rows = active.filter((p) => inBucket(p, lo, hi));
+      return { key, label, color, bg, count: rows.length, amount: rows.reduce((a, p) => a + p.totalDebt, 0) };
+    };
+    const buckets = [
+      mk("cur", "Current", "#0052CC", "#E9F2FF", 0, 0),
+      mk("b1_30", "1-30 days", "#B8860B", "#FFF8E1", 1, 30),
+      mk("b31_60", "31-60 days", "#FF5630", "#FFEBE8", 31, 60),
+      mk("b60p", "60+ days", "#C62828", "#FFEBEE", 61, Number.MAX_SAFE_INTEGER),
+    ];
+    const total = buckets.reduce((a, b) => a + b.amount, 0);
+    return { buckets, total };
+  }, [plans]);
 
   const chipCount = (f: DebtFilter) => {
     switch (f) {
       case "overdue": return plans.filter((p) => p.overdueDays > 0 && p.status === "Active").length;
       case "blocked": return plans.filter((p) => p.autoBlockPosOverdue && p.overdueDays > 7).length;
       case "active": return plans.filter((p) => p.status === "Active").length;
+      case "cur": return plans.filter((p) => p.status === "Active" && p.overdueDays === 0).length;
+      case "b1_30": return plans.filter((p) => p.status === "Active" && p.overdueDays >= 1 && p.overdueDays <= 30).length;
+      case "b31_60": return plans.filter((p) => p.status === "Active" && p.overdueDays >= 31 && p.overdueDays <= 60).length;
+      case "b60p": return plans.filter((p) => p.status === "Active" && p.overdueDays > 60).length;
       default: return plans.length;
     }
   };
@@ -552,6 +583,93 @@ export default function DebtsScreen() {
               <p className="mt-0.5 text-[12px] text-white/60">Net cashflow (collect − payables)</p>
             </div>
           </div>
+
+          {/* ══════════ receivables aging — live stacked bar + clickable buckets ══════════ */}
+          <Panel className="p-4 @6xl:p-5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#E9F2FF] text-[#0052CC]">
+                  <ChartNoAxesColumnIncreasing className="h-4 w-4" />
+                </span>
+                <div>
+                  <h3 className="font-display text-[14px] font-bold text-[#172B4D]">Receivables aging</h3>
+                  <p className="text-[11px] text-[#6B778C]">Live ledger • click a bucket to filter the list below</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {(filter === "cur" || filter === "b1_30" || filter === "b31_60" || filter === "b60p") && (
+                  <button
+                    onClick={() => setFilter("all")}
+                    className="flex items-center gap-1.5 rounded-full border border-[#DFE1E6] bg-white px-3 py-1.5 text-[11px] font-bold text-[#172B4D] transition hover:border-[#B3B9C4]"
+                  >
+                    Filtered: {agingBuckets.buckets.find((b) => b.key === filter)?.label}
+                    <X size={12} className="text-[#FF5630]" />
+                  </button>
+                )}
+                <p className="font-display text-[15px] font-extrabold tabular-nums text-[#172B4D]">{KES(agingBuckets.total)}</p>
+              </div>
+            </div>
+
+            {/* stacked bar */}
+            <div className="mt-3 flex h-4 w-full gap-px overflow-hidden rounded-full bg-[#F4F5F7]">
+              {agingBuckets.buckets.map((b) =>
+                b.amount > 0 ? (
+                  <div
+                    key={b.key}
+                    style={{ width: `${(b.amount / agingBuckets.total) * 100}%`, backgroundColor: b.color }}
+                    className={cn(
+                      "h-full transition-all duration-500",
+                      filter === b.key && "ring-2 ring-[#172B4D] ring-offset-1"
+                    )}
+                    title={`${b.label} — ${KES(b.amount)}`}
+                  />
+                ) : null
+              )}
+            </div>
+
+            {/* bucket rows */}
+            <div className="mt-3 grid grid-cols-2 gap-2 @2xl:grid-cols-4">
+              {agingBuckets.buckets.map((b) => {
+                const active = filter === b.key;
+                const pct = agingBuckets.total > 0 ? Math.round((b.amount / agingBuckets.total) * 100) : 0;
+                return (
+                  <button
+                    key={b.key}
+                    onClick={() => setFilter(active ? "all" : b.key)}
+                    aria-pressed={active}
+                    className={cn(
+                      "rounded-xl border px-3 py-2.5 text-left transition",
+                      active
+                        ? "border-[#172B4D] shadow-sm"
+                        : "border-[#DFE1E6] bg-white hover:border-[#B3B9C4] hover:shadow-sm"
+                    )}
+                    style={active ? { backgroundColor: b.bg, borderColor: b.color } : undefined}
+                  >
+                    <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-[#6B778C]">
+                      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: b.color }} />
+                      {b.label}
+                      {active && <span className="ml-auto text-[9px] font-extrabold" style={{ color: b.color }}>●</span>}
+                    </p>
+                    <p className="font-display mt-1 text-[15px] font-extrabold tabular-nums" style={{ color: b.color }}>
+                      {KES(b.amount)}
+                    </p>
+                    <div className="mt-1 flex items-center justify-between">
+                      <p className="text-[10px] font-semibold text-[#6B778C]">
+                        {b.count} ledger{b.count === 1 ? "" : "s"}
+                      </p>
+                      <p className="text-[10px] font-bold tabular-nums text-[#6B778C]">{pct}%</p>
+                    </div>
+                    <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-[#F4F5F7]">
+                      <div
+                        className="h-full rounded-full transition-all duration-500"
+                        style={{ width: `${pct}%`, backgroundColor: b.color }}
+                      />
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </Panel>
 
           {/* filter chips */}
           <div className="flex flex-wrap gap-2">

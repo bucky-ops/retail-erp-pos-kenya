@@ -30,10 +30,16 @@ export function KpiCard({
   className?: string;
 }) {
   return (
-    <div className={cn("rounded-2xl border border-[#DFE1E6] bg-white p-4 shadow-sm", className)}>
+    <div
+      className={cn(
+        "group rounded-2xl border border-[#DFE1E6] bg-white p-4 shadow-sm transition-all duration-200",
+        "hover:-translate-y-0.5 hover:border-[#C9CFDA] hover:shadow-md",
+        className
+      )}
+    >
       <div className="flex items-center justify-between">
         <div
-          className="flex h-9 w-9 items-center justify-center rounded-xl"
+          className="flex h-9 w-9 items-center justify-center rounded-xl transition-transform duration-200 group-hover:scale-110"
           style={{ background: iconBg, color: iconColor }}
         >
           {icon}
