@@ -76,13 +76,16 @@ model Product {
 }
 
 model StockLevel {
-  id           Int     @id @default(autoincrement())
+  id           Int      @id @default(autoincrement())
   productId    Int
   storeId      Int
-  qty          Float   @default(0)
-  reorderPoint Float   @default(10)
-  product      Product @relation(fields: [productId], references: [id])
-  store        Store   @relation(fields: [storeId], references: [id])
+  qty          Float    @default(0)
+  reorderPoint Float    @default(10)
+  // When the current batch landed — used by the Stock Aging report.
+  // Reset to now() whenever a positive adjustment / transfer marks fresh stock in.
+  receivedAt   DateTime @default(now())
+  product      Product  @relation(fields: [productId], references: [id])
+  store        Store    @relation(fields: [storeId], references: [id])
 
   @@unique([productId, storeId])
 }
@@ -288,6 +291,7 @@ model Settings {
   kraCallbackUrl        String    @default("https://api.dukaflow.co.ke/etims/callback")
   kraConnected          Boolean   @default(true)
   kraLastSync           DateTime?
+  mpesaEnvironment      String    @default("Sandbox") // Sandbox | Production (Daraja app type)
   mpesaConsumerKey      String    @default("demo-consumer-key")
   mpesaConsumerSecret   String    @default("demo-consumer-secret")
   mpesaTillNumbers      String    @default("123456, 654321")
@@ -298,6 +302,12 @@ model Settings {
   loyaltyPointValue     Float     @default(1)
   loyaltyExpiryMonths   Int       @default(12)
   vatRate               Float     @default(0.16)
+  // Happy Hour auto-pricing: % off the configured category while the window runs.
+  happyHourEnabled      Boolean   @default(true)
+  happyHourStart        String    @default("14:00") // HH:mm (24h, Africa/Nairobi till time)
+  happyHourEnd          String    @default("16:00")
+  happyHourPercent      Float     @default(10)
+  happyHourCategory     String    @default("All") // "All" or a product category name
   receiptPromoFooter    String    @default("Thank You! You saved KES 300 with points! Come again!")
   receiptPrimaryColor   String    @default("#0052CC")
   receiptSecondaryColor String    @default("#00C853")

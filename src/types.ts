@@ -100,6 +100,7 @@ export interface CartLine {
   sku: string;
   unitPrice: number;
   qty: number;
+  category?: string; // used for Happy Hour auto-pricing
 }
 
 export interface SalePayload {
@@ -229,6 +230,7 @@ export interface SettingsDto {
   kraCallbackUrl: string;
   kraConnected: boolean;
   kraLastSync: string | null;
+  mpesaEnvironment: "Sandbox" | "Production";
   mpesaConsumerKey: string;
   mpesaConsumerSecret: string;
   mpesaTillNumbers: string;
@@ -239,6 +241,11 @@ export interface SettingsDto {
   loyaltyPointValue: number;
   loyaltyExpiryMonths: number;
   vatRate: number;
+  happyHourEnabled: boolean;
+  happyHourStart: string;
+  happyHourEnd: string;
+  happyHourPercent: number;
+  happyHourCategory: string;
   receiptPromoFooter: string;
   receiptPrimaryColor: string;
   receiptSecondaryColor: string;

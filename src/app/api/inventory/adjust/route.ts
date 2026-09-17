@@ -30,7 +30,12 @@ export async function POST(req: NextRequest) {
 
   const updated = await db.stockLevel.update({
     where: { productId_storeId: { productId: Number(productId), storeId: Number(storeId) } },
-    data: { qty: newQty },
+    data: {
+      qty: newQty,
+      // Inbound stock resets the batch age — the Stock Aging report values the
+      // current batch from receivedAt, so fresh goods must land as fresh.
+      ...(delta > 0 ? { receivedAt: new Date() } : {}),
+    },
   });
 
   const [product, store] = await Promise.all([

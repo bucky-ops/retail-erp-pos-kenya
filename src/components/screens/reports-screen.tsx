@@ -24,6 +24,17 @@ import {
 
 /* ── contracts ─────────────────────────────────────────────── */
 
+interface StockAgingBucket {
+  bucket: string;
+  from: number;
+  to: number | null;
+  color: string;
+  value: number;
+  qty: number;
+  items: number;
+  topItems: { name: string; emoji: string; qty: number; value: number; ageDays: number; store: string }[];
+}
+
 interface ReportsPayload {
   salesByStore: { store: string; total: number; count: number }[];
   salesByStaff: { staff: string; total: number; count: number }[];
@@ -33,6 +44,7 @@ interface ReportsPayload {
   debtorAging: { current: number; d0_30: number; d31_60: number; d60plus: number };
   loyalty: { earned: number; redeemed: number };
   daily: { day: string; revenue: number; profit: number }[];
+  stockAging: { buckets: StockAgingBucket[]; totalValue: number };
   generatedAt: string;
 }
 
@@ -88,15 +100,18 @@ export default function ReportsScreen() {
 
   /* derived datasets ─────────────────────────────────────── */
 
+  /* stock aging — REAL server data (StockLevel.receivedAt × qty × cost) */
   const stockAging = useMemo(() => {
-    const total = 2500000; // representative KES value split
+    const b = data?.stockAging.buckets;
     return [
-      { bucket: "0–30 days", value: Math.round(total * 0.6) },
-      { bucket: "31–60 days", value: Math.round(total * 0.25) },
-      { bucket: "61–90 days", value: Math.round(total * 0.1) },
-      { bucket: "90+ days", value: Math.round(total * 0.05) },
+      { bucket: "0–30 days", value: b?.[0]?.value ?? 0, color: "#00C853", qty: b?.[0]?.qty ?? 0, items: b?.[0]?.items ?? 0 },
+      { bucket: "31–60 days", value: b?.[1]?.value ?? 0, color: "#FFAB00", qty: b?.[1]?.qty ?? 0, items: b?.[1]?.items ?? 0 },
+      { bucket: "61–90 days", value: b?.[2]?.value ?? 0, color: "#FF5630", qty: b?.[2]?.qty ?? 0, items: b?.[2]?.items ?? 0 },
+      { bucket: "90+ days", value: b?.[3]?.value ?? 0, color: "#B71C1C", qty: b?.[3]?.qty ?? 0, items: b?.[3]?.items ?? 0 },
     ];
-  }, []);
+  }, [data]);
+
+  const stockAgingItems = data?.stockAging.buckets ?? [];
 
   const debtorRows = useMemo(() => {
     const a = data?.debtorAging;
@@ -161,8 +176,8 @@ export default function ReportsScreen() {
           };
         case "stock":
           return {
-            cols: ["Age bucket", "Stock value (KES)"],
-            rows: stockAging.map((r) => [r.bucket, r.value]),
+            cols: ["Age bucket", "Units", "SKUs", "Stock value (KES)"],
+            rows: stockAging.map((r) => [r.bucket, r.qty, r.items, r.value]),
           };
         case "debtors":
           return {
@@ -241,8 +256,8 @@ export default function ReportsScreen() {
             <BarChart data={stockAging}>
               <Tooltip formatter={kesTooltip} cursor={{ fill: "rgba(107,119,140,0.08)" }} />
               <Bar dataKey="value" radius={[6, 6, 0, 0]}>
-                {stockAging.map((_, i) => (
-                  <Cell key={i} fill={["#78909C", "#90A4AE", "#A7B0BC", "#BFC5CE"][i]} />
+                {stockAging.map((r, i) => (
+                  <Cell key={i} fill={r.color} />
                 ))}
               </Bar>
             </BarChart>
@@ -356,7 +371,11 @@ export default function ReportsScreen() {
               <XAxis dataKey="bucket" tick={axis} axisLine={false} tickLine={false} />
               <YAxis tick={axis} axisLine={false} tickLine={false} tickFormatter={compact} />
               <Tooltip formatter={kesTooltip} cursor={{ fill: "rgba(107,119,140,0.08)" }} />
-              <Bar dataKey="value" name="Stock value" radius={[6, 6, 0, 0]} fill="#78909C" />
+              <Bar dataKey="value" name="Stock value" radius={[6, 6, 0, 0]}>
+                {stockAging.map((r, i) => (
+                  <Cell key={i} fill={r.color} />
+                ))}
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         );
@@ -499,6 +518,35 @@ export default function ReportsScreen() {
 
           <div className="h-64">{drill && bigChart(drill)}</div>
 
+          {/* stock aging: real inventory-batch breakdown — heaviest items per bucket */}
+          {drill === "stock" && stockAgingItems.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-[#6B778C]">Heaviest stock per bucket</p>
+                <span className="rounded-full bg-[#E9F2FF] px-2.5 py-1 text-[11px] font-bold text-[#0052CC]">
+                  Total inventory at cost: {KES(data?.stockAging.totalValue ?? 0)}
+                </span>
+              </div>
+              <div className="max-h-44 space-y-1.5 overflow-y-auto rounded-xl border border-[#DFE1E6] p-2">
+                {stockAgingItems
+                  .filter((b) => b.topItems.length > 0)
+                  .flatMap((b) =>
+                    b.topItems.slice(0, 3).map((it, i) => (
+                      <div key={`${b.bucket}-${i}`} className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-[#F4F5F7]">
+                        <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: b.color }} />
+                        <span className="text-[14px]">{it.emoji}</span>
+                        <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-[#172B4D]">{it.name}</span>
+                        <span className="text-[11px] text-[#6B778C]">{it.store}</span>
+                        <span className="text-[11px] tabular-nums text-[#6B778C]">×{Math.round(it.qty)}</span>
+                        <span className="w-14 text-right text-[11px] tabular-nums text-[#6B778C]">{it.ageDays}d</span>
+                        <span className="w-20 text-right font-mono text-[12px] font-semibold tabular-nums text-[#172B4D]">{KES(it.value)}</span>
+                      </div>
+                    ))
+                  )}
+              </div>
+            </div>
+          )}
+
           {drillTable && drillTable.rows.length > 0 ? (
             <div className="max-h-56 overflow-y-auto rounded-xl border border-[#DFE1E6]">
               <Table>
@@ -523,7 +571,9 @@ export default function ReportsScreen() {
                             typeof cell === "number" && j > 0 ? "font-mono tabular-nums" : ""
                           )}
                         >
-                          {typeof cell === "number" && j > 0 && !String(drillTable.cols[j]).includes("Transactions") && !String(drillTable.cols[j]).includes("Invoices") && !String(drillTable.cols[j]).includes("Points")
+                          {typeof cell === "number" &&
+                           j > 0 &&
+                           !["Transactions", "Invoices", "Points", "Units", "SKUs"].some((k) => String(drillTable.cols[j]).includes(k))
                             ? KES(cell)
                             : String(cell)}
                         </TableCell>

@@ -1,0 +1,24 @@
+{
+  "name": "DukaFlow — Kenya Retail ERP + POS",
+  "short_name": "DukaFlow",
+  "description": "Offline-first multi-store POS, loyalty, debt plans, KRA eTIMS, M-Pesa and Kenya payroll for hardware stores.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#172B4D",
+  "theme_color": "#0052CC",
+  "lang": "en-KE",
+  "categories": ["business", "finance", "shopping"],
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "New Sale (POS)", "short_name": "POS", "url": "/?page=pos", "description": "Open the offline-first till" },
+    { "name": "Owner Dashboard", "short_name": "Dashboard", "url": "/?page=dashboard", "description": "Today's sales across stores" },
+    { "name": "Receipts & KRA", "short_name": "Receipts", "url": "/?page=receipts", "description": "Receipt gallery + eTIMS status" }
+  ]
+}

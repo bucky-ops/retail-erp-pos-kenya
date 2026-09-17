@@ -11,10 +11,11 @@
  * connectivity returns.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Ban,
   Banknote,
+  Beer,
   Building2,
   Check,
   CreditCard,
@@ -41,6 +42,7 @@ import {
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useApp, useSync } from "@/lib/store";
+import { happyHourLabel, happyHourMatchesCategory, isHappyHourActive, type HappyHourConfig } from "@/lib/happy-hour";
 import {
   KES,
   type CartLine,
@@ -106,6 +108,7 @@ interface Totals {
   tierDiscount: number;
   promoEligible: boolean;
   promoDiscount: number;
+  happyHourDiscount: number;
   billDiscount: number;
   pointsToUse: number;
   pointsValue: number;
@@ -119,6 +122,7 @@ function computeTotals(args: {
   lines: CartLine[];
   tier: string | null;
   promo: string | null;
+  happyHourDiscount: number;
   billDiscount: number;
   usePoints: boolean;
   pointsAvailable: number;
@@ -127,20 +131,24 @@ function computeTotals(args: {
 }): Totals {
   const subtotal = args.lines.reduce((s, l) => s + l.unitPrice * l.qty, 0);
   const tierPct = args.tier === "Gold" ? 0.1 : args.tier === "Silver" ? 0.05 : 0;
-  const tierDiscount = Math.round(subtotal * tierPct);
+  // NOTE: components stay float to mirror /api/sales exactly — the server
+  // rounds only VAT and the grand total, so the PAY button always matches
+  // the receipt to the shilling.
+  const tierDiscount = subtotal * tierPct;
   const promoEligible = !!args.promo && subtotal >= 5000;
   const promoDiscount = promoEligible ? 500 : 0;
+  const happyHourDiscount = Math.max(0, args.happyHourDiscount);
   const billDiscount = Math.max(0, Math.round(args.billDiscount));
 
-  // points never exceed the amount due after tier/promo/bill discounts
-  const remaining = Math.max(0, subtotal - tierDiscount - promoDiscount - billDiscount);
+  // points never exceed the amount due after tier/promo/happy-hour/bill discounts
+  const remaining = Math.max(0, subtotal - tierDiscount - promoDiscount - happyHourDiscount - billDiscount);
   const pointsToUse =
     args.usePoints && args.pointsAvailable > 0
       ? Math.max(0, Math.min(args.pointsAvailable, Math.floor(remaining / args.pointValue)))
       : 0;
   const pointsValue = pointsToUse * args.pointValue;
 
-  const discountTotal = tierDiscount + promoDiscount + billDiscount + pointsValue;
+  const discountTotal = tierDiscount + promoDiscount + happyHourDiscount + billDiscount + pointsValue;
   const base = Math.max(0, subtotal - discountTotal);
   const vat = Math.round(base * args.vatRate);
   const total = base + vat;
@@ -150,6 +158,7 @@ function computeTotals(args: {
     tierDiscount,
     promoEligible,
     promoDiscount,
+    happyHourDiscount,
     billDiscount,
     pointsToUse,
     pointsValue,
@@ -294,7 +303,7 @@ export default function PosScreen() {
       setCart((prev) => {
         const idx = prev.findIndex((l) => l.productId === p.id);
         if (idx === -1) {
-          return [...prev, { productId: p.id, name: p.name, emoji: p.emoji, sku: p.sku, unitPrice: p.price, qty: 1 }];
+          return [...prev, { productId: p.id, name: p.name, emoji: p.emoji, sku: p.sku, unitPrice: p.price, qty: 1, category: p.category }];
         }
         return prev.map((l, i) => (i === idx ? { ...l, qty: Math.min(l.qty + 1, available) } : l));
       });
@@ -404,10 +413,40 @@ export default function PosScreen() {
   };
 
   /* ── totals ────────────────────────────────────────────────── */
+  /* ── happy hour auto-pricing (ticks every 30s so banners stay honest) ── */
+  const [nowTick, setNowTick] = useState<Date>(() => new Date());
+  useEffect(() => {
+    const t = setInterval(() => setNowTick(new Date()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+
+  const hhCfg = useMemo<HappyHourConfig | null>(
+    () =>
+      settings
+        ? {
+            happyHourEnabled: settings.happyHourEnabled,
+            happyHourStart: settings.happyHourStart,
+            happyHourEnd: settings.happyHourEnd,
+            happyHourPercent: settings.happyHourPercent,
+            happyHourCategory: settings.happyHourCategory,
+          }
+        : null,
+    [settings]
+  );
+  const hhActive = isHappyHourActive(hhCfg, nowTick);
+  const happyHourDiscount = useMemo(() => {
+    if (!hhActive || !hhCfg) return 0;
+    return cart.reduce((sum, l) => {
+      const cat = l.category ?? products.find((p) => p.id === l.productId)?.category ?? "";
+      return happyHourMatchesCategory(hhCfg, cat) ? sum + l.unitPrice * l.qty * (hhCfg.happyHourPercent / 100) : sum;
+    }, 0);
+  }, [hhActive, hhCfg, cart, products]);
+
   const totals = computeTotals({
     lines: cart,
     tier: customer?.tier ?? null,
     promo,
+    happyHourDiscount,
     billDiscount: Number(billDiscount) || 0,
     usePoints,
     pointsAvailable: customer?.loyaltyPoints ?? 0,
@@ -995,6 +1034,20 @@ export default function PosScreen() {
 
           {/* totals footer */}
           <div className="space-y-3 border-t border-[#DFE1E6] bg-white p-4">
+            {/* happy hour auto-pricing banner */}
+            {hhActive && hhCfg && (
+              <div className="df-happy-banner flex items-center gap-2.5 rounded-xl border border-[#FFD54F] bg-gradient-to-r from-[#FFF8E1] via-[#FFF3CD] to-[#FFF8E1] px-3 py-2">
+                <span className="df-happy-dot h-2 w-2 shrink-0 rounded-full bg-[#FFAB00]" />
+                <Beer size={15} className="shrink-0 text-[#B8860B]" />
+                <p className="min-w-0 flex-1 text-[12px] font-bold text-[#8D6708]">
+                  Happy Hour! {Math.round(hhCfg.happyHourPercent)}% off {hhCfg.happyHourCategory === "All" ? "everything" : hhCfg.happyHourCategory}
+                  <span className="ml-1 font-medium">until {hhCfg.happyHourEnd}</span>
+                </p>
+                {happyHourDiscount > 0 && (
+                  <span className="shrink-0 font-mono text-[12px] font-bold text-[#FF5630]">−{KES(totals.happyHourDiscount)}</span>
+                )}
+              </div>
+            )}
             {/* promo */}
             {promo ? (
               <div className="flex items-center justify-between rounded-xl border border-[#C8E6C9] bg-[#E8F5E9] px-3 py-2">
@@ -1081,6 +1134,14 @@ export default function PosScreen() {
                     Discount <span className="font-medium text-[#B8860B]">({customer.tier} {Math.round(totals.tierPct * 100)}% applied)</span>
                   </span>
                   <span className="font-semibold text-[#FF5630]">−{KES(totals.tierDiscount)}</span>
+                </div>
+              )}
+              {hhActive && totals.happyHourDiscount > 0 && hhCfg && (
+                <div className="flex justify-between">
+                  <span className="text-[#6B778C]">
+                    Happy Hour <span className="font-medium text-[#B8860B]">({happyHourLabel(hhCfg)} • {Math.round(hhCfg.happyHourPercent)}%)</span>
+                  </span>
+                  <span className="font-semibold text-[#FF5630]">−{KES(totals.happyHourDiscount)}</span>
                 </div>
               )}
               {promo && totals.promoEligible && (

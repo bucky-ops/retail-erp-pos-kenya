@@ -15,9 +15,11 @@ export async function PUT(req: NextRequest) {
   const allowed = [
     "kraPin", "kraBranchId", "kraDeviceSerial", "kraCallbackUrl", "kraConnected",
     "mpesaConsumerKey", "mpesaConsumerSecret", "mpesaTillNumbers", "mpesaCallbackUrl",
+    "mpesaEnvironment",
     "smsApiKey", "smsSenderName",
     "loyaltyEarnPerKes", "loyaltyPointValue", "loyaltyExpiryMonths",
-    "vatRate", "receiptPromoFooter", "receiptPrimaryColor", "receiptSecondaryColor",
+    "vatRate",
+    "happyHourEnabled", "happyHourStart", "happyHourEnd", "happyHourPercent", "happyHourCategory", "receiptPromoFooter", "receiptPrimaryColor", "receiptSecondaryColor",
     "companyName", "tierRules",
   ] as const;
 

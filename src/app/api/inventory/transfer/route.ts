@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
   });
   await db.stockLevel.upsert({
     where: { productId_storeId: { productId, storeId: toStoreId } },
-    update: { qty: { increment: qty } },
+    update: { qty: { increment: qty }, receivedAt: new Date() }, // arriving goods are a fresh batch at the destination
     create: { productId, storeId: toStoreId, qty },
   });
 

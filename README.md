@@ -10,7 +10,8 @@
 
 | Module | Highlights |
 | --- | --- |
-| **Multi-store POS (offline-first)** | Per-store stock, barcode scanning, customer picker (tier / points / debt / gift card / credit limit in one strip), 6 payment modes (Cash, **M-Pesa STK Push**, Till, Paybill, Gift Card, Credit Sale), promo codes, bill discounts, points redemption, VAT 16%. Sales are written to **IndexedDB first** and auto-sync when connectivity returns (`src/lib/offline.ts`). |
+| **Multi-store POS (offline-first)** | Per-store stock, barcode scanning, customer picker (tier / points / debt / gift card / credit limit in one strip), 6 payment modes (Cash, **M-Pesa STK Push**, Till, Paybill, Gift Card, Credit Sale), promo codes, bill discounts, points redemption, VAT 16%, **Happy Hour auto-pricing** (time-boxed % off a category, till banner + server-authoritative pricing). Sales are written to **IndexedDB first** and auto-sync when connectivity returns (`src/lib/offline.ts`). |
+| **Installable PWA offline shell** | Service worker (`public/sw.js`) caches the app shell so the till **boots with zero network** (network-first navigations, cache-first static assets, `/api` never cached), web app manifest + maskable icons, install prompt, and a **Settings › Device & Offline** panel (install button, SW status, offline queue replay). In dev the SW registers only with `?sw=1` to keep hot-reload sane. |
 | **Sales pipeline** | Kanban **Quotation → Proforma → Sales Order → Invoiced → Paid** with drag & drop, one-click stage maturing, full stage timeline, auto Sales Invoice creation at "Invoiced". |
 | **Loyalty & gift cards** | Configurable earn rules (1 pt / KES 100 by default), Gold 10% / Silver 5% auto tier discounts, 12-month expiry, gift cards with **real QR codes**, partial redemption, top-ups, six designer gradients. |
 | **Creditors / debtors / debt plans** | Aging buckets (0-30 / 31-60 / 60+), payment-plan builder (Weekly/Monthly installments, **auto reminder SMS**, **auto-block POS when overdue > 7 days**), record payments with SMS receipts. Credit sales auto-create debt plans. |
@@ -20,7 +21,8 @@
 | **Kenya payroll** | PAYE 2024 bands (10→35% + KES 2,400 relief + AHL relief), NSSF Tier I 360 + Tier II 720, **SHIF 2.75%** (min 300), **Housing Levy 1.5%** employee + employer, HELB. Payslips with QR, M-Pesa B2C + bank CSV, journal posting simulation. (`src/lib/kenya-payroll.ts`) |
 | **Raven chat** | In-house Slack-style chat: `#general #thika-road #kiambu-store #managers-only #stock-alerts #deliveries`, unread badges, **shareable ERP doc cards** (invoices, transfers, debt plans), threads, `/` commands. Stock transfers post to `#stock-alerts` automatically. |
 | **Client messaging** | Africa's Talking–style SMS + WhatsApp Cloud API simulation, audience filters (Gold / has debt / birthday today / bought last 7 days), merge tags (`{customer_name}`, `{points_balance}`…), 160-char segment costing, iPhone preview, full delivery log. Receipt + debt-reminder SMS fire automatically. |
-| **Reports** | 8 live reports (Sales by Store, P&L, Stock Aging, Debtor Aging, Loyalty Redemption, Staff Performance, KRA eTIMS Submissions, M-Pesa Reconciliation) with real charts, drill-downs and CSV export. |
+| **Daily automation** | `GET /api/cron/daily` — recalculates debt-plan overdue days, birthday SMS, debt reminders 1 day before due (deduped per day, respects the reminder opt-out). Wire to any scheduler; trigger manually from Settings › Backup & Restore. |
+| **Reports** | 8 live reports (Sales by Store, P&L, Stock Aging, Debtor Aging, Loyalty Redemption, Staff Performance, KRA eTIMS Submissions, M-Pesa Reconciliation) with real charts, drill-downs and CSV export. **Stock Aging is computed from real inventory batch ages** (`StockLevel.receivedAt` × qty × cost, reset on inbound stock/transfer) with per-bucket heaviest-items drill-down. |
 | **Roles** | Cashier (POS-first login via PIN), Store Keeper, Sales, Owner. Demo PINs below. |
 
 ---

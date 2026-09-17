@@ -3,13 +3,17 @@
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Building2, CalendarClock, Check, Database, Download, Eye, EyeOff, Landmark, Loader2,
-  MessageSquare, MonitorSmartphone, Percent, Play, Plug, ReceiptText, Smartphone,
-  Sparkles, Upload, Users, Warehouse, X,
+  MessageSquare, MonitorSmartphone, Percent, Play, Plug, ReceiptText, RefreshCw, Smartphone,
+  Sparkles, Upload, Users, Warehouse, WifiOff, X,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { SettingsDto, StaffDto, StoreDto } from "@/types";
 import { Panel, ScreenHeader, TableSkeleton } from "@/components/df/shared";
 import { DukaMark } from "@/components/df/logo";
+import { usePwaInstall } from "@/components/df/pwa";
+import { offlineQueue, syncPendingSales } from "@/lib/offline";
+import { isHappyHourActive } from "@/lib/happy-hour";
+import { useApp } from "@/lib/store";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -32,7 +36,7 @@ const err = (e: unknown) => (e instanceof Error ? e.message : "Something went wr
 
 type SectionId =
   | "company" | "stores" | "users" | "pos" | "print" | "taxes"
-  | "kra" | "mpesa" | "sms" | "loyalty" | "backup";
+  | "kra" | "mpesa" | "sms" | "loyalty" | "device" | "backup";
 
 const SECTIONS: { id: SectionId; label: string; icon: typeof Building2 }[] = [
   { id: "company", label: "Company", icon: Building2 },
@@ -45,6 +49,7 @@ const SECTIONS: { id: SectionId; label: string; icon: typeof Building2 }[] = [
   { id: "mpesa", label: "M-Pesa Daraja", icon: Smartphone },
   { id: "sms", label: "SMS Provider", icon: MessageSquare },
   { id: "loyalty", label: "Loyalty Rules", icon: Sparkles },
+  { id: "device", label: "Device & Offline", icon: WifiOff },
   { id: "backup", label: "Backup & Restore", icon: Database },
 ];
 
@@ -131,6 +136,116 @@ function SaveButton({ onSave, label = "Save changes" }: { onSave: () => Promise<
   );
 }
 
+/**
+ * Device & Offline panel — PWA install, service-worker status and the
+ * offline sale queue with a manual replay button.
+ */
+function DevicePanel() {
+  const { canInstall, installed, standalone, swActive, promptInstall } = usePwaInstall();
+  const [queue, setQueue] = useState<{ total: number; unsynced: number }>({ total: 0, unsynced: 0 });
+  const [online, setOnline] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+
+  useEffect(() => {
+    setOnline(navigator.onLine);
+    const up = () => setOnline(true);
+    const down = () => setOnline(false);
+    window.addEventListener("online", up);
+    window.addEventListener("offline", down);
+    offlineQueue
+      .count()
+      .then(setQueue)
+      .catch(() => {});
+    return () => {
+      window.removeEventListener("online", up);
+      window.removeEventListener("offline", down);
+    };
+  }, []);
+
+  const replay = async () => {
+    setSyncing(true);
+    try {
+      const r = await syncPendingSales();
+      const c = await offlineQueue.count();
+      setQueue(c);
+      toast({
+        title: r.failed === 0 ? "Offline sales synced ✅" : "Sync finished with errors",
+        description: `${r.synced} replayed to the server${r.failed ? ` • ${r.failed} failed (kept in queue)` : ""}.`,
+      });
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const statusDot = (ok: boolean, warn = false) => (
+    <span
+      className={cn(
+        "h-2 w-2 shrink-0 rounded-full",
+        ok ? "bg-[#00C853]" : warn ? "bg-[#FFAB00]" : "bg-[#6B778C]"
+      )}
+    />
+  );
+
+  const rows: { label: string; ok: boolean; note: string; warn?: boolean }[] = [
+    { label: "Connection", ok: online, note: online ? "Online — selling live" : "Offline — sales queue locally", warn: true },
+    { label: "Offline shell (service worker)", ok: swActive, note: swActive ? "Active — app caches for zero-network boots" : "Registering… (or served without HTTPS)", warn: true },
+    {
+      label: "App install",
+      ok: standalone || installed,
+      note: standalone ? "Running as an installed app" : installed ? "Installed on this device" : canInstall ? "Ready to install" : "Use browser menu → Install app",
+      warn: true,
+    },
+  ];
+
+  return (
+    <Panel>
+      <PanelHead title="Device & Offline" sub="Install the app on this device and manage the offline engine" icon={WifiOff} />
+
+      <div className="mt-6 max-w-[560px] space-y-2.5">
+        {rows.map((r) => (
+          <div key={r.label} className="flex items-center justify-between rounded-xl border border-[#DFE1E6] bg-[#FAFBFC] px-4 py-3">
+            <div className="flex items-center gap-2.5">
+              {statusDot(r.ok, r.warn)}
+              <p className="text-[13px] font-semibold text-[#172B4D]">{r.label}</p>
+            </div>
+            <p className={cn("text-[12px]", r.ok ? "text-[#6B778C]" : "text-[#FF5630]")}>{r.note}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-5 flex flex-wrap items-center gap-2">
+        <Button
+          disabled={!canInstall}
+          onClick={async () => {
+            const ok = await promptInstall();
+            if (!ok) toast({ title: "Install dismissed", description: "You can install anytime from this panel." });
+          }}
+          className="h-10 rounded-xl bg-[#172B4D] px-5 text-[13px] font-bold text-white hover:bg-[#0F1D33] disabled:opacity-50"
+        >
+          <Download size={14} /> {standalone || installed ? "DukaFlow is installed" : "Install DukaFlow app"}
+        </Button>
+        <Button
+          variant="outline"
+          disabled={syncing || queue.unsynced === 0}
+          onClick={() => void replay()}
+          className="h-10 rounded-xl border-[#DFE1E6] px-5 text-[13px] font-bold text-[#172B4D] disabled:opacity-50"
+        >
+          {syncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+          Replay queued sales{queue.unsynced > 0 ? ` (${queue.unsynced})` : ""}
+        </Button>
+      </div>
+
+      <div className="mt-6 max-w-[560px] rounded-xl border border-[#C8E6C9] bg-[#F0FFF4] p-4">
+        <p className="text-[12px] leading-relaxed text-[#1B7A2E]">
+          <strong>Offline-first by design.</strong> Sales are written to this device&apos;s IndexedDB first, then synced —
+          so load-shedding or dead zones never stop the till. Stock, loyalty and KRA receipt numbering resolve when the
+          connection returns.
+        </p>
+      </div>
+    </Panel>
+  );
+}
+
 function PanelHead({ title, sub, icon: Icon }: { title: string; sub: string; icon: typeof Building2 }) {
   return (
     <div className="flex items-start gap-3">
@@ -149,6 +264,7 @@ function PanelHead({ title, sub, icon: Icon }: { title: string; sub: string; ico
 
 export default function SettingsScreen() {
   const [section, setSection] = useState<SectionId>("kra");
+  const categories = useApp((s) => s.categories);
 
   const [draft, setDraft] = useState<SettingsDto | null>(null);
   const [stores, setStores] = useState<StoreDto[]>([]);
@@ -156,7 +272,6 @@ export default function SettingsScreen() {
   const [stockByStore, setStockByStore] = useState<Record<number, number>>({});
   const [loading, setLoading] = useState(true);
 
-  const [mpesaEnv, setMpesaEnv] = useState<"Sandbox" | "Production">("Sandbox");
   const [autoBackup, setAutoBackup] = useState(true);
   const [jobsBusy, setJobsBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -222,6 +337,14 @@ export default function SettingsScreen() {
     const pts = Math.floor(1000 / earn);
     return { pts, kes: pts * (draft?.loyaltyPointValue ?? 1) };
   }, [draft?.loyaltyEarnPerKes, draft?.loyaltyPointValue]);
+
+  /* happy hour liveness (re-checked every 30s, mirrors the POS banner) */
+  const [hhNow, setHhNow] = useState<Date>(() => new Date());
+  useEffect(() => {
+    const t = setInterval(() => setHhNow(new Date()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+  const hhLiveNow = isHappyHourActive(draft ?? undefined, hhNow);
 
   if (loading || !draft) {
     return (
@@ -698,7 +821,18 @@ export default function SettingsScreen() {
                 <PanelHead title="M-Pesa Daraja" sub="STK push + B2C payouts via Safaricom Daraja API" icon={Smartphone} />
                 <div className="mt-6 grid max-w-[560px] grid-cols-2 gap-4">
                   <Field label="Environment">
-                    <Select value={mpesaEnv} onValueChange={(v) => setMpesaEnv(v as "Sandbox" | "Production")}>
+                    <Select
+                      value={draft.mpesaEnvironment}
+                      onValueChange={(v) => {
+                        set("mpesaEnvironment", v as SettingsDto["mpesaEnvironment"]);
+                        if (v === "Production") {
+                          toast({
+                            title: "Production selected — double-check keys",
+                            description: "STK pushes will hit the live Daraja gateway. Save to persist.",
+                          });
+                        }
+                      }}
+                    >
                       <SelectTrigger className="h-10 rounded-xl text-[13px]">
                         <SelectValue />
                       </SelectTrigger>
@@ -734,13 +868,14 @@ export default function SettingsScreen() {
                     onSave={() =>
                       put(
                         {
+                          mpesaEnvironment: draft.mpesaEnvironment,
                           mpesaConsumerKey: draft.mpesaConsumerKey,
                           mpesaConsumerSecret: draft.mpesaConsumerSecret,
                           mpesaTillNumbers: draft.mpesaTillNumbers,
                           mpesaCallbackUrl: draft.mpesaCallbackUrl,
                         },
                         "M-Pesa Daraja settings saved",
-                        `Environment: ${mpesaEnv}`
+                        `Environment: ${draft.mpesaEnvironment}`
                       )
                     }
                   />
@@ -749,7 +884,7 @@ export default function SettingsScreen() {
                     onClick={() =>
                       toast({
                         title: "Daraja OAuth OK",
-                        description: `Token issued (expires 3599s) • ${mpesaEnv} app ${draft.mpesaTillNumbers.split(",")[0]?.trim() ?? ""}`,
+                        description: `Token issued (expires 3599s) • ${draft.mpesaEnvironment} app ${draft.mpesaTillNumbers.split(",")[0]?.trim() ?? ""}`,
                       })
                     }
                     className="h-10 rounded-xl border-[#DFE1E6] px-5 text-[13px] font-bold text-[#172B4D]"
@@ -871,6 +1006,107 @@ export default function SettingsScreen() {
                     }
                   />
                 </div>
+
+                {/* ── Happy Hour auto-pricing ── */}
+                <Separator className="my-6" />
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="flex items-center gap-2 text-[14px] font-bold text-[#172B4D]">
+                      <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-[#FFF3CD] text-[#B8860B]">
+                        <Percent size={13} />
+                      </span>
+                      Happy Hour auto-pricing
+                    </p>
+                    <p className="mt-1 max-w-md text-[11px] leading-relaxed text-[#6B778C]">
+                      Automatic time-boxed discount — e.g. 10% off Cement between 14:00 and 16:00 to move slow stock.
+                      Applied at every till (and to offline sales replayed later, using the time they were rung up).
+                    </p>
+                  </div>
+                  <Switch
+                    checked={draft.happyHourEnabled}
+                    onCheckedChange={(v) => set("happyHourEnabled", v)}
+                    className="data-[state=checked]:bg-[#FFAB00]"
+                  />
+                </div>
+                <div className="mt-4 grid max-w-[560px] grid-cols-2 gap-4 sm:grid-cols-4">
+                  <Field label="Starts">
+                    <Input
+                      type="time"
+                      value={draft.happyHourStart}
+                      onChange={(e) => set("happyHourStart", e.target.value)}
+                      className="h-10 rounded-xl border-[#DFE1E6] bg-[#FAFBFC] text-[13px]"
+                    />
+                  </Field>
+                  <Field label="Ends">
+                    <Input
+                      type="time"
+                      value={draft.happyHourEnd}
+                      onChange={(e) => set("happyHourEnd", e.target.value)}
+                      className="h-10 rounded-xl border-[#DFE1E6] bg-[#FAFBFC] text-[13px]"
+                    />
+                  </Field>
+                  <Field label="Discount %">
+                    <Input
+                      type="number"
+                      min={1}
+                      max={90}
+                      value={draft.happyHourPercent}
+                      onChange={(e) => set("happyHourPercent", Math.min(90, Math.max(0, Number(e.target.value))))}
+                      className="h-10 rounded-xl border-[#DFE1E6] bg-[#FAFBFC] text-[13px]"
+                    />
+                  </Field>
+                  <Field label="Applies to">
+                    <Select value={draft.happyHourCategory} onValueChange={(v) => set("happyHourCategory", v)}>
+                      <SelectTrigger className="h-10 rounded-xl text-[13px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="All">All products</SelectItem>
+                        {categories
+                          .filter((c) => c !== "All")
+                          .map((c) => (
+                            <SelectItem key={c} value={c}>
+                              {c}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                </div>
+                <div className="mt-4 flex max-w-[560px] items-center justify-between rounded-xl border border-[#FFD54F] bg-[#FFF8E1] px-4 py-3">
+                  <p className="text-[12px] text-[#8D6708]">
+                    {draft.happyHourEnabled
+                      ? `Window ${draft.happyHourStart}–${draft.happyHourEnd} • ${Math.round(draft.happyHourPercent)}% off ${draft.happyHourCategory === "All" ? "all products" : draft.happyHourCategory}`
+                      : "Happy Hour is switched off"}
+                  </p>
+                  <span
+                    className={cn(
+                      "rounded-full px-2.5 py-1 text-[11px] font-bold",
+                      hhLiveNow && draft.happyHourEnabled ? "bg-[#00C853] text-white" : "bg-[#DFE1E6] text-[#6B778C]"
+                    )}
+                  >
+                    {hhLiveNow && draft.happyHourEnabled ? "Active now" : "Not active now"}
+                  </span>
+                </div>
+                <div className="mt-4">
+                  <SaveButton
+                    onSave={() =>
+                      put(
+                        {
+                          happyHourEnabled: draft.happyHourEnabled,
+                          happyHourStart: draft.happyHourStart,
+                          happyHourEnd: draft.happyHourEnd,
+                          happyHourPercent: draft.happyHourPercent,
+                          happyHourCategory: draft.happyHourCategory,
+                        },
+                        "Happy Hour saved",
+                        draft.happyHourEnabled
+                          ? `${draft.happyHourStart}–${draft.happyHourEnd} • ${Math.round(draft.happyHourPercent)}% off ${draft.happyHourCategory === "All" ? "all products" : draft.happyHourCategory}`
+                          : "Tills will not auto-discount"
+                      )
+                    }
+                  />
+                </div>
               </Panel>
             )}
 
@@ -960,6 +1196,11 @@ export default function SettingsScreen() {
                   </div>
                 </div>
               </Panel>
+            )}
+
+            {/* ── DEVICE & OFFLINE ── */}
+            {section === "device" && (
+              <DevicePanel />
             )}
         </div>
       </div>

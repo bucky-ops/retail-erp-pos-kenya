@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { submitToEtims, generateInvoiceQr } from "@/lib/etims";
+import { happyHourMatchesCategory, isHappyHourActive } from "@/lib/happy-hour";
 import { SalePayload } from "@/types";
 
 export const dynamic = "force-dynamic";
@@ -100,7 +101,7 @@ export async function POST(req: NextRequest) {
       return s + (p ? p.price * i.qty : 0);
     }, 0);
 
-    // ── 3. Discounts: tier → promo → bill ────────────────
+    // ── 3. Discounts: tier → promo → happy hour → bill ────
     let discount = 0;
     const appliedPromo = payload.promoCode?.trim().toUpperCase() || null;
 
@@ -113,6 +114,19 @@ export async function POST(req: NextRequest) {
         discount += promo.type === "percent" ? subtotal * (promo.value / 100) : promo.value;
       } else if (promo && subtotal < promo.minSpend) {
         return NextResponse.json({ ok: false, error: `Promo ${promo.code} needs a minimum spend of KES ${promo.minSpend.toLocaleString()}` }, { status: 400 });
+      }
+    }
+
+    // Happy Hour auto-pricing — % off qualifying categories while the window
+    // runs. Evaluated at the sale's own timestamp so offline-replayed sales
+    // get the price that was on the till when they were rung up.
+    const saleTime = payload.createdAt ? new Date(payload.createdAt) : new Date();
+    if (isHappyHourActive(settings, saleTime)) {
+      for (const item of items) {
+        const p = priceMap.get(item.productId);
+        if (p && happyHourMatchesCategory(settings, p.category)) {
+          discount += p.price * item.qty * (settings.happyHourPercent / 100);
+        }
       }
     }
 

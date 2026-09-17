@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Sora, Inter } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
+import { PWARegister } from "@/components/df/pwa";
 
 const sora = Sora({
   variable: "--font-sora",
@@ -19,7 +20,14 @@ export const metadata: Metadata = {
   description:
     "Offline-first multi-store POS, loyalty, gift cards, debt plans, KRA eTIMS, M-Pesa, Kenya-compliant payroll and Raven chat — built for Kenyan hardware stores and supermarkets.",
   keywords: ["POS Kenya", "eTIMS", "M-Pesa", "ERP", "hardware store", "loyalty", "payroll"],
-  icons: { icon: "/favicon.svg" },
+  icons: { icon: "/favicon.svg", apple: "/icons/apple-touch-icon.png" },
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "DukaFlow",
+  },
+  applicationName: "DukaFlow",
 };
 
 export const viewport: Viewport = {
@@ -39,6 +47,7 @@ export default function RootLayout({
         className={`${sora.variable} ${inter.variable} antialiased bg-background text-foreground font-inter`}
       >
         {children}
+        <PWARegister />
         <Toaster />
       </body>
     </html>
