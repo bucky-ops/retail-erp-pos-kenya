@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ArrowRight, Boxes, Loader2, Package, PackageX, Search, ShoppingBag, SlidersHorizontal, TriangleAlert, Wallet, ArrowLeftRight,
+  ArrowRight, Boxes, ClipboardList, Loader2, Package, PackageX, Search, ShoppingBag, SlidersHorizontal, TriangleAlert, Wallet, ArrowLeftRight,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useApp } from "@/lib/store";
 import { ProcurementDialog } from "@/components/df/procurement";
+import { StockTakeDialog } from "@/components/df/stock-take";
 import { KES } from "@/types";
 import { ScreenHeader, KpiCard, EmptyState, TableSkeleton } from "@/components/df/shared";
 import { toast } from "@/hooks/use-toast";
@@ -124,6 +125,8 @@ export default function InventoryScreen() {
   const [transferOpen, setTransferOpen] = useState(false);
   /* procurement workspace (suppliers / reorder suggestions / POs) */
   const [procOpen, setProcOpen] = useState(false);
+  /* stock take / cycle count workspace */
+  const [stOpen, setStOpen] = useState(false);
   const [tfProducts, setTfProducts] = useState<InvRow[] | null>(null);
   const [tfProduct, setTfProduct] = useState<number | null>(null);
   const [tfFrom, setTfFrom] = useState<number | null>(null);
@@ -271,6 +274,13 @@ export default function InventoryScreen() {
         stores={stores.map((s) => ({ id: s.id, name: s.name }))}
         onDone={load}
       />
+      {/* stock take / cycle count workspace (snapshot → count → approve) */}
+      <StockTakeDialog
+        open={stOpen}
+        onOpenChange={setStOpen}
+        stores={stores.map((s) => ({ id: s.id, name: s.name }))}
+        onDone={load}
+      />
       <ScreenHeader
         title="Inventory"
         subtitle="Multi-store stock, margins & transfers"
@@ -282,6 +292,12 @@ export default function InventoryScreen() {
             <span className="hidden rounded-full border border-[#DFE1E6] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#6B778C] @md:inline-flex">
               <b className="mr-1 text-[#172B4D]">{summary.skuCount}</b> SKUs
             </span>
+            <Button
+              onClick={() => setStOpen(true)}
+              className="h-9 rounded-xl border border-[#DFE1E6] bg-white px-4 text-[13px] font-semibold text-[#172B4D] shadow-sm hover:border-[#0052CC] hover:text-[#0052CC]"
+            >
+              <ClipboardList size={15} /> Stock Take
+            </Button>
             <Button
               onClick={() => setProcOpen(true)}
               className="h-9 rounded-xl bg-[#00C853] px-4 text-[13px] font-semibold text-[#052E14] shadow-sm hover:bg-[#00B34A]"

@@ -13,18 +13,20 @@ datasource db {
 // ─── Org structure ────────────────────────────────────────────────────────────
 
 model Store {
-  id        Int          @id @default(autoincrement())
-  name      String       @unique
-  location  String
-  isMain    Boolean      @default(false)
-  createdAt DateTime     @default(now())
-  stocks    StockLevel[]
-  sales     Sale[]
-  staff     Staff[]
-  tillSessions TillSession[]
-  purchaseOrders PurchaseOrder[]
-  expenses  Expense[]
-  salesReturns SalesReturn[]
+  id              Int              @id @default(autoincrement())
+  name            String           @unique
+  location        String
+  isMain          Boolean          @default(false)
+  createdAt       DateTime         @default(now())
+  stocks          StockLevel[]
+  sales           Sale[]
+  staff           Staff[]
+  tillSessions    TillSession[]
+  purchaseOrders  PurchaseOrder[]
+  expenses        Expense[]
+  salesReturns    SalesReturn[]
+  stockTakes      StockTake[]
+  supplierReturns SupplierReturn[]
 }
 
 model Staff {
@@ -41,21 +43,21 @@ model Staff {
 // ─── Customers / loyalty / credit ────────────────────────────────────────────
 
 model Customer {
-  id              Int        @id @default(autoincrement())
+  id              Int           @id @default(autoincrement())
   name            String
-  phone           String     @unique
+  phone           String        @unique
   email           String?
-  tier            String     @default("Bronze") // Gold | Silver | Bronze
-  loyaltyPoints   Int        @default(0)
-  totalSpent      Float      @default(0)
-  debtBalance     Float      @default(0)
-  creditLimit     Float      @default(0)
-  giftCardBalance Float      @default(0)
+  tier            String        @default("Bronze") // Gold | Silver | Bronze
+  loyaltyPoints   Int           @default(0)
+  totalSpent      Float         @default(0)
+  debtBalance     Float         @default(0)
+  creditLimit     Float         @default(0)
+  giftCardBalance Float         @default(0)
   birthday        DateTime?
   lastVisit       String?
   storeId         Int?
   notes           String?
-  createdAt       DateTime   @default(now())
+  createdAt       DateTime      @default(now())
   sales           Sale[]
   debtPlans       DebtPlan[]
   debtPayments    DebtPayment[]
@@ -67,20 +69,22 @@ model Customer {
 // ─── Catalog & multi-store stock ─────────────────────────────────────────────
 
 model Product {
-  id        Int          @id @default(autoincrement())
-  name      String
-  sku       String       @unique
-  barcode   String       @unique
-  category  String
-  price     Float
-  cost      Float        @default(0)
-  unit      String       @default("pc")
-  emoji     String       @default("📦")
-  active    Boolean      @default(true)
-  stocks    StockLevel[]
-  saleItems SaleItem[]
-  saleReturnItems SaleReturnItem[]
-  purchaseOrderItems PurchaseOrderItem[]
+  id                  Int                  @id @default(autoincrement())
+  name                String
+  sku                 String               @unique
+  barcode             String               @unique
+  category            String
+  price               Float
+  cost                Float                @default(0)
+  unit                String               @default("pc")
+  emoji               String               @default("📦")
+  active              Boolean              @default(true)
+  stocks              StockLevel[]
+  saleItems           SaleItem[]
+  saleReturnItems     SaleReturnItem[]
+  purchaseOrderItems  PurchaseOrderItem[]
+  stockTakeItems      StockTakeItem[]
+  supplierReturnItems SupplierReturnItem[]
 }
 
 model StockLevel {
@@ -114,7 +118,7 @@ model TillSession {
   id           Int       @id @default(autoincrement())
   storeId      Int
   store        Store     @relation(fields: [storeId], references: [id])
-  openedBy     String    // staff name
+  openedBy     String // staff name
   openingFloat Float     @default(0) // cash in drawer at open
   expectedCash Float? // computed at close: float + cash sales
   countedCash  Float? // physically counted at close
@@ -128,32 +132,32 @@ model TillSession {
 // ─── Sales (POS receipts + invoices) ─────────────────────────────────────────
 
 model Sale {
-  id              Int        @id @default(autoincrement())
-  receiptNo       String     @unique
+  id              Int           @id @default(autoincrement())
+  receiptNo       String        @unique
   storeId         Int
   customerId      Int?
-  staffName       String     @default("Counter 1")
+  staffName       String        @default("Counter 1")
   subtotal        Float
-  discount        Float      @default(0)
-  vat             Float      @default(0)
+  discount        Float         @default(0)
+  vat             Float         @default(0)
   total           Float
   paymentMethod   String // Cash | M-Pesa | Till | Paybill | Gift Card | Credit Sale | Card
-  pointsRedeemed  Int        @default(0)
-  pointsEarned    Int        @default(0)
+  pointsRedeemed  Int           @default(0)
+  pointsEarned    Int           @default(0)
   tierAtSale      String?
   promoCode       String?
-  status          String     @default("Completed")
-  kraStatus       String     @default("Pending") // Verified | Pending | Failed
+  status          String        @default("Completed")
+  kraStatus       String        @default("Pending") // Verified | Pending | Failed
   cuInvoiceNumber String?
   qrCodeBase64    String?
-  offlineCreated  Boolean    @default(false)
+  offlineCreated  Boolean       @default(false)
   clientId        String? // offline queue dedupe key
   syncedAt        DateTime?
-  createdAt       DateTime   @default(now())
+  createdAt       DateTime      @default(now())
   items           SaleItem[]
   returns         SalesReturn[]
-  store           Store      @relation(fields: [storeId], references: [id])
-  customer        Customer?  @relation(fields: [customerId], references: [id])
+  store           Store         @relation(fields: [storeId], references: [id])
+  customer        Customer?     @relation(fields: [customerId], references: [id])
 
   @@unique([clientId])
 }
@@ -177,78 +181,79 @@ model SaleItem {
 // A return references the original receipt; qty per line is validated against
 // what has ALREADY been returned so the same item can never be refunded twice.
 model SalesReturn {
-  id           Int       @id @default(autoincrement())
-  returnNo     String    @unique // RET-0001
+  id           Int              @id @default(autoincrement())
+  returnNo     String           @unique // RET-0001
   saleId       Int
-  sale         Sale      @relation(fields: [saleId], references: [id])
+  sale         Sale             @relation(fields: [saleId], references: [id])
   storeId      Int
-  store        Store     @relation(fields: [storeId], references: [id])
+  store        Store            @relation(fields: [storeId], references: [id])
   customerId   Int?
-  customer     Customer? @relation(fields: [customerId], references: [id])
-  staffName    String    @default("Counter 1")
-  reason       String    @default("") // Damaged | Wrong item | Customer changed mind | Expired | Other
-  refundMethod String    @default("Cash refund") // Cash refund | M-Pesa B2C | Credit note | Gift card
-  restocked    Boolean   @default(true)
-  total        Float     // refund value incl. VAT
+  customer     Customer?        @relation(fields: [customerId], references: [id])
+  staffName    String           @default("Counter 1")
+  reason       String           @default("") // Damaged | Wrong item | Customer changed mind | Expired | Other
+  refundMethod String           @default("Cash refund") // Cash refund | M-Pesa B2C | Credit note | Gift card
+  restocked    Boolean          @default(true)
+  total        Float // refund value incl. VAT
   creditNoteNo String? // CN-0001 when refundMethod = Credit note
   giftCardCode String? // GC-xxxx when refundMethod = Gift card (store credit)
-  status       String    @default("Completed")
-  createdAt    DateTime  @default(now())
+  status       String           @default("Completed")
+  createdAt    DateTime         @default(now())
   items        SaleReturnItem[]
 }
 
 model SaleReturnItem {
-  id        Int          @id @default(autoincrement())
-  returnId  Int
-  returnRef SalesReturn  @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  id         Int         @id @default(autoincrement())
+  returnId   Int
+  returnRef  SalesReturn @relation(fields: [returnId], references: [id], onDelete: Cascade)
   saleItemId Int? // line on the original receipt
-  productId Int?
-  name      String
-  emoji     String       @default("📦")
-  qty       Float
-  unitPrice Float
-  total     Float
-  product   Product?     @relation(fields: [productId], references: [id])
+  productId  Int?
+  name       String
+  emoji      String      @default("📦")
+  qty        Float
+  unitPrice  Float
+  total      Float
+  product    Product?    @relation(fields: [productId], references: [id])
 }
 
 // ─── Procurement: suppliers & purchase orders (reorder → receive) ────────────
 
 model Supplier {
-  id       Int    @id @default(autoincrement())
-  name     String
-  phone    String @default("")
-  email    String @default("")
-  kraPin   String @default("")
-  category String @default("General") // Cement | Paint | Plumbing | Tools | General
-  leadDays Int    @default(3)
-  active   Boolean @default(true)
-  purchaseOrders PurchaseOrder[]
+  id              Int              @id @default(autoincrement())
+  name            String
+  phone           String           @default("")
+  email           String           @default("")
+  kraPin          String           @default("")
+  category        String           @default("General") // Cement | Paint | Plumbing | Tools | General
+  leadDays        Int              @default(3)
+  active          Boolean          @default(true)
+  purchaseOrders  PurchaseOrder[]
+  supplierReturns SupplierReturn[]
 }
 
 model PurchaseOrder {
-  id         Int       @id @default(autoincrement())
-  poNo       String    @unique // PO-0001
+  id         Int                 @id @default(autoincrement())
+  poNo       String              @unique // PO-0001
   supplierId Int
-  supplier   Supplier  @relation(fields: [supplierId], references: [id])
+  supplier   Supplier            @relation(fields: [supplierId], references: [id])
   storeId    Int
-  store      Store     @relation(fields: [storeId], references: [id])
-  status     String    @default("Draft") // Draft | Sent | Received | Cancelled
-  total      Float     @default(0)
-  note       String    @default("")
-  orderedAt  DateTime  @default(now())
+  store      Store               @relation(fields: [storeId], references: [id])
+  status     String              @default("Draft") // Draft | Sent | Received | Cancelled
+  total      Float               @default(0)
+  note       String              @default("")
+  orderedAt  DateTime            @default(now())
   receivedAt DateTime?
   items      PurchaseOrderItem[]
 }
 
 model PurchaseOrderItem {
-  id        Int      @id @default(autoincrement())
+  id        Int           @id @default(autoincrement())
   poId      Int
   po        PurchaseOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
   productId Int
-  product   Product  @relation(fields: [productId], references: [id])
+  product   Product       @relation(fields: [productId], references: [id])
   qty       Float
   unitCost  Float
-  received  Float    @default(0)
+  received  Float         @default(0)
 }
 
 // ─── Operating expenses (petty cash / bills) ──────────────────────────────────
@@ -261,7 +266,7 @@ model Expense {
   note      String   @default("")
   amount    Float
   paidVia   String   @default("Cash") // Cash | M-Pesa | Bank
-  refNo     String?  // receipt / voucher ref
+  refNo     String? // receipt / voucher ref
   staffName String   @default("Owner")
   spentAt   DateTime @default(now())
 }
@@ -297,20 +302,20 @@ model GiftCard {
 }
 
 model DebtPlan {
-  id                  Int      @id @default(autoincrement())
+  id                  Int           @id @default(autoincrement())
   customerId          Int
   invoiceNo           String?
   totalDebt           Float
-  installmentType     String   @default("Weekly") // Weekly | Monthly
+  installmentType     String        @default("Weekly") // Weekly | Monthly
   installmentAmount   Float
   nextDueDate         DateTime
-  status              String   @default("Active") // Active | Completed | Defaulted
-  autoReminderSms     Boolean  @default(true)
-  autoBlockPosOverdue Boolean  @default(true)
-  overdueDays         Int      @default(0)
-  customer            Customer @relation(fields: [customerId], references: [id])
+  status              String        @default("Active") // Active | Completed | Defaulted
+  autoReminderSms     Boolean       @default(true)
+  autoBlockPosOverdue Boolean       @default(true)
+  overdueDays         Int           @default(0)
+  customer            Customer      @relation(fields: [customerId], references: [id])
   payments            DebtPayment[]
-  createdAt           DateTime @default(now())
+  createdAt           DateTime      @default(now())
 }
 
 // Payment ledger for debt plans — every installment recorded against a plan
@@ -417,40 +422,104 @@ model PromoCode {
 // ─── Singleton settings ──────────────────────────────────────────────────────
 
 model Settings {
-  id                    Int       @id @default(1)
-  kraPin                String    @default("P051234567A")
-  kraBranchId           String    @default("00")
-  kraDeviceSerial       String    @default("KRA-DEVICE-001")
-  kraCallbackUrl        String    @default("https://api.dukaflow.co.ke/etims/callback")
-  kraConnected          Boolean   @default(true)
-  kraLastSync           DateTime?
-  mpesaEnvironment      String    @default("Sandbox") // Sandbox | Production (Daraja app type)
-  mpesaConsumerKey      String    @default("demo-consumer-key")
-  mpesaConsumerSecret   String    @default("demo-consumer-secret")
-  mpesaTillNumbers      String    @default("123456, 654321")
-  mpesaCallbackUrl      String    @default("https://api.dukaflow.co.ke/mpesa/callback")
-  smsApiKey             String    @default("atsk_demo_1234567890")
-  smsSenderName         String    @default("DUKAFLOW")
-  loyaltyEarnPerKes     Int       @default(100)
-  loyaltyPointValue     Float     @default(1)
-  loyaltyExpiryMonths   Int       @default(12)
-  vatRate               Float     @default(0.16)
+  id                       Int       @id @default(1)
+  kraPin                   String    @default("P051234567A")
+  kraBranchId              String    @default("00")
+  kraDeviceSerial          String    @default("KRA-DEVICE-001")
+  kraCallbackUrl           String    @default("https://api.dukaflow.co.ke/etims/callback")
+  kraConnected             Boolean   @default(true)
+  kraLastSync              DateTime?
+  mpesaEnvironment         String    @default("Sandbox") // Sandbox | Production (Daraja app type)
+  mpesaConsumerKey         String    @default("demo-consumer-key")
+  mpesaConsumerSecret      String    @default("demo-consumer-secret")
+  mpesaTillNumbers         String    @default("123456, 654321")
+  mpesaCallbackUrl         String    @default("https://api.dukaflow.co.ke/mpesa/callback")
+  smsApiKey                String    @default("atsk_demo_1234567890")
+  smsSenderName            String    @default("DUKAFLOW")
+  loyaltyEarnPerKes        Int       @default(100)
+  loyaltyPointValue        Float     @default(1)
+  loyaltyExpiryMonths      Int       @default(12)
+  vatRate                  Float     @default(0.16)
   // Happy Hour auto-pricing: % off the configured category while the window runs.
-  happyHourEnabled      Boolean   @default(true)
-  happyHourStart        String    @default("14:00") // HH:mm (24h, Africa/Nairobi till time)
-  happyHourEnd          String    @default("16:00")
-  happyHourPercent      Float     @default(10)
-  happyHourCategory     String    @default("All") // "All" or a product category name
-  receiptPromoFooter    String    @default("Thank You! You saved KES 300 with points! Come again!")
-  receiptPrimaryColor   String    @default("#0052CC")
-  receiptSecondaryColor String    @default("#00C853")
-  companyName           String    @default("DukaFlow Ltd")
-  tierRules             String    @default("{\"bronze\":{\"minPoints\":0,\"discount\":0},\"silver\":{\"minPoints\":500,\"discount\":5},\"gold\":{\"minPoints\":2000,\"discount\":10},\"expiryMonths\":12,\"expiryEnabled\":true}")
-  lastDailyJobsAt       DateTime?
+  happyHourEnabled         Boolean   @default(true)
+  happyHourStart           String    @default("14:00") // HH:mm (24h, Africa/Nairobi till time)
+  happyHourEnd             String    @default("16:00")
+  happyHourPercent         Float     @default(10)
+  happyHourCategory        String    @default("All") // "All" or a product category name
+  receiptPromoFooter       String    @default("Thank You! You saved KES 300 with points! Come again!")
+  receiptPrimaryColor      String    @default("#0052CC")
+  receiptSecondaryColor    String    @default("#00C853")
+  companyName              String    @default("DukaFlow Ltd")
+  tierRules                String    @default("{\"bronze\":{\"minPoints\":0,\"discount\":0},\"silver\":{\"minPoints\":500,\"discount\":5},\"gold\":{\"minPoints\":2000,\"discount\":10},\"expiryMonths\":12,\"expiryEnabled\":true}")
+  lastDailyJobsAt          DateTime?
   // Scheduled report email ("Schedule email" on Reports) — a mock mailer that logs to SmsLog with channel=Email
-  reportScheduleEnabled   Boolean   @default(false)
-  reportScheduleFrequency String    @default("Weekly") // Daily | Weekly | Monthly (sent 08:00 EAT by /api/cron/report)
-  reportScheduleEmail     String    @default("owner@dukaflow.co.ke")
+  reportScheduleEnabled    Boolean   @default(false)
+  reportScheduleFrequency  String    @default("Weekly") // Daily | Weekly | Monthly (sent 08:00 EAT by /api/cron/report)
+  reportScheduleEmail      String    @default("owner@dukaflow.co.ke")
   reportScheduleLastSentAt DateTime?
-  updatedAt             DateTime  @updatedAt
+  updatedAt                DateTime  @updatedAt
+}
+
+// ─── Stock take / cycle count ─────────────────────────────────────────────────
+// A count session snapshots every stock line in a store, the team enters what
+// is physically on the shelf, and approving applies the variances as real
+// adjustments (with a full audit trail + chat notification).
+
+model StockTake {
+  id         Int             @id @default(autoincrement())
+  stNo       String          @unique // ST-0001
+  storeId    Int
+  store      Store           @relation(fields: [storeId], references: [id])
+  status     String          @default("Counting") // Counting | Review | Approved | Cancelled
+  category   String          @default("All") // scope filter at creation ("All" or a category)
+  startedBy  String          @default("Owner")
+  note       String          @default("")
+  startedAt  DateTime        @default(now())
+  approvedAt DateTime?
+  items      StockTakeItem[]
+}
+
+model StockTakeItem {
+  id          Int       @id @default(autoincrement())
+  stockTakeId Int
+  stockTake   StockTake @relation(fields: [stockTakeId], references: [id], onDelete: Cascade)
+  productId   Int
+  product     Product   @relation(fields: [productId], references: [id])
+  systemQty   Float // snapshot of StockLevel.qty when the session opened
+  countedQty  Float? // what the team actually found on the shelf
+  unitCost    Float     @default(0) // cost at snapshot time — values the variance
+  counted     Boolean   @default(false)
+  countedAt   DateTime?
+  countedBy   String    @default("")
+}
+
+// ─── Return to vendor (RTV) / debit notes ─────────────────────────────────────
+// Send damaged / wrong / excess goods back to a supplier with a numbered debit
+// note; stock leaves the store and every line is audited in #stock-alerts.
+
+model SupplierReturn {
+  id          Int                  @id @default(autoincrement())
+  rtnNo       String               @unique // RTV-0001
+  debitNoteNo String               @default("") // DN-0001
+  supplierId  Int
+  supplier    Supplier             @relation(fields: [supplierId], references: [id])
+  storeId     Int
+  store       Store                @relation(fields: [storeId], references: [id])
+  reason      String               @default("Damaged") // Damaged | Wrong item | Warranty | Overstock
+  total       Float                @default(0) // valued at cost — what the supplier owes us
+  status      String               @default("Sent") // Sent | Credited
+  note        String               @default("")
+  createdAt   DateTime             @default(now())
+  items       SupplierReturnItem[]
+}
+
+model SupplierReturnItem {
+  id               Int            @id @default(autoincrement())
+  supplierReturnId Int
+  supplierReturn   SupplierReturn @relation(fields: [supplierReturnId], references: [id], onDelete: Cascade)
+  productId        Int
+  product          Product        @relation(fields: [productId], references: [id])
+  qty              Float
+  unitCost         Float
+  total            Float
 }

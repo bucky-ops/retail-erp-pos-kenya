@@ -82,6 +82,41 @@ async function runDailyJobs() {
     debtRemindersSent++;
   }
 
+  // ── 4. Daily expenses digest — today's petty cash + bills ──
+  // Owner's morning digest: what the business spent today, by category,
+  // logged as an Email-type entry in SmsLog (mock mailer).
+  const todayExpenses = await db.expense.findMany({
+    where: { spentAt: { gte: todayStart, lt: todayEnd } },
+    include: { store: { select: { name: true } } },
+  });
+  const expenseTotal = todayExpenses.reduce((s, e) => s + e.amount, 0);
+  const byCategory = new Map<string, number>();
+  for (const e of todayExpenses) byCategory.set(e.category, (byCategory.get(e.category) ?? 0) + e.amount);
+  const categorySummary = [...byCategory.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([cat, amt]) => `${cat}: KES ${Math.round(amt).toLocaleString()}`)
+    .join(" • ");
+  let expenseDigestLogged = false;
+  if (todayExpenses.length > 0) {
+    // Dedupe per day: only log if no expense digest exists for today yet.
+    const existingDigest = await db.smsLog.findFirst({
+      where: { createdAt: { gte: todayStart, lt: todayEnd }, type: "ExpenseDigest" },
+    });
+    if (!existingDigest) {
+      await db.smsLog.create({
+        data: {
+          phone: "owner@dukaflow.co.ke",
+          message: `Daily expense digest: ${todayExpenses.length} entries totaling KES ${Math.round(expenseTotal).toLocaleString()}. ${categorySummary}.`,
+          type: "ExpenseDigest",
+          channel: "Email",
+          status: "Delivered",
+          cost: 0,
+        },
+      });
+      expenseDigestLogged = true;
+    }
+  }
+
   await db.settings.update({ where: { id: 1 }, data: { lastDailyJobsAt: new Date() } });
 
   return NextResponse.json({
@@ -92,6 +127,7 @@ async function runDailyJobs() {
     debtRemindersSent,
     birthdayCandidates: birthdayCustomers.length,
     reminderCandidates: dueTomorrow.length,
+    expenses: { count: todayExpenses.length, total: expenseTotal, digestLogged: expenseDigestLogged },
   });
 }
 

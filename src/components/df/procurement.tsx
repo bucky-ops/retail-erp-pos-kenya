@@ -1,19 +1,22 @@
 "use client";
 
 /**
- * DukaFlow — Procurement workspace (Suppliers + reorder suggestions + POs).
+ * DukaFlow — Procurement workspace (Suppliers + reorder suggestions + POs + RTV).
  *
- * Opened from the Inventory screen "Procurement" button. Three tabs:
+ * Opened from the Inventory screen "Procurement" button. Four tabs:
  *   1. Reorder suggestions — low-stock lines (qty ≤ reorderPoint) with a
  *      suggested cover qty and best-match supplier; create POs grouped per
  *      supplier in one click.
  *   2. Purchase orders — lifecycle Draft → Sent → Received/Partially Received
  *      with a GRN-style receive flow (partial receipts supported).
  *   3. Suppliers — directory + quick add.
+ *   4. Return to vendor — send damaged/wrong/warranty/overstock goods back
+ *      with a numbered debit note (RTV-xxxx / DN-xxxx); stock decrements and
+ *      the supplier can be marked credited when the money lands.
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Building2, Check, ChevronDown, Loader2, Plus, Send, ShoppingCart, Truck, Undo2, X } from "lucide-react";
+import { Building2, Check, ChevronDown, Loader2, PackageMinus, Plus, Send, ShoppingCart, Truck, Undo2, X } from "lucide-react";
 import { api } from "@/lib/api";
 import { KES } from "@/types";
 import { toast } from "@/hooks/use-toast";
@@ -58,6 +61,16 @@ interface Sup {
 
 interface StoreLite { id: number; name: string }
 
+interface RTV {
+  id: number; rtnNo: string; debitNoteNo: string; reason: string; total: number; status: string; note: string; createdAt: string;
+  supplier: { id: number; name: string };
+  store: { id: number; name: string };
+  items: { id: number; qty: number; unitCost: number; total: number; product: { name: string; emoji: string; sku: string } }[];
+}
+
+/* stock line used to pick + validate RTV quantities */
+interface StockRow { productId: number; name: string; emoji: string; sku: string; storeId: number; qty: number; cost: number }
+
 const err = (e: unknown) => (e instanceof Error ? e.message : "Something went wrong");
 
 const STATUS_CLS: Record<string, string> = {
@@ -66,6 +79,9 @@ const STATUS_CLS: Record<string, string> = {
   "Partially Received": "bg-[#FFF8E1] text-[#B8860B]",
   Received: "bg-[#E8F5E9] text-[#1B7A2E]",
   Cancelled: "bg-[#FFEBE8] text-[#FF5630]",
+  Counting: "bg-[#FFF8E1] text-[#B8860B]",
+  Approved: "bg-[#E8F5E9] text-[#1B7A2E]",
+  Credited: "bg-[#E8F5E9] text-[#1B7A2E]",
 };
 
 const fmtDate = (iso: string) =>
@@ -102,16 +118,25 @@ export function ProcurementDialog({
   /* supplier add form */
   const [supForm, setSupForm] = useState({ name: "", phone: "", category: "General", leadDays: "3" });
 
+  /* return-to-vendor form */
+  const [rtvs, setRtvs] = useState<RTV[] | null>(null);
+  const [stockRows, setStockRows] = useState<StockRow[] | null>(null);
+  const [rtvForm, setRtvForm] = useState({ supplierId: "", storeId: "", reason: "Damaged", note: "" });
+  const [rtvPick, setRtvPick] = useState(""); // product picker value
+  const [rtvLines, setRtvLines] = useState<{ productId: number; name: string; emoji: string; qty: number; max: number; cost: number }[]>([]);
+
   const loadAll = useCallback(async () => {
     try {
-      const [s, p, sup] = await Promise.all([
+      const [s, p, sup, rv] = await Promise.all([
         api.get<{ suggestions: Sugg[] }>("/api/purchase-orders?suggestions=1"),
         api.get<PO[]>("/api/purchase-orders"),
         api.get<Sup[]>("/api/suppliers"),
+        api.get<RTV[]>("/api/supplier-returns"),
       ]);
       setSugg(s.suggestions);
       setPos(p);
       setSups(sup);
+      setRtvs(rv);
       // defaults: suggested qty + best-match supplier
       const q: Record<number, number> = {};
       const sp: Record<number, number> = {};
@@ -123,7 +148,7 @@ export function ProcurementDialog({
       setSupOv(sp);
     } catch (e) {
       toast({ title: "Could not load procurement data", description: err(e) });
-      setSugg([]); setPos([]); setSups([]);
+      setSugg([]); setPos([]); setSups([]); setRtvs([]);
     }
   }, []);
 
@@ -243,6 +268,76 @@ export function ProcurementDialog({
     0
   );
 
+  /* ── return-to-vendor ── */
+
+  /* load stock for the picked store when the RTV tab store changes */
+  const loadRtvStock = useCallback(async (storeId: string) => {
+    if (!storeId) { setStockRows(null); return; }
+    try {
+      const d = await api.get<{ rows: StockRow[] }>(`/api/inventory?storeId=${storeId}`);
+      setStockRows(d.rows);
+    } catch {
+      setStockRows([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (open) void loadRtvStock(rtvForm.storeId);
+  }, [open, rtvForm.storeId, loadRtvStock]);
+
+  const rtvStockOptions = useMemo(
+    () => (stockRows ?? []).filter((r) => r.qty > 0 && !rtvLines.some((l) => l.productId === r.productId)),
+    [stockRows, rtvLines]
+  );
+
+  const addRtvLine = () => {
+    const row = (stockRows ?? []).find((r) => String(r.productId) === rtvPick);
+    if (!row) return;
+    setRtvLines((ls) => [...ls, { productId: row.productId, name: row.name, emoji: row.emoji, qty: 1, max: Math.floor(row.qty), cost: row.cost }]);
+    setRtvPick("");
+  };
+
+  const rtvTotal = rtvLines.reduce((s, l) => s + l.qty * l.cost, 0);
+
+  const submitRtv = async () => {
+    if (!rtvForm.supplierId || !rtvForm.storeId || rtvLines.length === 0) return;
+    setBusy(true);
+    try {
+      const d = await api.post<{ ok: boolean; rtnNo: string; debitNoteNo: string; total: number }>("/api/supplier-returns", {
+        supplierId: Number(rtvForm.supplierId),
+        storeId: Number(rtvForm.storeId),
+        reason: rtvForm.reason,
+        note: rtvForm.note,
+        lines: rtvLines.map((l) => ({ productId: l.productId, qty: l.qty })),
+      });
+      toast({
+        title: `${d.rtnNo} created — ${d.debitNoteNo} for ${KES(d.total)} ✓`,
+        description: "Stock decremented and #stock-alerts notified.",
+      });
+      setRtvLines([]);
+      setRtvForm((f) => ({ ...f, note: "" }));
+      await loadAll();
+      await onDone?.();
+    } catch (e) {
+      toast({ title: "Return failed", description: err(e) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const creditRtv = async (r: RTV) => {
+    setBusy(true);
+    try {
+      await api.patch("/api/supplier-returns", { id: r.id });
+      toast({ title: `${r.debitNoteNo} marked credited ✓`, description: `${r.supplier.name} reconciled.` });
+      await loadAll();
+    } catch (e) {
+      toast({ title: "Update failed", description: err(e) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl rounded-2xl">
@@ -265,6 +360,9 @@ export function ProcurementDialog({
             </TabsTrigger>
             <TabsTrigger value="suppliers" className="rounded-full px-3 text-[12px] font-semibold data-[state=active]:bg-[#172B4D] data-[state=active]:text-white">
               Suppliers
+            </TabsTrigger>
+            <TabsTrigger value="rtv" className="rounded-full px-3 text-[12px] font-semibold data-[state=active]:bg-[#172B4D] data-[state=active]:text-white">
+              <PackageMinus className="mr-1 inline h-3 w-3" /> Return to vendor
             </TabsTrigger>
           </TabsList>
 
@@ -461,6 +559,135 @@ export function ProcurementDialog({
                   Add supplier
                 </Button>
               </div>
+            </div>
+          </TabsContent>
+          {/* ── RETURN TO VENDOR ── */}
+          <TabsContent value="rtv" className="space-y-3">
+            <div className="grid grid-cols-2 gap-2 @2xl:grid-cols-4">
+              <Select value={rtvForm.supplierId} onValueChange={(v) => setRtvForm((f) => ({ ...f, supplierId: v }))}>
+                <SelectTrigger className="h-8 rounded-lg text-[12px]"><SelectValue placeholder="Supplier *" /></SelectTrigger>
+                <SelectContent>
+                  {(sups ?? []).map((x) => (
+                    <SelectItem key={x.id} value={String(x.id)}>{x.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={rtvForm.storeId} onValueChange={(v) => setRtvForm((f) => ({ ...f, storeId: v }))}>
+                <SelectTrigger className="h-8 rounded-lg text-[12px]"><SelectValue placeholder="From store *" /></SelectTrigger>
+                <SelectContent>
+                  {stores.map((s) => (
+                    <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={rtvForm.reason} onValueChange={(v) => setRtvForm((f) => ({ ...f, reason: v }))}>
+                <SelectTrigger className="h-8 rounded-lg text-[12px]"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {["Damaged", "Wrong item", "Warranty", "Overstock"].map((r) => (
+                    <SelectItem key={r} value={r}>{r}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Input value={rtvForm.note} onChange={(e) => setRtvForm((f) => ({ ...f, note: e.target.value }))} placeholder="Note (optional)" className="h-8 rounded-lg text-[12px]" />
+            </div>
+
+            {/* product picker (needs a store first) */}
+            {rtvForm.storeId ? (
+              <div className="flex items-center gap-2">
+                <Select value={rtvPick} onValueChange={setRtvPick}>
+                  <SelectTrigger className="h-8 flex-1 rounded-lg text-[12px]">
+                    <SelectValue placeholder={stockRows === null ? "Loading stock…" : "Pick a product to return"} />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-56">
+                    {rtvStockOptions.length === 0 ? (
+                      <p className="px-3 py-2 text-center text-[11px] text-[#6B778C]">Everything here is already picked or out of stock.</p>
+                    ) : (
+                      rtvStockOptions.map((r) => (
+                        <SelectItem key={r.productId} value={String(r.productId)}>
+                          {r.emoji} {r.name} — {Math.floor(r.qty)} in stock
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+                <Button size="sm" disabled={!rtvPick} onClick={addRtvLine} className="h-8 rounded-lg bg-[#0052CC] px-3 text-[11px] font-bold text-white hover:bg-[#0041A8] disabled:opacity-40">
+                  <Plus className="h-3 w-3" /> Add
+                </Button>
+              </div>
+            ) : (
+              <p className="rounded-xl border border-dashed border-[#DFE1E6] py-6 text-center text-[12px] text-[#6B778C]">
+                Pick the supplier and the store you’re returning from to load its stock.
+              </p>
+            )}
+
+            {/* lines */}
+            {rtvLines.length > 0 && (
+              <div className="space-y-1 rounded-xl border border-[#DFE1E6] p-2">
+                {rtvLines.map((l, idx) => (
+                  <div key={l.productId} className="flex flex-wrap items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-[#F4F5F7]">
+                    <span className="text-[16px]">{l.emoji}</span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[12px] font-semibold text-[#172B4D]">{l.name}</p>
+                      <p className="text-[10px] text-[#6B778C]">cost {KES(l.cost)} • max {l.max} on shelf</p>
+                    </div>
+                    <input
+                      type="number" min={1} max={l.max}
+                      value={l.qty}
+                      onChange={(e) => setRtvLines((ls) => ls.map((x, i) => (i === idx ? { ...x, qty: Math.max(1, Math.min(x.max, Number(e.target.value) || 1)) } : x)))}
+                      className="h-7 w-16 rounded-lg border border-[#DFE1E6] text-center font-mono text-[12px] font-bold tabular-nums text-[#172B4D] outline-none focus:border-[#FF5630]"
+                      aria-label={`Return quantity for ${l.name}`}
+                    />
+                    <span className="w-20 text-right font-mono text-[11px] font-bold tabular-nums text-[#172B4D]">{KES(l.qty * l.cost)}</span>
+                    <button
+                      onClick={() => setRtvLines((ls) => ls.filter((_, i) => i !== idx))}
+                      className="flex h-6 w-6 items-center justify-center rounded-md text-[#6B778C] hover:bg-[#FFEBE8] hover:text-[#FF5630]"
+                      aria-label={`Remove ${l.name} from return`}
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-[#172B4D] px-4 py-3">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-white/60">Debit note total (at cost)</p>
+                <p className="font-display text-[16px] font-bold text-white">{KES(rtvTotal)}</p>
+              </div>
+              <Button
+                onClick={() => void submitRtv()}
+                disabled={busy || !rtvForm.supplierId || !rtvForm.storeId || rtvLines.length === 0}
+                className="h-10 rounded-xl bg-[#FF5630] px-5 text-[13px] font-bold text-white hover:bg-[#E84528] disabled:opacity-40"
+              >
+                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <PackageMinus className="h-4 w-4" />}
+                Create return &amp; debit note
+              </Button>
+            </div>
+
+            {/* recent RTVs */}
+            <div className="df-scroll max-h-40 space-y-1.5 overflow-y-auto pr-1">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-[#6B778C]">Recent returns</p>
+              {(rtvs ?? []).length === 0 ? (
+                <p className="py-2 text-center text-[11px] text-[#6B778C]">No returns to vendor yet.</p>
+              ) : (
+                rtvs!.map((r) => (
+                  <div key={r.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-[#DFE1E6] bg-[#FAFBFC] px-2.5 py-1.5">
+                    <span className="font-mono text-[11px] font-bold text-[#172B4D]">{r.rtnNo}</span>
+                    <span className="rounded-full bg-[#FFEBE8] px-1.5 py-0.5 font-mono text-[9px] font-bold text-[#C62828]">{r.debitNoteNo}</span>
+                    <span className={cn("rounded-full px-1.5 py-0.5 text-[9px] font-bold", STATUS_CLS[r.status] ?? "bg-[#F4F5F7] text-[#6B778C]")}>{r.status}</span>
+                    <span className="min-w-0 flex-1 truncate text-[10px] text-[#6B778C]">
+                      {r.supplier.name} • {r.reason} • {fmtDate(r.createdAt)} • {r.items.length} lines
+                    </span>
+                    <span className="font-mono text-[11px] font-bold text-[#172B4D]">{KES(r.total)}</span>
+                    {r.status === "Sent" && (
+                      <Button size="sm" variant="outline" disabled={busy} onClick={() => void creditRtv(r)} className="h-6 rounded-md px-2 text-[10px] font-bold text-[#1B7A2E]">
+                        <Check className="h-2.5 w-2.5" /> Credit
+                      </Button>
+                    )}
+                  </div>
+                ))
+              )}
             </div>
           </TabsContent>
         </Tabs>
