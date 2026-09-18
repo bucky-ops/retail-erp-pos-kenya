@@ -42,13 +42,14 @@ import {
   hashPayload,
   kes,
 } from "@/lib/receipt";
-import { ReceiptDocument, printReceiptArea } from "@/components/df/receipt-document";
+import { ReceiptDocument } from "@/components/df/receipt-document";
+import { printReceiptDocs } from "@/services/receiptService";
 import {
   CompanyProfile,
   ReportPrint,
   ReportTable,
   ReportToolbar,
-  printReportArea,
+  printReportStandalone,
   useCompanyProfile,
 } from "@/components/df/report-print";
 import { useApp } from "@/lib/store";
@@ -1113,7 +1114,7 @@ function TrialBalanceTab({
 
   const doPrint = () => {
     setPrintOpen(true);
-    window.setTimeout(() => printReportArea(), 700);
+    void printReportStandalone("a4");
   };
 
   const doExport = () => {
@@ -1272,7 +1273,7 @@ function PnlTab({ pnl, month }: { pnl: AccPayload["pnl"]; month: string }) {
 
   const doPrint = () => {
     setPrintOpen(true);
-    window.setTimeout(() => printReportArea(), 700);
+    void printReportStandalone("a4");
   };
 
   const doExport = () => {
@@ -1442,7 +1443,7 @@ function BalanceSheetTab({ bs }: { bs: AccPayload["balanceSheet"] }) {
 
   const doPrint = () => {
     setPrintOpen(true);
-    window.setTimeout(() => printReportArea(), 700);
+    void printReportStandalone("a4");
   };
 
   const doExport = () => {
@@ -1874,7 +1875,7 @@ function FinancialReportTab({
   const doPrint = () => {
     if (!resp) return;
     setPrintOpen(true);
-    window.setTimeout(() => printReportArea(), 700);
+    void printReportStandalone("a4");
   };
 
   const doExport = () => {
@@ -2331,10 +2332,9 @@ export default function AccountingScreen() {
     return () => clearTimeout(t);
   }, [load]);
 
-  /** Renders the document into the hidden A4 host, then prints. */
+  /** Prints the document standalone (own window, own onload - never blank). */
   const printDocNow = useCallback((doc: ReceiptDocData) => {
-    setPrintDoc(doc);
-    window.setTimeout(() => printReceiptArea("a4"), 700);
+    void printReceiptDocs([doc], "a4");
   }, []);
 
   const printJournal = useCallback(

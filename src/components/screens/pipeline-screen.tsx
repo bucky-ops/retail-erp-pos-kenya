@@ -8,7 +8,8 @@ import {
 import { api } from "@/lib/api";
 import { ChainDoc, DealDto, KES } from "@/types";
 import { customerPointsLine, fmtDate, kes, type ReceiptDocData } from "@/lib/receipt";
-import { ReceiptDocument, printReceiptArea } from "@/components/df/receipt-document";
+import { ReceiptDocument } from "@/components/df/receipt-document";
+import { printReceiptDocs } from "@/services/receiptService";
 import { ScreenHeader, EmptyState, TableSkeleton } from "@/components/df/shared";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -431,8 +432,8 @@ export default function PipelineScreen() {
     if (docs.length === 0) return;
     setPrintMode("a4");
     setPrintDocs(docs.map((d) => chainDocData(deal, d)));
-    // let React mount the hidden print host + generate QRs before window.print()
-    window.setTimeout(() => printReceiptArea("a4"), 300);
+    // Naivas grade: standalone combined print (own window, page breaks between docs)
+    void printReceiptDocs(docs.map((d) => chainDocData(deal, d)), "a4");
   }, []);
 
   const dealChainDocs = useCallback(

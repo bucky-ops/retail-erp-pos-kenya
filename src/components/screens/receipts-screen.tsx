@@ -8,7 +8,8 @@ import {
 import { api } from "@/lib/api";
 import { KES, SaleDto, SaleItemDto } from "@/types";
 import { ReceiptDocData } from "@/lib/receipt";
-import { ReceiptDocument, printReceiptArea } from "@/components/df/receipt-document";
+import { ReceiptDocument } from "@/components/df/receipt-document";
+import { printReceiptDocs } from "@/services/receiptService";
 import { kindLabel, payloadToReceiptDoc } from "@/components/df/receipt-doc-adapter";
 import { KpiCard, Panel, ScreenHeader } from "@/components/df/shared";
 import { DukaMark } from "@/components/df/logo";
@@ -810,7 +811,6 @@ export default function ReceiptsScreen() {
 
   /* digital receipts (public QR twins) + one-shot reprint doc */
   const [digitals, setDigitals] = useState<DigitalReceiptDto[] | null>(null);
-  const [printDoc, setPrintDoc] = useState<{ doc: ReceiptDocData; mode: "thermal" | "a4" } | null>(null);
 
   const loadDigitals = () => {
     api
@@ -918,8 +918,8 @@ export default function ReceiptsScreen() {
         receipt?: { payload: unknown; kind: string; title: string; refNo: string; createdAt: string };
       }>(`/api/digital-receipt?code=${encodeURIComponent(code)}`);
       if (!d.receipt) throw new Error("Receipt not found");
-      setPrintDoc({
-        doc: payloadToReceiptDoc(d.receipt.payload, {
+      void printReceiptDocs(
+        payloadToReceiptDoc(d.receipt.payload, {
           receiptCode: code,
           kind: d.receipt.kind,
           title: d.receipt.title,
@@ -927,20 +927,11 @@ export default function ReceiptsScreen() {
           createdAt: d.receipt.createdAt,
         }),
         mode,
-      });
+      );
     } catch (e) {
       toast({ title: "Could not load that receipt", description: err(e), variant: "destructive" });
     }
   };
-
-  useEffect(() => {
-    if (!printDoc) return;
-    const t = setTimeout(() => {
-      printReceiptArea(printDoc.mode);
-      setPrintDoc(null);
-    }, 150);
-    return () => clearTimeout(t);
-  }, [printDoc]);
 
   return (
     <div>
@@ -1264,12 +1255,6 @@ export default function ReceiptsScreen() {
         </div>
       </div>
 
-      {/* off-screen print host for digital twin reprints */}
-      {printDoc && (
-        <div aria-hidden className="fixed -left-[9999px] top-0">
-          <ReceiptDocument data={printDoc.doc} mode={printDoc.mode} />
-        </div>
-      )}
 
       {/* fullscreen dialog */}
       <Dialog open={fullOpen} onOpenChange={setFullOpen}>

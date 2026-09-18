@@ -9,7 +9,8 @@ import {
 import { api } from "@/lib/api";
 import { KES, PayslipDto } from "@/types";
 import { fmtDate, kes, type ReceiptDocData } from "@/lib/receipt";
-import { ReceiptDocument, printReceiptArea } from "@/components/df/receipt-document";
+import { ReceiptDocument } from "@/components/df/receipt-document";
+import { printReceiptDocs } from "@/services/receiptService";
 import { ScreenHeader, KpiCard, Panel, EmptyState, TableSkeleton } from "@/components/df/shared";
 import { QrImage } from "@/components/df/qr";
 import { toast } from "@/hooks/use-toast";
@@ -823,13 +824,9 @@ export default function PayrollScreen() {
     } catch {
       // digital twin failed - print anyway, QR falls back to the doc number
     }
-    setPrintMode(mode);
-    setPrintDocs([doc]);
-    // let React mount the hidden print host + generate the QR before window.print()
-    window.setTimeout(() => {
-      printReceiptArea(mode);
-      setSlipPrinting(false);
-    }, 300);
+    // Naivas grade: standalone print document (own window, own onload - never blank)
+    void printReceiptDocs([doc], mode);
+    setSlipPrinting(false);
   }, []);
 
   return (

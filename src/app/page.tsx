@@ -8,6 +8,7 @@ import {
   CalendarClock, Landmark, Trash2, ExternalLink, ScanBarcode, Monitor,
 } from "lucide-react";
 import { useApp, useSync, ScreenId } from "@/lib/store";
+import { warmPrintAssets } from "@/services/receiptService";
 import { api } from "@/lib/api";
 import { syncPendingSales, offlineQueue } from "@/lib/offline";
 import { Logo, DukaMark } from "@/components/df/logo";
@@ -158,6 +159,10 @@ export default function App() {
         <LoginScreen
           onLogin={(u) => {
             setUser(u);
+            // Warm the print asset cache: company logo to base64 in localStorage
+            // so every receipt prints offline with zero external image fetches.
+            const st = useApp.getState?.();
+            void warmPrintAssets((st?.settings as { logoUrl?: string } | null)?.logoUrl);
             if (u.role === "Cashier" || u.role === "Store Keeper") setPage("pos");
           }}
         />

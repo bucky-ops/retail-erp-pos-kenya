@@ -14,6 +14,7 @@
 import { ReactNode, useEffect, useState } from "react";
 import { FileSpreadsheet, FileText, Printer } from "lucide-react";
 import { PUBLIC_BASE_URL, fmtDate } from "@/lib/receipt";
+import { printElementStandalone } from "@/services/receiptService";
 import { useApp } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -84,6 +85,17 @@ export function printReportArea(): void {
   if (prev) prev.remove();
   document.head.appendChild(style);
   window.print();
+}
+
+/**
+ * Naivas grade report printing: captures the rendered .df-report-sheet node with
+ * computed styles inlined and prints it from a STANDALONE document (own window,
+ * own onload, zero ancestor clipping, zero timing races). Prefer this over
+ * printReportArea everywhere.
+ */
+export async function printReportStandalone(page: "a4" | "thermal" = "a4"): Promise<void> {
+  const sheet = document.querySelector(".df-report-sheet");
+  await printElementStandalone(sheet, page);
 }
 
 /* -- ReportPrint: the A4 sheet ---------------------------------------------- */

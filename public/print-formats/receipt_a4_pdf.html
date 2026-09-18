@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>SALES RECEIPT INV-2883</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  html, body { background: #fff; }
+  table { border-collapse: collapse; }
+  img { display: block; }
+  .df-toolbar { display: flex; gap: 8px; justify-content: center; padding: 10px; font-family: Arial, sans-serif; background: #F1F5F9; border-bottom: 1px solid #CBD5E1; }
+  .df-toolbar button { padding: 6px 14px; font-size: 12px; font-weight: 700; border: 1px solid #94A3B8; border-radius: 6px; background: #fff; cursor: pointer; }
+  @media print { .df-toolbar { display: none !important; } }
+
+  body { font-family: Arial, "Helvetica Neue", sans-serif; color: #111827; }
+  .sheet { width: 186mm; margin: 0 auto; padding: 10mm 2mm; }
+  table.rc-head { width: 100%; margin-bottom: 6mm; }
+  table.rc-head td { vertical-align: middle; }
+  .rc-logo { max-height: 64px; max-width: 30mm; object-fit: contain; }
+  .rc-company { font-size: 21px; font-weight: 800; letter-spacing: 0.5px; color: #111827; }
+  .rc-co-sub { font-size: 11px; color: #374151; line-height: 1.5; }
+  .rc-doc-box { text-align: right; }
+  .rc-title { font-size: 17px; font-weight: 800; letter-spacing: 2px; color: #111827; }
+  .rc-doc-no { font-size: 12px; font-weight: 700; font-family: "Courier New", monospace; }
+  .rc-meta { font-size: 11px; color: #374151; line-height: 1.55; }
+  table.rc-items { width: 100%; font-size: 11.5px; border: 1px solid #111827; }
+  table.rc-items th { background: #F3F4F6; border: 1px solid #111827; padding: 4px 6px; text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.5px; }
+  table.rc-items td { border: 1px solid #9CA3AF; padding: 4px 6px; vertical-align: top; }
+  .rc-r { text-align: right; white-space: nowrap; }
+  .rc-disc { display: block; font-size: 9.5px; color: #6B7280; }
+  .rc-totals { margin-top: 5mm; margin-left: auto; width: 84mm; font-size: 11.5px; }
+  .rc-totals .row { display: flex; justify-content: space-between; padding: 2px 0; }
+  .rc-grand { display: flex; justify-content: space-between; border-top: 3px double #111827; margin-top: 3px; padding-top: 4px; font-size: 17px; font-weight: 800; }
+  .rc-points { margin: 5mm 0 0; padding: 4mm; background: #FFF9C4; border: 1.5px dashed #B8860B; text-align: center; font-size: 11.5px; line-height: 1.6; }
+  .rc-points b { display: block; font-size: 12.5px; letter-spacing: 1px; }
+  .rc-extra { margin: 4mm 0; font-size: 11.5px; }
+  .rc-extra .hd { font-weight: 700; border-bottom: 1px dashed #9CA3AF; margin-bottom: 2px; }
+  .rc-extra .row { display: flex; justify-content: space-between; padding: 1.5px 0; }
+  .rc-qr-wrap { margin-top: 6mm; text-align: center; }
+  .rc-qr { width: 32mm; height: 32mm; margin: 0 auto; }
+  .rc-qr-cap { font-size: 10.5px; font-weight: 700; margin-top: 2mm; }
+  .rc-qr-url { font-size: 9px; color: #6B7280; word-break: break-all; }
+  .rc-footer { margin-top: 6mm; border-top: 1.5px solid #111827; padding-top: 3mm; text-align: center; font-size: 12px; font-weight: 700; }
+  .rc-pw { text-align: center; font-size: 9px; color: #9CA3AF; margin-top: 2mm; }
+  @page { size: A4 portrait; margin: 12mm 10mm; }
+  @media print { .sheet { width: auto; padding: 0; } }
+</style>
+</head>
+<body onload="window.print(); setTimeout(window.close, 800);">
+<div class="df-toolbar">
+    <button onclick="window.print()">Print now</button>
+    <button onclick="window.close()">Close</button>
+  </div>
+<div class="sheet">
+  <table class="rc-head"><tr>
+    <td style="width:34mm;"><div style="width:56px;height:56px;border:2px solid #111827;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;margin-right:5mm;">DU</div></td>
+    <td>
+      <div class="rc-company">DukaFlow Ltd</div>
+      <div class="rc-co-sub">
+        KRA PIN: P051XXXXXXX<br />
+        DukaFlow Thika Road<br />
+        Ruai, Eastern Bypass, Nairobi<br />
+        Tel: 0712 345 678
+         | Till No: TILL-04
+      </div>
+    </td>
+    <td class="rc-doc-box">
+      <div class="rc-title">SALES RECEIPT</div>
+      <div class="rc-doc-no">INV-2883</div>
+      <div class="rc-meta">18 Sept 2026, 18:41</div>
+      <div class="rc-meta">Served by: Mary Wanjiku</div>
+      <div class="rc-meta">Customer: John Kamau</div>
+      
+    </td>
+  </tr></table>
+  
+  <table class="rc-items">
+    <thead><tr><th>#</th><th>Item</th><th class="rc-r">Qty x Price</th><th class="rc-r">Total</th></tr></thead>
+    <tbody><tr>
+        <td style="width:9mm">1</td>
+        <td>Fresh Bananas (Loose)</td>
+        <td class="rc-r">1.25 kg x 129.00</td>
+        <td class="rc-r" style="font-weight:600;width:22mm">161.25</td>
+      </tr><tr>
+        <td style="width:9mm">2</td>
+        <td>Azam Soda 500ml<span class="rc-disc">Discount KES 10.00</span></td>
+        <td class="rc-r">2 x 95.00</td>
+        <td class="rc-r" style="font-weight:600;width:22mm">180.00</td>
+      </tr></tbody>
+  </table>
+  <div class="rc-points"><b>CUSTOMER POINTS [POINTS]</b><div>John Kamau - GOLD Tier | Earned: 45 pts | Balance: 420 pts | Value KES 420</div></div>
+  <div class="rc-totals"><div class="row" ><span>Subtotal</span><span>KES 295.65</span></div><div class="row" ><span>Discount</span><span>- KES 10.00</span></div><div class="row" ><span>VAT 16%</span><span>KES 40.83</span></div><div class="rc-grand"><span>GRAND TOTAL</span><span>KES 326.48</span></div></div>
+  <div class="rc-pay"><div class="row"><span>[M-PESA] M-Pesa</span><span>KES 163.24</span></div><div class="row"><span>[CASH] Cash</span><span>KES 163.24</span></div></div>
+  <div class="rc-qr-wrap">
+    <img class="rc-qr" src="data:image/png;base64,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" alt="QR" />
+    <div class="rc-qr-cap">Scan for Digital Receipt</div>
+    <div class="rc-qr-url">https://retail-erp-pos-kenya.vercel.app/receipt/NVS-DUKA-2026-00042</div>
+  </div>
+  <div class="rc-footer">Thank you! Sema na sisi: 0712 345 678</div>
+  <div class="rc-pw">Generated by DukaFlow POS | 2026</div>
+</div>
+</body>
+</html>

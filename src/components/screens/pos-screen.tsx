@@ -26,6 +26,7 @@ import {
   Building2,
   Check,
   CreditCard,
+  FileText,
   Gift,
   HandCoins,
   History,
@@ -63,7 +64,8 @@ import { api } from "@/lib/api";
 import { useApp, useSync } from "@/lib/store";
 import { happyHourLabel, happyHourMatchesCategory, isHappyHourActive, type HappyHourConfig } from "@/lib/happy-hour";
 import { canSeeMargin } from "@/lib/roles";
-import { kes } from "@/lib/receipt";
+import { kes, type ReceiptDocData } from "@/lib/receipt";
+import { printReceiptDocs, type ReceiptPrintMode } from "@/services/receiptService";
 import {
   KES,
   type CartLine,
@@ -241,6 +243,56 @@ interface SuccessState {
   /** digital twin from the API: NVS code + public URL rendered as a QR */
   digitalReceipt: { code: string; url: string } | null;
 }
+
+/** Build the printable document model from a completed sale (standalone print). */
+function saleToPrintDoc(success: NonNullable<SuccessStateAsDoc>): ReceiptDocData {
+  const s = success.sale;
+  const settings = useApp.getState().settings as Record<string, unknown> | null;
+  const code = success.digitalReceipt?.code;
+  return {
+    kind: "SALE",
+    docNo: s.receiptNo,
+    receiptCode: code,
+    date: new Date(s.createdAt).toLocaleString("en-KE", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }),
+    storeName: s.storeName,
+    storePhone: (settings?.companyPhone as string) || undefined,
+    tillNo: (settings?.tillNo as string) || undefined,
+    kraPin: (settings?.kraPin as string) || undefined,
+    cuInvoiceNumber: s.cuInvoiceNumber ?? undefined,
+    etimsEnabled: s.kraStatus === "Verified",
+    servedBy: s.staffName,
+    customerName: s.customerName ?? undefined,
+    customerLine:
+      s.customerName
+        ? `${s.customerName} - ${s.customerTier ?? s.tierAtSale ?? "Bronze"} Tier | Earned: ${s.pointsEarned} pts | Balance: ${success.loyalty?.balance ?? 0} pts | Value KES ${success.loyalty?.balance ?? 0}`
+        : undefined,
+    lines: s.items.map((it, i) => ({
+      no: i + 1,
+      name: it.name,
+      qty: it.qty,
+      unit: "pc",
+      unitPrice: it.unitPrice,
+      discount: it.discount,
+      total: it.total,
+    })),
+    totals: [
+      { label: "Subtotal", value: kes(s.subtotal) },
+      ...(s.discount > 0 ? [{ label: "Discount", value: `- ${kes(s.discount)}` }] : []),
+      ...(s.pointsRedeemed > 0 ? [{ label: "Points Used", value: `- ${kes(s.pointsRedeemed)}` }] : []),
+      { label: "VAT 16%", value: kes(s.vat) },
+    ],
+    grandTotal: kes(s.total),
+    paymentLines: [{ method: s.paymentMethod, amount: kes(s.total) }],
+    pointsLine:
+      s.customerName
+        ? { earned: s.pointsEarned, redeemed: s.pointsRedeemed || undefined, balance: success.loyalty?.balance, value: success.loyalty?.balance }
+        : undefined,
+    footerMessage: (settings?.receiptPromoFooter as string) || undefined,
+    qrText: success.digitalReceipt?.url ?? (code ? `https://retail-erp-pos-kenya.vercel.app/receipt/${code}` : undefined),
+    company: (settings?.companyName as string) || "DukaFlow Ltd",
+  };
+}
+type SuccessStateAsDoc = SuccessState;
 
 /** Tenders available inside one split payment (Points redeems loyalty). */
 const SPLIT_METHODS = ["Cash", "M-Pesa", "M-Pesa Till", "M-Pesa Paybill", "Card", "Points", "Gift Card"] as const;
@@ -2202,10 +2254,18 @@ export default function PosScreen() {
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => window.print()}
+                        onClick={() => void printReceiptDocs(saleToPrintDoc(success), "thermal")}
                         className="mt-1.5 h-7 rounded-lg border-[#DFE1E6] bg-white px-2.5 text-[11px] font-bold text-[#172B4D]"
                       >
                         <Printer size={12} /> Print Receipt
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void printReceiptDocs(saleToPrintDoc(success), "a4")}
+                        className="ml-1.5 mt-1.5 h-7 rounded-lg border-[#DFE1E6] bg-white px-2.5 text-[11px] font-bold text-[#172B4D]"
+                      >
+                        <FileText size={12} /> Print A4 PDF
                       </Button>
                     </div>
                   </div>
@@ -2260,7 +2320,7 @@ export default function PosScreen() {
               <div className="grid grid-cols-3 gap-2 border-t border-[#DFE1E6] bg-[#FAFBFC] p-4">
                 <Button
                   variant="outline"
-                  onClick={() => window.print()}
+                  onClick={() => void printReceiptDocs(saleToPrintDoc(success), "thermal" as ReceiptPrintMode)}
                   className="h-10 rounded-xl border-[#DFE1E6] bg-white text-[13px] font-semibold text-[#172B4D]"
                 >
                   <Printer size={14} /> Print 80mm

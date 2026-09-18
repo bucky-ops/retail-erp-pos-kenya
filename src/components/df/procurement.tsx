@@ -20,6 +20,7 @@ import { Building2, Check, ChevronDown, ClipboardList, FileText, Loader2, Mail, 
 import { api } from "@/lib/api";
 import { KES, type ProductDto } from "@/types";
 import { toast } from "@/hooks/use-toast";
+import { printElementStandalone } from "@/services/receiptService";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -498,10 +499,10 @@ export function ProcurementDialog({
 
   const printStatement = () => {
     setStmtBusy(true);
-    window.setTimeout(() => {
-      window.print();
-      setStmtBusy(false);
-    }, 60);
+    // Naivas grade: capture the statement node and print it standalone (never blank)
+    void printElementStandalone(document.querySelector(".df-statement"), "a4").finally(() =>
+      setStmtBusy(false),
+    );
   };
 
   /* -- supplier statement email: preview → send --------- */

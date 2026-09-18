@@ -11,7 +11,8 @@ import { ReactNode, useEffect, useRef, useState } from "react";
 import {
   Check, FileDown, FileText, Link2, Loader2, MessageCircle, Printer, ReceiptText, SearchX,
 } from "lucide-react";
-import { ReceiptDocument, printReceiptArea } from "@/components/df/receipt-document";
+import { ReceiptDocument } from "@/components/df/receipt-document";
+import { printReceiptDocs, printElementStandalone } from "@/services/receiptService";
 import { payloadToReceiptDoc } from "@/components/df/receipt-doc-adapter";
 import { DukaMark } from "@/components/df/logo";
 import { ReceiptDocData, kes } from "@/lib/receipt";
@@ -188,8 +189,7 @@ export default function ReceiptView({ code }: { code: string }) {
                   icon={<Printer size={14} />}
                   label="Print"
                   onClick={() => {
-                    ensurePrintStyle();
-                    printReceiptArea(mode);
+                    void printReceiptDocs(doc, mode);
                   }}
                 />
                 <ActionBtn

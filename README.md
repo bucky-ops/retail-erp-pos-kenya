@@ -106,6 +106,10 @@ The POS behaves like a Naivas till, end to end:
 
 Every document (sale, Z-Report, payslip, debtor/creditor payment, quotation, proforma, order, invoice, expense, stock adjustment) gets a **public digital twin** at `/receipt/NVS-DUKA-YYYY-XXXXX` hosted on Vercel. The printed QR points there - scannable from any phone, no app, no login. Receipts render in 80 mm thermal and A4 modes, with Print / Save PDF / WhatsApp share / Copy link.
 
+### Blank receipt fix: standalone print documents
+
+Printing no longer touches the live app DOM. `src/services/receiptService.ts` builds a **complete standalone HTML document** for every receipt and report: all CSS inline, the logo as base64 (warmed into `localStorage` at login via `convertImageToBase64`), the QR as base64 generated locally by the `qrcode` library (works fully offline), text icon fallbacks (`[CASH]`, `[M-PESA]`, `[TILL]`, `[PHONE]`), a yellow CUSTOMER POINTS box and `print-color-adjust: exact`. The document opens in its own window (popup, with a hidden iframe fallback when popups are blocked) and prints itself on `onload="window.print()"`, so printing waits for every image - no blank paper, no QR race, no dialog clipping. Root causes and evidence: `DIAGNOSIS.md`. Canonical print formats are emitted to `public/print-formats/receipt_80mm_thermal.html` and `receipt_a4_pdf.html` (`bun scripts/export-print-formats.mjs`). Reports print through the same engine via computed style capture (`printReportStandalone`), and every receipt family exposes **Print Thermal HTML / Print A4 PDF / Share WhatsApp**.
+
 ### Quotation → Payment in one click
 
 In **Pipeline**, mature a quotation stage by stage (**Mature to Proforma → Order → Invoice → Payment**) or hit **Mature All At Once** for the animated 5-tick stepper that issues QT → PF → SO → INV → PAY documents with digital receipts, then prints them individually or stapled into one combined PDF.

@@ -9,7 +9,8 @@ import {
 import { api } from "@/lib/api";
 import { KES } from "@/types";
 import { type ReceiptDocData } from "@/lib/receipt";
-import { ReceiptDocument, printReceiptArea } from "@/components/df/receipt-document";
+import { ReceiptDocument } from "@/components/df/receipt-document";
+import { printReceiptDocs } from "@/services/receiptService";
 import { ScreenHeader, KpiCard, Panel, EmptyState, TableSkeleton } from "@/components/df/shared";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -322,13 +323,9 @@ export default function DayCloseScreen() {
         // twin failed - print anyway, QR falls back to the Z number
       }
     }
-    setPrintMode("a4");
-    setPrintDocs([doc]);
-    // let React mount the hidden print host + generate the QR before window.print()
-    window.setTimeout(() => {
-      printReceiptArea("a4");
-      setZBusy(false);
-    }, 300);
+    // Naivas grade: standalone print document (own window, own onload - never blank)
+    void printReceiptDocs([doc], "a4");
+    setZBusy(false);
   }, [today]);
 
   /* -- KPI values -------------------------------------------- */

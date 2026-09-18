@@ -13,7 +13,7 @@ import { api } from "@/lib/api";
 import { useApp } from "@/lib/store";
 import { exportCsv as exportReportCsv, hashPayload } from "@/lib/receipt";
 import {
-  ReportPrint, ReportTable, ReportToolbar, printReportArea, useCompanyProfile,
+  ReportPrint, ReportTable, ReportToolbar, printReportStandalone, useCompanyProfile,
 } from "@/components/df/report-print";
 import { KES, SettingsDto } from "@/types";
 import { Panel, ScreenHeader, TableSkeleton } from "@/components/df/shared";
@@ -301,7 +301,7 @@ export default function ReportsScreen() {
   const printReport = (id: ReportId) => {
     if (!data) return;
     setPrintId(id);
-    window.setTimeout(() => printReportArea(), 700);
+    void printReportStandalone("a4");
   };
 
   /** Export Excel - CSV download via lib/receipt (opens in Excel). */

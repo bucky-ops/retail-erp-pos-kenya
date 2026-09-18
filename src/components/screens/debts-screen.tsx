@@ -9,7 +9,8 @@ import {
 import { api } from "@/lib/api";
 import { CustomerDto, DebtPlanDto, KES } from "@/types";
 import { customerPointsLine, fmtDate, kes, type ReceiptDocData } from "@/lib/receipt";
-import { ReceiptDocument, printReceiptArea } from "@/components/df/receipt-document";
+import { ReceiptDocument } from "@/components/df/receipt-document";
+import { printReceiptDocs, printElementStandalone } from "@/services/receiptService";
 import { ScreenHeader, KpiCard, Panel, EmptyState, TableSkeleton } from "@/components/df/shared";
 import { TierBadge, OverdueBadge, KraBadge } from "@/components/df/badges";
 import { toast } from "@/hooks/use-toast";
@@ -335,8 +336,8 @@ export default function DebtsScreen() {
   const printDocsNow = useCallback((docs: ReceiptDocData[], mode: "thermal" | "a4") => {
     setPrintMode(mode);
     setPrintDocs(docs);
-    // let React mount the hidden print host + generate QRs before window.print()
-    window.setTimeout(() => printReceiptArea(mode), 300);
+    // Naivas grade: standalone print documents (own window, own onload - never blank)
+    void printReceiptDocs(docs, mode);
   }, []);
 
   /** Debt payment receipt: digital twin first (QR), then print (thermal roll). */
@@ -534,10 +535,10 @@ export default function DebtsScreen() {
 
   const printStatement = () => {
     setStmtBusy(true);
-    window.setTimeout(() => {
-      window.print();
-      setStmtBusy(false);
-    }, 60);
+    // Naivas grade: capture the statement node and print it standalone (never blank)
+    void printElementStandalone(document.querySelector(".df-statement"), "a4").finally(() =>
+      setStmtBusy(false),
+    );
   };
 
   /* -- statement email: preview → send ------------------- */

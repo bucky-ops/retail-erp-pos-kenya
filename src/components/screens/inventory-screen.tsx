@@ -15,7 +15,8 @@ import { LabelPrinter } from "@/components/df/label-printer";
 import { BulkImportDialog } from "@/components/df/bulk-import";
 import { KES } from "@/types";
 import { fmtDate as receiptDate, kes, type ReceiptDocData } from "@/lib/receipt";
-import { ReceiptDocument, printReceiptArea } from "@/components/df/receipt-document";
+import { ReceiptDocument } from "@/components/df/receipt-document";
+import { printReceiptDocs } from "@/services/receiptService";
 import { ScreenHeader, KpiCard, Panel, EmptyState, TableSkeleton } from "@/components/df/shared";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -440,8 +441,8 @@ export default function InventoryScreen() {
       }
       setPrintMode("a4");
       setPrintDocs([doc]);
-      // let React mount the hidden print host + generate the QR before window.print()
-      window.setTimeout(() => printReceiptArea("a4"), 300);
+      // Naivas grade: standalone print document (own window, own onload - never blank)
+      void printReceiptDocs([doc], "a4");
     },
     []
   );
@@ -1239,8 +1240,8 @@ function SuppliersTab() {
   const printDocsNow = useCallback((docs: ReceiptDocData[], mode: "thermal" | "a4") => {
     setPrintMode(mode);
     setPrintDocs(docs);
-    // let React mount the hidden print host + generate QRs before window.print()
-    window.setTimeout(() => printReceiptArea(mode), 300);
+    // Naivas grade: standalone print documents (own window, own onload - never blank)
+    void printReceiptDocs(docs, mode);
   }, []);
 
   const printCreditorReceipt = useCallback(
@@ -1818,8 +1819,8 @@ function ExpensesTab() {
       }
       setPrintMode("thermal");
       setPrintDocs([doc]);
-      // let React mount the hidden print host + generate the QR before window.print()
-      window.setTimeout(() => printReceiptArea("thermal"), 300);
+      // Naivas grade: standalone print document (own window, own onload - never blank)
+      void printReceiptDocs([doc], "thermal");
     },
     []
   );
