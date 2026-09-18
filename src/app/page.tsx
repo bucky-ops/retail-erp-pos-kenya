@@ -221,7 +221,7 @@ export default function App() {
                       <div>
                         <p className="text-[12px] font-semibold text-white">DukaFlow POS</p>
                         <p className={cn("text-[11px]", online ? "text-white/60" : "text-[#FFAB00]")}>
-                          Tablet v2.4 • {online ? "Online" : `Offline${unsynced ? ` • ${unsynced} queued` : ""}`}
+                          Tablet v1.2.0 • {online ? "Online" : `Offline${unsynced ? ` • ${unsynced} queued` : ""}`}
                         </p>
                       </div>
                     </div>
@@ -372,7 +372,7 @@ export default function App() {
               <footer className="mt-auto flex items-center justify-between border-t border-[#DFE1E6] bg-white px-4 py-2.5 text-[11px] text-[#6B778C] @4xl:px-8">
                 <span className="flex items-center gap-1.5">
                   <PackageCheck size={12} className="text-[#00C853]" />
-                  DukaFlow v2.4 - Multi-store • Offline-first POS • KRA eTIMS • M-Pesa Ready
+                  DukaFlow v1.2.0 - Multi-store • Offline-first POS • KRA eTIMS • M-Pesa Ready
                 </span>
                 <span className="hidden @md:inline">
                   {activeStore ? `${activeStore.name}, ${activeStore.location}` : "All Stores"} • Nairobi, Kenya
