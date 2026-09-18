@@ -129,3 +129,23 @@ Work Log:
 
 Stage Summary:
 - Round-8 web scope COMPLETE: Day Closing workflow live (count -> variance -> approval -> freeze posts journal), Payroll = Kenya HRMS (payroll + attendance + advances), Inventory Pro (7 tabs), Accounting screen clean, lint 0 / tsc clean / dash-free, version 1.2.0 shipped. Files I touched this pass: src/app/api/payroll/attendance/route.ts (NEW), src/components/screens/day-close-screen.tsx (live variance + save fix), DB reseeded. Everything else verified as staged by the earlier pass.
+
+---
+Task ID: 10 (final) - web update, versions, wireframe preview, em-dash cleanup
+Agent: Z.ai Code (main)
+Task: Complete web Round-8 per wireframe, bump versions (web 1.2.0 / mobile 1.1.0), publish wireframe preview on GitHub Pages, remove all em dashes from GitHub + app + web app.
+
+Work Log:
+- Repo surgery: discovered dukaflow-mobile/ had NO independent .git (was tracked inside web repo; commit 3a933f7 accidentally added 38 mobile files to retail-erp-pos-kenya). Fixed: git reset HEAD~1, git rm -r --cached dukaflow-mobile/, added dukaflow-mobile/ to web .gitignore, re-inited mobile repo (git init -b main, remote bucky-ops/dukaflow-mobile, fetch, reset origin/main, core.fileMode false). Verified local content identical to GitHub 188c35b.
+- Task 10-a (web, full-stack-developer agent): Day Close screen fully implemented (611 lines: live per-tender variance vs KES 100 tolerance, Z report, saveCounts bug fix), accounting-screen lint errors fixed (hoisted render-created components), payroll extended with Attendance + Advances tabs (new GET /api/payroll/attendance), inventory extended to 7 tabs (Suppliers/POs/Stock Takes/Supplier Returns/Expenses/Stock Age), pre-existing lint errors fixed in df/label-printer.tsx + df/procurement.tsx, package.json 0.2.1 -> 1.2.0, sidebar version chip. DB was empty again -> re-ran all 4 seed scripts. bun run lint: 0 errors. agent-browser QA: all screens verified with seeded data at 2 viewports, zero console errors.
+- Task 10-b (mobile, general-purpose agent): em-dash sweep 1,673 matches -> 0 (incl. U+2500 banners), pubspec 1.0.0+1 -> 1.1.0+2, docs/index.html = wireframe prototype (265KB self-contained), .github/workflows/pages.yml (deploy-pages@v4), README Live Wireframe Preview section.
+- Em-dash cleanup (user requirement): web repo 455+ matches -> 0 (src, prisma, scripts, README, worklog), mobile repo -> 0, web release v1.1.0 notes PATCHed -> 0, commit messages rewritten via git filter-branch msg-filter on BOTH repos (web: 2 commits, mobile: 4 commits) + force push + tags re-pointed (v1.1.0, v1.0.1, v1.2.0). GitHub now fully dash-free.
+- Mobile release: pushed main 6cf6664, tag v1.1.0 -> Android CI green, release v1.1.0 published with 4 APKs. Enabled GitHub Pages (build_type workflow) via API, Deploy Wireframe Preview re-run -> SUCCESS, https://bucky-ops.github.io/dukaflow-mobile/ live (HTTP 200).
+- Web release: pushed rewritten main (fde6a25 + label fixes), tag v1.2.0, release published via API: https://github.com/bucky-ops/retail-erp-pos-kenya/releases/tag/v1.2.0 (dash-free notes).
+- Version consistency fix: stale "v2.4" labels in shell header / tablet badge / design screen -> v1.2.0, browser-verified.
+
+Stage Summary:
+- WEB: v1.2.0 released - Round-8 complete (Receipt Studio, HRMS, Inventory Pro, Day Closing, Accounting), lint green, dash-free.
+- MOBILE: v1.1.0 released (4 APKs) - wireframe live preview on GitHub Pages, dash-free, version 1.1.0+2.
+- Preview URLs: web app via Preview Panel; wireframe: https://bucky-ops.github.io/dukaflow-mobile/
+- Pending watch item: post-rewrite CI re-runs on mobile (same code, expected green; v1.1.0 run re-uploads release assets).
