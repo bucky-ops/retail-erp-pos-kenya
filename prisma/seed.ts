@@ -19,10 +19,28 @@ async function main() {
   await db.chatMessage.deleteMany();
   await db.chatChannel.deleteMany();
   await db.payslip.deleteMany();
+  await db.staffAdvance.deleteMany();
+  await db.attendance.deleteMany();
   await db.employee.deleteMany();
+  await db.journalLine.deleteMany();
+  await db.journalEntry.deleteMany();
+  await db.account.deleteMany();
+  await db.bankStatementLine.deleteMany();
+  await db.dayClose.deleteMany();
+  await db.supplierPrice.deleteMany();
+  await db.purchaseOrderItem.deleteMany();
+  await db.purchaseOrder.deleteMany();
+  await db.stockTakeItem.deleteMany();
+  await db.stockTake.deleteMany();
+  await db.supplierReturnItem.deleteMany();
+  await db.supplierReturn.deleteMany();
+  await db.expense.deleteMany();
+  await db.supplier.deleteMany();
   await db.debtPlan.deleteMany();
   await db.giftCard.deleteMany();
   await db.promoCode.deleteMany();
+  await db.saleReturnItem.deleteMany();
+  await db.salesReturn.deleteMany();
   await db.saleItem.deleteMany();
   await db.sale.deleteMany();
   await db.pipelineDeal.deleteMany();
@@ -211,25 +229,183 @@ async function main() {
     ],
   });
 
-  // ─── Employees & payslips (Sep 2026) ─────────────────────
+  // ─── Employees (HRMS) & payslips ─────────────────────────
   const employees = [
-    { name: "Mary Wanjiku", idNo: "12345678", dept: "Sales", role: "Cashier", basic: 30000, house: 5000, transport: 3000, helb: 0, mpesa: "0712345678" },
-    { name: "James Otieno", idNo: "23456789", dept: "Store", role: "Store Keeper", basic: 25000, house: 3000, transport: 2000, helb: 1500, mpesa: "0722333444" },
-    { name: "Grace Akinyi", idNo: "34567890", dept: "Cashier", role: "Sales", basic: 22000, house: 2000, transport: 1000, helb: 0, mpesa: "0733555666" },
-    { name: "Peter Kimani", idNo: "45678901", dept: "Management", role: "Store Manager", basic: 65000, house: 15000, transport: 8000, helb: 5000, mpesa: "0744777888" },
-  ].map((e) => ({ ...e, house: e.house, transport: e.transport }));
+    { name: "Mary Wanjiku", idNo: "12345678", dept: "Sales", role: "Cashier", basic: 30000, house: 5000, transport: 3000, helb: 0, mpesa: "0712345678", status: "Active", storeId: thika.id, joined: daysAgo(760), annualUsed: 10, sickUsed: 1, att: 98, late: 2 },
+    { name: "James Otieno", idNo: "23456789", dept: "Store", role: "Store Keeper", basic: 25000, house: 3000, transport: 2000, helb: 1500, mpesa: "0722333444", status: "Active", storeId: thika.id, joined: daysAgo(620), annualUsed: 12, sickUsed: 2, att: 95, late: 4 },
+    { name: "Grace Akinyi", idNo: "34567890", dept: "Cashier", role: "Sales", basic: 22000, house: 2000, transport: 1000, helb: 0, mpesa: "0733555666", status: "Active", storeId: kiambu.id, joined: daysAgo(540), annualUsed: 8, sickUsed: 0, att: 97, late: 1 },
+    { name: "Peter Kimani", idNo: "45678901", dept: "Management", role: "Store Manager", basic: 65000, house: 15000, transport: 8000, helb: 5000, mpesa: "0744777888", status: "Active", storeId: thika.id, joined: daysAgo(1100), annualUsed: 6, sickUsed: 0, att: 99, late: 0 },
+    { name: "Faith Njeri", idNo: "56789012", dept: "Sales", role: "Senior Cashier", basic: 35000, house: 6000, transport: 3000, helb: 0, mpesa: "0755111222", status: "On Leave", storeId: thika.id, joined: daysAgo(900), annualUsed: 15, sickUsed: 3, att: 94, late: 3 },
+    { name: "Samuel Mwangi", idNo: "67890123", dept: "Store", role: "Loader", basic: 18000, house: 1500, transport: 1000, helb: 1000, mpesa: "0766222333", status: "Active", storeId: thika.id, joined: daysAgo(410), annualUsed: 4, sickUsed: 1, att: 92, late: 5 },
+    { name: "Esther Kilonzo", idNo: "78901234", dept: "Accounts", role: "Accountant", basic: 55000, house: 12000, transport: 6000, helb: 3000, mpesa: "0777333444", status: "Active", storeId: thika.id, joined: daysAgo(980), annualUsed: 7, sickUsed: 0, att: 98, late: 1 },
+    { name: "Brian Ochieng", idNo: "89012345", dept: "Sales", role: "Sales Rep", basic: 28000, house: 4000, transport: 3500, helb: 1500, mpesa: "0788444555", status: "Active", storeId: kiambu.id, joined: daysAgo(300), annualUsed: 5, sickUsed: 2, att: 96, late: 2 },
+    { name: "Lucy Wambui", idNo: "90123456", dept: "Store", role: "Store Keeper", basic: 24000, house: 3000, transport: 2000, helb: 0, mpesa: "0799555666", status: "Active", storeId: kiambu.id, joined: daysAgo(350), annualUsed: 9, sickUsed: 1, att: 93, late: 4 },
+    { name: "Dennis Mutua", idNo: "11223344", dept: "IT", role: "Systems Admin", basic: 60000, house: 14000, transport: 7000, helb: 4000, mpesa: "0700666777", status: "Active", storeId: thika.id, joined: daysAgo(500), annualUsed: 8, sickUsed: 0, att: 97, late: 1 },
+    { name: "Alice Chepkemoi", idNo: "22334455", dept: "Sales", role: "Cashier", basic: 26000, house: 3500, transport: 2500, helb: 0, mpesa: "0711777888", status: "Active", storeId: kiambu.id, joined: daysAgo(280), annualUsed: 3, sickUsed: 0, att: 95, late: 2 },
+    { name: "Victor Omondi", idNo: "33445566", dept: "Security", role: "Guard", basic: 16000, house: 1000, transport: 800, helb: 0, mpesa: "0722888999", status: "Active", storeId: thika.id, joined: daysAgo(720), annualUsed: 6, sickUsed: 2, att: 99, late: 0 },
+  ];
 
-  for (const e of employees) {
+  for (let i = 0; i < employees.length; i++) {
+    const e = employees[i];
     const emp = await db.employee.create({
       data: {
+        staffNo: `DF-${String(i + 1).padStart(3, "0")}`,
         name: e.name, idNo: e.idNo, dept: e.dept, role: e.role, basic: e.basic,
-        houseAllowance: e.house, transport: e.transport, helb: e.helb, mpesaNumber: e.mpesa,
-        bankAccount: `Equity ••${e.idNo.slice(-4)}`,
+        houseAllowance: e.house, transport: e.transport, helb: e.helb,
+        mpesaNumber: e.mpesa, bankAccount: `Equity ••${e.idNo.slice(-4)}`,
+        kraPin: `A00${e.idNo.slice(0, 5)}Z`, nssfNo: `NSSF${e.idNo.slice(0, 6)}`,
+        shifNo: `SHIF${e.idNo.slice(0, 6)}`, housingNo: `HL${e.idNo.slice(0, 6)}`,
+        emergencyName: e.name.split(" ")[1] ? `${e.name.split(" ")[0]} Kin` : "Next of Kin",
+        emergencyPhone: `07${e.idNo.slice(2, 4)}999${e.idNo.slice(0, 2)}`,
+        leaveAnnual: 21, leaveAnnualUsed: e.annualUsed, leaveSick: 7, leaveSickUsed: e.sickUsed,
+        attendancePct: e.att, status: e.status, storeId: e.storeId, joinedAt: e.joined,
       },
     });
-    await db.payslip.create({
-      data: { employeeId: emp.id, period: "2026-09", basic: e.basic, houseAllowance: e.house, transport: e.transport, gross: 0, nssf: 0, shif: 0, housingLevy: 0, paye: 0, helb: e.helb, net: 0, status: "Draft" },
+    // current + previous payslip
+    for (const period of ["2026-08", "2026-09"]) {
+      await db.payslip.create({
+        data: { employeeId: emp.id, period, basic: e.basic, houseAllowance: e.house, transport: e.transport, gross: 0, nssf: 0, shif: 0, housingLevy: 0, paye: 0, helb: e.helb, net: 0, status: period === "2026-09" ? "Draft" : "Paid" },
+      });
+    }
+    // attendance register: last 7 days
+    for (let d = 0; d < 7; d++) {
+      const day = new Date(now.getTime() - d * 864e5);
+      const isSunday = day.getDay() === 0;
+      const onLeave = e.status === "On Leave" && d < 3;
+      const late = d === e.late % 7 && !onLeave;
+      const status = isSunday ? "OFF" : onLeave ? "Leave" : late ? "Late" : d === 5 && e.role === "Loader" ? "Absent" : "Present";
+      await db.attendance.create({
+        data: {
+          employeeId: emp.id, date: day.toISOString().slice(0, 10), status,
+          checkIn: status === "Present" ? "07:5" + (5 + (i % 4)) : status === "Late" ? "08:03" : null,
+          checkOut: status === "Present" || status === "Late" ? "17:1" + (i % 6) : null,
+          overtimeHrs: d === 4 && e.role !== "Guard" ? 2 : 0,
+        },
+      });
+    }
+  }
+  // advances: 3 staff owe
+  for (const [idx, amt] of [[1, 15000], [5, 8000], [8, 20000]] as const) {
+    const emp = await db.employee.findFirst({ where: { staffNo: `DF-${String(idx + 1).padStart(3, "0")}` } });
+    if (emp) {
+      await db.staffAdvance.create({
+        data: { employeeId: emp.id, ref: `ADV-${String(idx).padStart(3, "0")}`, principal: amt, installment: Math.round(amt / 6), outstanding: Math.round(amt * 0.6), reason: "School fees", takenAt: daysAgo(70) },
+      });
+    }
+  }
+
+  // ─── Day closing: 2 closed days + today open ─────────────
+  const mkDayClose = async (date: Date, sales: number, receipts: number, cash: number, mpesa: number, cashCounted: number, mpesaCounted: number, closed: boolean) => {
+    const d = date.toISOString().slice(0, 10).replace(/-/g, "");
+    const variance = closed ? cashCounted + mpesaCounted - cash - mpesa : 0;
+    await db.dayClose.create({
+      data: {
+        zNo: `Z-${d}-THIKA`, storeId: thika.id, businessDate: date.toISOString().slice(0, 10),
+        status: closed ? "Closed" : "Open", salesTotal: sales, receipts,
+        cashSystem: cash, cashCounted: closed ? cashCounted : null,
+        mpesaSystem: mpesa, mpesaCounted: closed ? mpesaCounted : null,
+        cardSystem: Math.round(sales * 0.04), variance,
+        approvedBy: closed ? "Peter Kimani (Owner)" : "",
+        staffOnDuty: "Mary Wanjiku, James Otieno, Samuel Mwangi, Victor Omondi",
+        openingCash: 15000, closingCash: closed ? cashCounted : null,
+        openedAt: date, closedAt: closed ? new Date(date.getTime() + 20 * 36e5) : null,
+      },
     });
+  };
+  await mkDayClose(daysAgo(2), 118300, 42, 47200, 52800, 47000, 52800, true);
+  await mkDayClose(daysAgo(1), 131050, 48, 52400, 58700, 52800, 58700, true);
+  const todayNoon = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0);
+  await mkDayClose(todayNoon, 96400, 35, 38600, 43100, 0, 0, false);
+
+  // ─── Accounting: chart of accounts + journals + bank stmt ─
+  const coa: { code: string; name: string; type: string; parent?: string; isGroup?: boolean }[] = [
+    { code: "1000", name: "ASSETS", type: "Asset", isGroup: true },
+    { code: "1010", name: "Cash — Thika Road", type: "Asset", parent: "1000" },
+    { code: "1020", name: "Cash — Kiambu Road", type: "Asset", parent: "1000" },
+    { code: "1030", name: "M-Pesa Till 123456", type: "Asset", parent: "1000" },
+    { code: "1100", name: "Bank — Equity Current", type: "Asset", parent: "1000" },
+    { code: "1200", name: "Inventory", type: "Asset", parent: "1000" },
+    { code: "1300", name: "Debtors (Receivables)", type: "Asset", parent: "1000" },
+    { code: "1400", name: "VAT Input (Recoverable)", type: "Asset", parent: "1000" },
+    { code: "2000", name: "LIABILITIES", type: "Liability", isGroup: true },
+    { code: "2100", name: "Creditors (Suppliers)", type: "Liability", parent: "2000" },
+    { code: "2200", name: "VAT Output (Payable)", type: "Liability", parent: "2000" },
+    { code: "2300", name: "PAYE / NSSF / SHIF Payable", type: "Liability", parent: "2000" },
+    { code: "2400", name: "Customer Deposits", type: "Liability", parent: "2000" },
+    { code: "3000", name: "EQUITY", type: "Equity", isGroup: true },
+    { code: "3100", name: "Owner Capital", type: "Equity", parent: "3000" },
+    { code: "3200", name: "Retained Earnings", type: "Equity", parent: "3000" },
+    { code: "4000", name: "REVENUE", type: "Revenue", isGroup: true },
+    { code: "4100", name: "Sales — Hardware", type: "Revenue", parent: "4000" },
+    { code: "4200", name: "Sales — Cement & Building", type: "Revenue", parent: "4000" },
+    { code: "4300", name: "Other Income", type: "Revenue", parent: "4000" },
+    { code: "5000", name: "COST OF GOODS SOLD", type: "COGS", isGroup: true },
+    { code: "5100", name: "Purchases", type: "COGS", parent: "5000" },
+    { code: "5200", name: "Stock Adjustments", type: "COGS", parent: "5000" },
+    { code: "6000", name: "EXPENSES", type: "Expense", isGroup: true },
+    { code: "6100", name: "Salaries & Wages", type: "Expense", parent: "6000" },
+    { code: "6200", name: "Rent", type: "Expense", parent: "6000" },
+    { code: "6300", name: "Electricity & Water", type: "Expense", parent: "6000" },
+    { code: "6400", name: "Transport & Fuel", type: "Expense", parent: "6000" },
+    { code: "6500", name: "Licenses & eTIMS", type: "Expense", parent: "6000" },
+  ];
+  for (const a of coa) {
+    await db.account.create({ data: { code: a.code, name: a.name, type: a.type, parent: a.parent ?? null, isGroup: a.isGroup ?? false } });
+  }
+  const acc = (code: string) => ({ account: { connect: { code } } });
+
+  const mkJournal = async (jvNo: string, date: string, memo: string, source: string, refNo: string, lines: { code: string; debit?: number; credit?: number; memo?: string }[]) => {
+    await db.journalEntry.create({
+      data: {
+        jvNo, date, memo, source, refNo, storeId: thika.id,
+        lines: { create: lines.map((l) => ({ ...acc(l.code), debit: l.debit ?? 0, credit: l.credit ?? 0, memo: l.memo ?? "" })) },
+      },
+    });
+  };
+
+  // opening capital
+  await mkJournal("JV-0001", daysAgo(30).toISOString().slice(0, 10), "Opening balances — owner injection", "Manual", "", [
+    { code: "1010", debit: 850000 }, { code: "1030", debit: 320000 }, { code: "1100", debit: 1400000 },
+    { code: "1200", debit: 2100000 }, { code: "3100", credit: 4670000 },
+  ]);
+  // two historical day-close journals (Sep 17 & 16)
+  await mkJournal("JV-0002", daysAgo(2).toISOString().slice(0, 10), "Daily sales — Z-2026-0917-THIKA", "DayClose", "Z-2026-0917-THIKA", [
+    { code: "1010", debit: 47200, memo: "Cash sales" }, { code: "1030", debit: 52800, memo: "M-Pesa sales" },
+    { code: "1100", debit: 4732, memo: "Card settlements" }, { code: "2200", credit: 16868, memo: "VAT 16%" },
+    { code: "4100", credit: 62000 }, { code: "4200", credit: 33864 },
+    { code: "5100", debit: 78900, memo: "COGS" }, { code: "1200", credit: 78900 },
+  ]);
+  await mkJournal("JV-0003", daysAgo(1).toISOString().slice(0, 10), "Daily sales — Z-2026-0918-THIKA", "DayClose", "Z-2026-0918-THIKA", [
+    { code: "1010", debit: 52400, memo: "Cash sales" }, { code: "1030", debit: 58700, memo: "M-Pesa sales" },
+    { code: "2200", credit: 18210, memo: "VAT 16%" },
+    { code: "4100", credit: 70000 }, { code: "4200", credit: 22890 },
+    { code: "5100", debit: 87120, memo: "COGS" }, { code: "1200", credit: 87120 },
+  ]);
+  await mkJournal("JV-0004", daysAgo(1).toISOString().slice(0, 10), "Electricity bill — Kenya Power", "Manual", "KPLC-8891", [
+    { code: "6300", debit: 18400 }, { code: "1010", credit: 18400 },
+  ]);
+  await mkJournal("JV-0005", daysAgo(5).toISOString().slice(0, 10), "Rent — Thika Road shop", "Manual", "RENT-SEP", [
+    { code: "6200", debit: 120000 }, { code: "1100", credit: 120000 },
+  ]);
+
+  // cached account balances (debit-positive)
+  const agg = await db.journalLine.groupBy({ by: ["accountId"], _sum: { debit: true, credit: true } });
+  for (const g of agg) {
+    const debit = g._sum.debit ?? 0, credit = g._sum.credit ?? 0;
+    await db.account.update({ where: { id: g.accountId }, data: { balance: debit - credit } });
+  }
+
+  // ─── Bank recon: M-Pesa till statement ───────────────────
+  const stmt: { date: string; ref: string; description: string; amount: number; matched: boolean; matchRef?: string }[] = [
+    { date: daysAgo(2).toISOString().slice(0, 10), ref: "SBE4721KL", description: "Customer payment INV-2891", amount: 52800, matched: true, matchRef: "JV-0002" },
+    { date: daysAgo(2).toISOString().slice(0, 10), ref: "SBE4722KL", description: "Paybill transfer to Equity", amount: -30000, matched: true, matchRef: "JV-0002" },
+    { date: daysAgo(1).toISOString().slice(0, 10), ref: "SBE4790KL", description: "Customer payment INV-2902", amount: 58700, matched: true, matchRef: "JV-0003" },
+    { date: daysAgo(1).toISOString().slice(0, 10), ref: "SBE4791KL", description: "M-Pesa charges", amount: -220, matched: false },
+    { date: now.toISOString().slice(0, 10), ref: "SBE4801KL", description: "Customer payment INV-2910", amount: 21400, matched: false },
+    { date: now.toISOString().slice(0, 10), ref: "SBE4802KL", description: "Supplier Bamburi refund", amount: 4300, matched: false },
+  ];
+  for (const s of stmt) {
+    await db.bankStatementLine.create({ data: { date: s.date, ref: s.ref, description: s.description, amount: s.amount, matched: s.matched, matchRef: s.matchRef ?? "" } });
   }
 
   // ─── Raven chat ──────────────────────────────────────────
@@ -292,6 +468,8 @@ async function main() {
     stores: await db.store.count(), products: await db.product.count(),
     customers: await db.customer.count(), sales: await db.sale.count(),
     deals: await db.pipelineDeal.count(), employees: await db.employee.count(),
+    attendances: await db.attendance.count(), dayCloses: await db.dayClose.count(),
+    accounts: await db.account.count(), journals: await db.journalEntry.count(),
     channels: await db.chatChannel.count(), giftCards: await db.giftCard.count(),
     debtPlans: await db.debtPlan.count(),
   };

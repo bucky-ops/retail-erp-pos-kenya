@@ -5,6 +5,7 @@ import {
   LayoutDashboard, ShoppingCart, KanbanSquare, Boxes, Users, HandCoins, ReceiptText,
   Banknote, MessageSquare, MessagesSquare, BarChart3, Settings2, Palette, LogOut,
   ChevronLeft, Wifi, WifiOff, Search, Store as StoreIcon, RefreshCw, PackageCheck, Menu,
+  CalendarClock, Landmark,
 } from "lucide-react";
 import { useApp, useSync, ScreenId } from "@/lib/store";
 import { api } from "@/lib/api";
@@ -28,6 +29,8 @@ import MessagesScreen from "@/components/screens/messages-screen";
 import ChatScreen from "@/components/screens/chat-screen";
 import ReportsScreen from "@/components/screens/reports-screen";
 import SettingsScreen from "@/components/screens/settings-screen";
+import DayCloseScreen from "@/components/screens/day-close-screen";
+import AccountingScreen from "@/components/screens/accounting-screen";
 
 const NAV: { id: ScreenId; label: string; icon: typeof LayoutDashboard }[] = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -41,6 +44,8 @@ const NAV: { id: ScreenId; label: string; icon: typeof LayoutDashboard }[] = [
   { id: "messages", label: "Messages", icon: MessageSquare },
   { id: "chat", label: "Raven Chat", icon: MessagesSquare },
   { id: "reports", label: "Reports", icon: BarChart3 },
+  { id: "dayclose", label: "Day Close", icon: CalendarClock },
+  { id: "accounting", label: "Accounting", icon: Landmark },
   { id: "settings", label: "Settings", icon: Settings2 },
   { id: "design", label: "Design System", icon: Palette },
 ];
@@ -355,6 +360,8 @@ export default function App() {
                 {page === "messages" && <MessagesScreen />}
                 {page === "chat" && <ChatScreen />}
                 {page === "reports" && <ReportsScreen />}
+                {page === "dayclose" && <DayCloseScreen />}
+                {page === "accounting" && <AccountingScreen />}
                 {page === "settings" && <SettingsScreen />}
               </main>
 

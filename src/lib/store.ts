@@ -7,7 +7,7 @@ import { SettingsDto, StoreDto, StaffDto } from "@/types";
 export type ScreenId =
   | "design" | "login" | "dashboard" | "pos" | "pipeline" | "inventory"
   | "customers" | "debts" | "receipts" | "payroll" | "messages"
-  | "chat" | "reports" | "settings";
+  | "chat" | "reports" | "settings" | "dayclose" | "accounting";
 
 export interface AuthUser {
   id: number;

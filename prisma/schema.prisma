@@ -27,6 +27,8 @@ model Store {
   salesReturns    SalesReturn[]
   stockTakes      StockTake[]
   supplierReturns SupplierReturn[]
+  employees       Employee[]
+  dayCloses       DayClose[]
 }
 
 model Staff {
@@ -351,22 +353,6 @@ model DebtPayment {
 
 // ─── HR & Kenya payroll ──────────────────────────────────────────────────────
 
-model Employee {
-  id             Int       @id @default(autoincrement())
-  name           String
-  idNo           String
-  dept           String
-  role           String
-  basic          Float
-  houseAllowance Float     @default(0)
-  transport      Float     @default(0)
-  helb           Float     @default(0)
-  bankAccount    String?
-  mpesaNumber    String?
-  active         Boolean   @default(true)
-  payslips       Payslip[]
-}
-
 model Payslip {
   id             Int      @id @default(autoincrement())
   employeeId     Int
@@ -539,4 +525,150 @@ model SupplierReturnItem {
   qty              Float
   unitCost         Float
   total            Float
+}
+
+// ─── HRMS: employee master, attendance & leave ────────────────────────────────
+// Full employee records for the Kenya HRMS screen: statutory numbers (KRA PIN,
+// NSSF, SHIF, Housing Levy), salary channel (bank / M-Pesa), emergency contact,
+// leave balances and a daily attendance register with check-in times.
+
+model Employee {
+  id              Int            @id @default(autoincrement())
+  staffNo         String         @unique @default("") // DF-001
+  name            String
+  idNo            String
+  kraPin          String         @default("")
+  nssfNo          String         @default("")
+  shifNo          String         @default("")
+  housingNo       String         @default("") // Housing Levy number
+  dept            String
+  role            String
+  storeId         Int?
+  store           Store?         @relation(fields: [storeId], references: [id])
+  basic           Float
+  houseAllowance  Float          @default(0)
+  transport       Float          @default(0)
+  helb            Float          @default(0)
+  bankAccount     String?
+  mpesaNumber     String?
+  emergencyName   String         @default("")
+  emergencyPhone  String         @default("")
+  leaveAnnual     Int            @default(21) // entitled days
+  leaveAnnualUsed Int            @default(0)
+  leaveSick       Int            @default(7)
+  leaveSickUsed   Int            @default(0)
+  attendancePct   Float          @default(96) // trailing 30 days
+  status          String         @default("Active") // Active | On Leave | Suspended | Exited
+  joinedAt        DateTime       @default(now())
+  active          Boolean        @default(true)
+  payslips        Payslip[]
+  attendances     Attendance[]
+  advances        StaffAdvance[]
+}
+
+model Attendance {
+  id          Int      @id @default(autoincrement())
+  employeeId  Int
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  date        String // "2026-09-18" — day granularity
+  status      String   @default("Present") // Present | Late | Absent | Leave | OFF
+  checkIn     String? // "08:03"
+  checkOut    String? // "17:12"
+  overtimeHrs Float    @default(0)
+
+  @@unique([employeeId, date])
+}
+
+// Salary advance / loan with installment tracking
+model StaffAdvance {
+  id          Int       @id @default(autoincrement())
+  employeeId  Int
+  employee    Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  ref         String    @default("") // ADV-001
+  principal   Float
+  installment Float     @default(0) // deducted per payslip
+  outstanding Float
+  reason      String    @default("")
+  takenAt     DateTime  @default(now())
+  clearedAt   DateTime?
+}
+
+// ─── Day closing workflow (Z reports) ─────────────────────────────────────────
+// Owner closes the till day: count cash + M-Pesa, check variance vs system,
+// get manager approval for big variances, then freeze a Z report. Closing a
+// day also auto-posts the sales journal into the accounting module.
+
+model DayClose {
+  id           Int       @id @default(autoincrement())
+  zNo          String    @unique // Z-2026-0918-THIKA
+  storeId      Int
+  store        Store     @relation(fields: [storeId], references: [id])
+  businessDate String // "2026-09-18"
+  status       String    @default("Open") // Open | Closed
+  salesTotal   Float     @default(0)
+  receipts     Int       @default(0)
+  cashSystem   Float     @default(0)
+  cashCounted  Float?
+  mpesaSystem  Float     @default(0)
+  mpesaCounted Float?
+  cardSystem   Float     @default(0)
+  variance     Float     @default(0) // counted - system (cash+mpesa)
+  approvedBy   String    @default("")
+  staffOnDuty  String    @default("") // comma separated names
+  openingCash  Float     @default(0)
+  closingCash  Float?
+  note         String    @default("")
+  openedAt     DateTime  @default(now())
+  closedAt     DateTime?
+}
+
+// ─── Accounting: chart of accounts, journals, bank recon ──────────────────────
+// Simple but complete double-entry ledger. Accounts form a tree (1000 Assets →
+// 1010 Cash Thika...). Every day close auto-posts a sales journal. Trial
+// balance, P&L and Balance Sheet are computed from JournalLine sums.
+
+model Account {
+  id      Int           @id @default(autoincrement())
+  code    String        @unique // "1010"
+  name    String // "Cash — Thika Road"
+  type    String // Asset | Liability | Equity | Revenue | COGS | Expense
+  parent  String? // parent account code, null for roots
+  isGroup Boolean       @default(false) // group headers cannot be posted to
+  balance Float         @default(0) // cached balance (debit-positive)
+  lines   JournalLine[]
+}
+
+model JournalEntry {
+  id        Int           @id @default(autoincrement())
+  jvNo      String        @unique // JV-0001
+  date      String // "2026-09-18"
+  memo      String        @default("")
+  source    String        @default("Manual") // Manual | DayClose | Payroll | Inventory
+  refNo     String        @default("") // Z-…, PAY-…, PO-…
+  storeId   Int?
+  createdAt DateTime      @default(now())
+  lines     JournalLine[]
+}
+
+model JournalLine {
+  id        Int          @id @default(autoincrement())
+  entryId   Int
+  entry     JournalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  accountId Int
+  account   Account      @relation(fields: [accountId], references: [id])
+  debit     Float        @default(0)
+  credit    Float        @default(0)
+  memo      String       @default("")
+}
+
+// M-Pesa till / bank statement lines used by the reconciliation view
+model BankStatementLine {
+  id          Int     @id @default(autoincrement())
+  date        String
+  till        String  @default("M-Pesa Till 123456")
+  ref         String // receipt no / paybill ref
+  description String
+  amount      Float // +money in, -money out
+  matched     Boolean @default(false)
+  matchRef    String  @default("") // JV-… it reconciles to
 }
