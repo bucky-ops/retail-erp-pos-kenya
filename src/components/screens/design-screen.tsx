@@ -95,7 +95,7 @@ export default function DesignScreen() {
     <div className="space-y-8">
       <ScreenHeader
         title="Design System"
-        subtitle="DukaFlow brand v1.2.0 - components, tokens & logo rules"
+        subtitle="DukaFlow brand v1.3.0 - components, tokens & logo rules"
         actions={
           <Button
             onClick={downloadLogo}

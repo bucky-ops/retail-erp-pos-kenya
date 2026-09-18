@@ -18,6 +18,7 @@ export async function GET(req: NextRequest) {
   const since = new Date(Date.now() - days * 24 * 3600 * 1000);
   const expenses = await db.expense.findMany({
     where: {
+      archivedAt: null,
       ...(storeId && storeId !== "all" ? { storeId: Number(storeId) } : {}),
       spentAt: { gte: since },
     },

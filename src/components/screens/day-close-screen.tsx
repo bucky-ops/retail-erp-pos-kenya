@@ -1,12 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import {
-  AlertTriangle, Banknote, CalendarClock, CheckCircle2, CreditCard, FileText,
-  Loader2, Lock, RefreshCw, Scale, ShieldCheck, Smartphone, Store,
+  AlertTriangle, Banknote, CalendarClock, CheckCircle2, CreditCard, ExternalLink, FileText,
+  Loader2, Lock, Printer, RefreshCw, Scale, ShieldCheck, Smartphone, Store,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { KES } from "@/types";
+import { type ReceiptDocData } from "@/lib/receipt";
+import { ReceiptDocument, printReceiptArea } from "@/components/df/receipt-document";
 import { ScreenHeader, KpiCard, Panel, EmptyState, TableSkeleton } from "@/components/df/shared";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -45,9 +48,14 @@ interface DayCloseDTO {
   staffOnDuty: string;
   openingCash: number;
   closingCash: number | null;
+  paybillSystem: number;
+  pointsSystem: number;
+  discountsTotal: number;
+  returnsTotal: number;
   note: string;
   openedAt: string;
   closedAt: string | null;
+  digitalCode?: string | null;
 }
 
 interface DCPayload {
@@ -55,6 +63,85 @@ interface DCPayload {
   history: DayCloseDTO[];
   staffOnDuty: string[];
   breakdown: { method: string; total: number; count: number }[];
+}
+
+/* -- Z-Report receipt (ReceiptDocument + digital twin) ----- */
+
+const RECEIPT_HOST_CSS = `
+#df-receipt-host { display: none; }
+@media print {
+  #df-receipt-host { display: block !important; }
+  body > *:not(#df-receipt-host) { display: none !important; }
+  #df-receipt-host .df-receipt { position: static !important; left: auto; top: auto; }
+}
+`;
+
+function ReceiptPrintHost({ docs, mode }: { docs: ReceiptDocData[]; mode: "thermal" | "a4" }) {
+  if (docs.length === 0) return null;
+  // portals only exist client-side; docs start empty so SSR renders null and hydration stays in sync
+  if (typeof document === "undefined") return null;
+  return createPortal(
+    <div id="df-receipt-host" aria-hidden>
+      <style>{RECEIPT_HOST_CSS}</style>
+      {docs.map((d, i) => (
+        <div key={`${i}-${d.docNo}`} style={{ pageBreakAfter: i < docs.length - 1 ? "always" : "auto" }}>
+          <ReceiptDocument data={d} mode={mode} />
+        </div>
+      ))}
+    </div>,
+    document.body
+  );
+}
+
+/** Z-Report as a ReceiptDocument: float, sales by tender, discounts, returns, closing cash, variance. */
+function zReportDoc(today: DayCloseDTO, receiptCode?: string): ReceiptDocData {
+  const varianceOk = Math.abs(today.variance) <= TOLERANCE;
+  return {
+    kind: "ZREPORT",
+    docNo: today.zNo,
+    receiptCode,
+    date: fmtTime(today.closedAt ?? today.openedAt),
+    storeName: today.storeName,
+    kraPin: "P051234567A",
+    tillNo: "01",
+    servedBy: today.staffOnDuty || "-",
+    lines: [],
+    totals: [
+      { label: "Receipts", value: String(today.receipts) },
+      { label: "Net sales", value: KES(today.salesTotal), bold: true },
+      { label: "Variance", value: signed(today.variance), bold: true },
+      { label: "Status", value: varianceOk ? "WITHIN TOLERANCE" : "OVER TOLERANCE" },
+      ...(today.approvedBy ? [{ label: "Approved by", value: today.approvedBy }] : []),
+    ],
+    grandTotal: KES(today.salesTotal),
+    extraBlocks: [
+      { heading: "Opening Float", rows: [{ label: "Opening cash", value: KES(today.openingCash) }] },
+      {
+        heading: "Sales by Payment Method",
+        rows: [
+          { label: "Cash", value: KES(today.cashSystem) },
+          { label: "M-Pesa Till", value: KES(today.mpesaSystem) },
+          { label: "M-Pesa Paybill", value: KES(today.paybillSystem) },
+          { label: "Card", value: KES(today.cardSystem) },
+          { label: "Points", value: KES(today.pointsSystem) },
+        ],
+      },
+      { heading: "Discounts", rows: [{ label: "Discounts total", value: KES(today.discountsTotal) }] },
+      { heading: "Returns", rows: [{ label: "Returns total", value: KES(today.returnsTotal) }] },
+      ...(today.closingCash != null
+        ? [{ heading: "Closing Cash", rows: [{ label: "Closing cash banked", value: KES(today.closingCash) }] }]
+        : []),
+      {
+        heading: "Variance",
+        rows: [
+          { label: "Counted - system", value: signed(today.variance), bold: true },
+          { label: "Tolerance", value: `+/- ${KES(TOLERANCE)}` },
+        ],
+      },
+      ...(today.note ? [{ heading: "Notes", rows: [{ label: "Note", value: today.note }] }] : []),
+    ],
+    footerMessage: today.status === "Closed" ? "Day frozen - figures are final" : "Provisional Z reading - freeze to finalise",
+  };
 }
 
 const err = (e: unknown) => (e instanceof Error ? e.message : "Something went wrong");
@@ -208,6 +295,41 @@ export default function DayCloseScreen() {
 
   const loading = data === null;
   const history = data?.history ?? [];
+
+  /* -- Z-Report receipt printing -- */
+  const [printDocs, setPrintDocs] = useState<ReceiptDocData[]>([]);
+  const [printMode, setPrintMode] = useState<"thermal" | "a4">("a4");
+  const [zBusy, setZBusy] = useState(false);
+
+  /** Print Z: reuse the stored digitalCode, else create the digital twin first. */
+  const printZReport = useCallback(async () => {
+    if (!today) return;
+    setZBusy(true);
+    let code = today.digitalCode ?? null;
+    const doc = zReportDoc(today, code ?? undefined);
+    if (!code) {
+      try {
+        const dr = await api.post<{ receiptCode: string; url: string }>("/api/digital-receipt", {
+          kind: "ZREPORT",
+          refNo: today.zNo,
+          payload: doc,
+        });
+        code = dr.receiptCode;
+        doc.receiptCode = code;
+        // remember the twin so the Digital Z chip appears without a reload
+        setData((d) => (d && d.today ? { ...d, today: { ...d.today, digitalCode: code } } : d));
+      } catch {
+        // twin failed - print anyway, QR falls back to the Z number
+      }
+    }
+    setPrintMode("a4");
+    setPrintDocs([doc]);
+    // let React mount the hidden print host + generate the QR before window.print()
+    window.setTimeout(() => {
+      printReceiptArea("a4");
+      setZBusy(false);
+    }, 300);
+  }, [today]);
 
   /* -- KPI values -------------------------------------------- */
   const expectedCash = today ? today.openingCash + today.cashSystem : 0;
@@ -435,18 +557,31 @@ export default function DayCloseScreen() {
 
           {/* -- Z Report -- */}
           <Panel className="lg:col-span-2">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <h3 className="font-display text-[15px] font-bold text-[#172B4D]">Z Report</h3>
-              {today && (
-                <Badge
-                  className={cn(
-                    "rounded-full px-3 py-1 text-[11px] font-bold",
-                    closed ? "bg-[#E8F5E9] text-[#1B7A2E]" : "bg-[#FFF8E1] text-[#8B6D00]"
-                  )}
-                >
-                  {closed ? "Closed" : "Open"}
-                </Badge>
-              )}
+              <div className="flex items-center gap-1.5">
+                {today?.digitalCode && (
+                  <a
+                    href={`/receipt/${today.digitalCode}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    title={`Open the digital Z receipt at /receipt/${today.digitalCode}`}
+                    className="inline-flex items-center gap-1 rounded-full bg-[#E9F2FF] px-2.5 py-1 text-[10px] font-bold text-[#0052CC] transition hover:bg-[#D3E5FA]"
+                  >
+                    <ExternalLink size={10} /> Digital Z
+                  </a>
+                )}
+                {today && (
+                  <Badge
+                    className={cn(
+                      "rounded-full px-3 py-1 text-[11px] font-bold",
+                      closed ? "bg-[#E8F5E9] text-[#1B7A2E]" : "bg-[#FFF8E1] text-[#8B6D00]"
+                    )}
+                  >
+                    {closed ? "Closed" : "Open"}
+                  </Badge>
+                )}
+              </div>
             </div>
 
             {today && (
@@ -491,6 +626,26 @@ export default function DayCloseScreen() {
                 <p className="text-center text-[10px] text-[#6B778C]">
                   {closed ? "Day frozen - figures are final" : "Provisional - freeze to finalize"}
                 </p>
+              </div>
+            )}
+
+            {/* day lock notice + Z print */}
+            {closed && (
+              <div className="mt-3 flex items-center gap-2 rounded-xl bg-[#E8F5E9] px-3 py-2 text-[12px] font-semibold text-[#1B7A2E]">
+                <Lock size={14} /> Day locked - sales for this date need Manager PIN
+              </div>
+            )}
+
+            {today && (
+              <div className="mt-3">
+                <Button
+                  onClick={() => void printZReport()}
+                  disabled={zBusy}
+                  variant="outline"
+                  className="h-10 w-full rounded-xl text-[13px] font-semibold"
+                >
+                  {zBusy ? <Loader2 size={14} className="animate-spin" /> : <Printer size={14} />} Print Z-Report (A4 with QR)
+                </Button>
               </div>
             )}
 
@@ -600,6 +755,9 @@ export default function DayCloseScreen() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* hidden receipt print host (portaled to body, revealed by printReceiptArea) */}
+      <ReceiptPrintHost docs={printDocs} mode={printMode} />
     </div>
   );
 }

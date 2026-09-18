@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { createDigitalReceipt, logAudit } from "@/lib/supermarket-server";
 
 export const dynamic = "force-dynamic";
 
@@ -51,6 +52,10 @@ interface DayCloseDTO {
   mpesaSystem: number;
   mpesaCounted: number | null;
   cardSystem: number;
+  paybillSystem: number;
+  pointsSystem: number;
+  discountsTotal: number;
+  returnsTotal: number;
   variance: number;
   approvedBy: string;
   staffOnDuty: string;
@@ -59,12 +64,15 @@ interface DayCloseDTO {
   note: string;
   openedAt: string;
   closedAt: string | null;
+  digitalCode?: string | null;
 }
 
 type DayCloseRow = {
   id: number; zNo: string; storeId: number; businessDate: string; status: string;
   salesTotal: number; receipts: number; cashSystem: number; cashCounted: number | null;
   mpesaSystem: number; mpesaCounted: number | null; cardSystem: number; variance: number;
+  paybillSystem: number; pointsSystem: number; discountsTotal: number; returnsTotal: number;
+  digitalCode?: string | null;
   approvedBy: string; staffOnDuty: string; openingCash: number; closingCash: number | null;
   note: string; openedAt: Date; closedAt: Date | null;
   store: { name: string } | null;
@@ -84,6 +92,10 @@ const serialize = (dc: DayCloseRow): DayCloseDTO => ({
   mpesaSystem: r2(dc.mpesaSystem),
   mpesaCounted: dc.mpesaCounted == null ? null : r2(dc.mpesaCounted),
   cardSystem: r2(dc.cardSystem),
+  paybillSystem: r2(dc.paybillSystem),
+  pointsSystem: r2(dc.pointsSystem),
+  discountsTotal: r2(dc.discountsTotal),
+  returnsTotal: r2(dc.returnsTotal),
   variance: r2(dc.variance),
   approvedBy: dc.approvedBy,
   staffOnDuty: dc.staffOnDuty,
@@ -116,12 +128,15 @@ async function ensureToday(store: { id: number; name: string }) {
 
   const sales = await db.sale.findMany({
     where: { storeId: store.id, createdAt: { gte: startOfLocalDay() } },
-    select: { total: true, paymentMethod: true },
+    select: { total: true, paymentMethod: true, discount: true, pointsRedeemed: true },
   });
   const salesTotal = r2(sales.reduce((a, s) => a + s.total, 0));
   const cashSystem = r2(sales.filter((s) => isCash(s.paymentMethod)).reduce((a, s) => a + s.total, 0));
-  const mpesaSystem = r2(sales.filter((s) => isMpesa(s.paymentMethod)).reduce((a, s) => a + s.total, 0));
-  const cardSystem = r2(salesTotal - cashSystem - mpesaSystem);
+  const mpesaSystem = r2(sales.filter((s) => isMpesa(s.paymentMethod) && !s.paymentMethod.includes("Paybill")).reduce((a, s) => a + s.total, 0));
+  const paybillSystem = r2(sales.filter((s) => s.paymentMethod.includes("Paybill")).reduce((a, s) => a + s.total, 0));
+  const pointsSystem = r2(sales.filter((s) => s.paymentMethod.includes("Points")).reduce((a, s) => a + s.total, 0));
+  const cardSystem = r2(Math.max(0, salesTotal - cashSystem - mpesaSystem - paybillSystem - pointsSystem));
+  const discountsTotal = r2(sales.reduce((a, s) => a + s.discount, 0));
 
   const staff = await db.staff.findMany({ where: { onShift: true }, select: { name: true } });
   const staffOnDuty = staff.map((s) => s.name).join(", ") || "Counter 1";
@@ -138,7 +153,10 @@ async function ensureToday(store: { id: number; name: string }) {
         receipts: sales.length,
         cashSystem,
         mpesaSystem,
+        paybillSystem,
+        pointsSystem,
         cardSystem,
+        discountsTotal,
         variance: 0,
         approvedBy: "",
         staffOnDuty,
@@ -273,9 +291,26 @@ export async function POST(req: NextRequest) {
 
   try {
     const result = await db.$transaction(async (tx) => {
+      // Full tender capture at close (Paybill / Points / discounts / returns).
+      const daySales = await tx.sale.findMany({
+        where: { storeId: dc.storeId, createdAt: { gte: startOfLocalDay() } },
+        select: { total: true, discount: true, paymentMethod: true },
+      });
+      const returnsToday = await tx.salesReturn.findMany({
+        where: { storeId: dc.storeId, createdAt: { gte: startOfLocalDay() } },
+        select: { total: true },
+      });
+      const paybillSystem = r2(daySales.filter((s) => s.paymentMethod.includes("Paybill")).reduce((a, s) => a + s.total, 0));
+      const pointsSystem = r2(daySales.filter((s) => s.paymentMethod.includes("Points")).reduce((a, s) => a + s.total, 0));
+      const discountsTotal = r2(daySales.reduce((a, s) => a + s.discount, 0));
+      const returnsTotal = r2(returnsToday.reduce((a, s) => a + s.total, 0));
+
       const closed = await tx.dayClose.update({
         where: { id: dc.id },
-        data: { status: "Closed", closedAt: new Date(), closingCash, note },
+        data: {
+          status: "Closed", closedAt: new Date(), closingCash, note,
+          paybillSystem, pointsSystem, discountsTotal, returnsTotal,
+        },
       });
 
       // -- Auto-post the daily sales journal (single balanced entry) --
@@ -344,7 +379,58 @@ export async function POST(req: NextRequest) {
       return { zNo: closed.zNo, jvNo };
     });
 
-    return NextResponse.json({ ok: true, ...result });
+    // Z-Report digital receipt (public twin, QR on the printed Z).
+    let digitalCode: string | null = null;
+    let digitalUrl = "";
+    try {
+      const settings = await db.settings.findUnique({ where: { id: 1 } });
+      const storeRow = await db.store.findUnique({ where: { id: dc.storeId } });
+      const fresh = await db.dayClose.findUnique({ where: { id: dc.id } });
+      if (fresh) {
+        const doc = await createDigitalReceipt("ZREPORT", {
+          zNo: fresh.zNo,
+          businessDate: fresh.businessDate,
+          storeName: storeRow?.name ?? "Store",
+          storeAddress: settings?.companyAddress ?? "",
+          storePhone: settings?.companyPhone ?? "",
+          kraPin: settings?.kraPin ?? "",
+          openingFloat: fresh.openingCash,
+          salesByMethod: {
+            cash: fresh.cashSystem,
+            mpesaTill: fresh.mpesaSystem,
+            mpesaPaybill: fresh.paybillSystem,
+            card: fresh.cardSystem,
+            points: fresh.pointsSystem,
+          },
+          totalSales: fresh.salesTotal,
+          receipts: fresh.receipts,
+          discounts: fresh.discountsTotal,
+          returns: fresh.returnsTotal,
+          closingCash: fresh.closingCash,
+          variance: fresh.variance,
+          approvedBy: fresh.approvedBy,
+          staffOnDuty: fresh.staffOnDuty,
+          note: fresh.note,
+          closedAt: fresh.closedAt,
+        }, { refNo: fresh.zNo });
+        digitalCode = doc.receiptCode;
+        digitalUrl = doc.url;
+        await db.dayClose.update({ where: { id: dc.id }, data: { digitalCode } });
+      }
+    } catch (e) {
+      console.error("Z digital receipt failed (close stands)", e);
+    }
+    await logAudit({
+      actor: dc.approvedBy || body.approvedBy || "manager",
+      action: "DAY_CLOSE",
+      entity: "DayClose",
+      entityId: dc.id,
+      label: result.zNo,
+      details: JSON.stringify(result),
+      storeId: dc.storeId,
+    });
+
+    return NextResponse.json({ ok: true, ...result, digitalCode, digitalUrl });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Could not close the day.";
     return NextResponse.json({ error: message }, { status: 400 });

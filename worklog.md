@@ -188,3 +188,85 @@ Stage Summary:
 - FULL PIPELINE LIVE: Vercel (Next.js UI + API) -> Supabase Postgres (session/transaction poolers) -> seeded data -> verified in browser and via API.
 - Note for future sessions: any new dependency with install scripts may be silently skipped on Vercel (allow-scripts); keep critical generate steps in the project postinstall.
 - Sandbox default remains SQLite; hosted switch documented in scripts/db-hosted.sh.
+
+---
+Task ID: 13 - Naivas supermarket upgrade (foundation complete, frontend in progress)
+Agent: Z.ai Code (main)
+Task: Upgrade the entire DukaFlow system to behave like Naivas supermarket (barcode POS, hold/resume, multi-pay, digital receipts with QR, Z-reports, accounting print suite, full CRUD with trash/audit, quotation-to-payment chain, kiosk pages).
+
+Work Log (Phase 1 - backend foundation, COMPLETE):
+- Schema: added models PosHold, DigitalReceipt (NVS-DUKA-YYYY-XXXXX + uuid alias + payload snapshot), AuditLog, TrashItem, VersionLog. Added fields: Product.isScale + scaleCode (EAN-13 scale barcodes 2 AAAAA WWWWW C), Sale.digitalCode + paySplitsJson (multi-pay), DayClose.paybillSystem/pointsSystem/discountsTotal/returnsTotal + digitalCode, PipelineDeal.docsJson, Settings.logoUrl/companyPhone/companyAddress/tillNo/receiptFooterMessage/etimsEnabled, archivedAt on 8 CRUD models (Product, Customer, Supplier, Expense, GiftCard, PromoCode, Staff, Employee). db push OK (SQLite), schema.postgres.prisma synced.
+- Libs: src/lib/receipt.ts (receipt codes, ReceiptDocData model, kes formatting, scale barcode parser, CSV export, verify hash, PUBLIC_BASE_URL = retail-erp-pos-kenya.vercel.app), src/lib/supermarket-server.ts (createDigitalReceipt, checkDayLock manager-PIN override, logAudit, logVersion), src/lib/roles.ts (canSeeMargin: Owner/Manager/Accountant only), src/components/df/receipt-document.tsx (universal thermal 80mm + A4 receipt with local QR generation, printReceiptArea helper), globals.css additions (90vh modals, POS 100vh fit, kiosk dark, print rules).
+- APIs NEW: /api/pos-hold (GET/POST/DELETE hold+resume), /api/digital-receipt (public GET by code/uuid + admin list + POST create), /api/trash (GET bin, POST soft delete with reason + snapshot, PUT restore; archive mode for 8 models, hard-delete+snapshot for workflow docs), /api/audit (GET trail), /api/price-check (PUBLIC product/scale-barcode/gift-card lookup with computed weight price), /api/reports/financial (kind=general-ledger|trial-balance|balance-sheet|debtors-ledger|creditors-ledger|stock-ledger|mpesa-recon, each with verification hash), /files/[file] (QR PNG on the fly: /files/qr_NVS-DUKA-2026-00001.png).
+- APIs EXTENDED: /api/sales POST (day lock check with managerPin override 423, multi-pay split validation + partial payment to debt, DigitalReceipt auto-creation per sale, paySplitsJson, audit log), /api/day-close close action (paybill/points/discounts/returns capture, Z-Report digital receipt, audit), /api/pipeline/[id] PATCH (action=mature creates per-stage docs QT/PF/SO/INV/PAY with digital receipts; action=matureAll creates the full chain at once + real Sale).
+- List routes patched to filter archivedAt: null (products, customers, suppliers, expenses, gift-cards, staff employees, payroll).
+- Verified live: pos-hold create, digital receipt creation (NVS-DUKA-2026-00001/00002 with QR + Vercel URL), sale with splits (M-Pesa 1450 + Cash 1450), price-check product lookup, trash archive -> list hide -> restore -> list show, financial reports GL/BS, /files QR PNG (200 image/png). tsc clean.
+
+Stage Summary:
+- Backend foundation 100% done and tested. Frontend agents now building: 2-a POS screen Naivas mode, 2-b accounting + reports print/export suite, 2-c pipeline maturity + all-document receipts, 2-d public pages (receipt/price-checker/display/verify) + receipts screen + trash/audit UI.
+
+---
+Task ID: 2-d
+Agent: public-pages-2-d
+Task: Public receipt/price-checker/display/verify pages + receipts screen + trash/audit UI
+
+Work Log:
+- Read worklog (Task 13 backend done), contracts: src/lib/receipt.ts, df/receipt-document.tsx, /api/digital-receipt (GET ?code / ?list=1), /api/price-check, /api/trash, /api/audit, page.tsx shell, lib/store.ts, receipts-screen (Receipt Studio) + settings-screen (section layout).
+- NEW src/components/df/receipt-doc-adapter.ts: isomorphic payloadToReceiptDoc() converts ANY stored DigitalReceipt payload (SALE with items/splits/points, ZREPORT with salesByMethod + day reconciliation, sparse EXPENSE {total:500}) into ReceiptDocData for ReceiptDocument; kindLabel() for chips.
+- TASK 1 /receipt/[code]: thin server page (dynamic force-dynamic, Next 16 params Promise) + receipt-view.tsx client page. Own standalone layout (no app shell/auth/store): dark header with code chip, loyalty hero (+pts earned, balance + KES value) when payload has points, 80mm Roll / A4 Sheet toggle (thermal default), ReceiptDocument render, buttons Print (printReceiptArea with correct mode + custom print style that neutralizes the A4 preview scale), Save PDF (window.print, chrome elements df-no-print), WhatsApp share (wa.me/?text= "Your DukaFlow receipt {code} - {url}" verified live), Copy Link with "Copied!" feedback. A4 preview auto-scales to phone via ResizeObserver FitWidth. Graceful "Receipt not found" card with code + go-home CTA (404 from API handled).
+- TASK 2 /price-checker: full-screen .df-kiosk dark kiosk. Autofocus scan input (text-4xl mono uppercase), Enter for barcode guns + 300ms debounce for typed names, last-lookup guard. Found-product stage: emoji, name (up to text-6xl), price (text-8xl, kes()), per-unit line ("per kg"/"each"), scale-computed line ("1.25 kg x KES x = KES y") when kg present, category badge. Gift card codes show "Balance KES x" + status chip. NO MATCH big red state auto-clears after 4s and refocuses input. Touch keypad (1-9/0/00/del/Enter) for tablets at the pillar.
+- TASK 3 /display: customer display pole listening on BroadcastChannel("dukaflow-display"); handles {type:"cart", total, itemCount, points, storeName, customerName, customerTier?, lastItem} (lastItem as string OR object) and {type:"idle"}. Shows store name, giant tabular TOTAL (text-[26vw]/text-9xl), item count, "You will earn X pts", last scanned item line, customer + tier badge (Gold/Silver/Bronze tones). Idle: "Karibu DukaFlow!" + "Cashier will serve you shortly". Connection dot via useSyncExternalStore (no setState-in-effect, no hydration flash). Verified live by broadcasting a cart message in the browser.
+- TASK 4 /verify/[hash]: 62-line server page "Report Verification" - ShieldCheck hero, hash in mono box (clamped 64 chars), explanation copy, Checked-at timestamp (fmtDate), Open DukaFlow link.
+- TASK 5 receipts-screen: added Digital Receipts panel at the top (between KPI strip and studio): fetches GET /api/digital-receipt?list=1&limit=60, grid (max-h 330 df-slim-scroll) of cards with QR thumbnail (qrDataUrl img, bordered QR fallback), mono code, kind badge (SALE/ZREPORT/PAYSLIP/DEBT_PAYMENT tones via kindLabel), ref + date; card click opens /receipt/{code} in a new tab; per-card Print button loads the payload then prints the real ReceiptDocument via an off-screen print host + printReceiptArea. Refresh button. Existing Receipt Studio untouched. "Digital twin" chip links /receipt/{digitalCode} for the selected sale when it has one (local SaleWithDigital type extension, types.ts untouched).
+- TASK 6 trash-screen.tsx NEW: default TrashScreen (ScreenHeader + Tabs) plus exported TrashBinPanel (GET /api/trash; entity filter chips; rows with entity badge, label, reason, who, when; Restore via AlertDialog confirm -> PUT {trashId, restoredBy: user.name}; Restored rows show badge + disabled state; max-h scroll) and AuditTrailPanel (GET /api/audit?limit=150; timeline with spine + colored dots, action badges DELETE red / CREATE green / RESTORE blue / MATURE purple / DAY_CLOSE amber, actor + entity - label, details clamped, relative time with full-time title). store.ts: "trash" added to ScreenId. page.tsx: TrashScreen wired into the screen switch, NAV entry "Trash + Audit" (Trash2 icon), Utilities group in sidebar + mobile sheet with Price Checker (/price-checker) and Display Pole (/display) external links (target _blank, ExternalLink). settings-screen: "Trash + Audit" section (trashaudit SectionId) embedding the same two panels.
+- agent-browser QA: /receipt/NVS-DUKA-2026-00002 at 390x844 shows loyalty hero +29 pts, thermal doc, WhatsApp href exactly "Your DukaFlow receipt NVS-DUKA-2026-00002 - {url}", Copy Link -> "Copied!", A4 toggle renders scaled sheet; /receipt/NOT-A-REAL-CODE shows "Receipt not found" card; /price-checker lookup "Bamburi" -> brick emoji, name, KES 1,250.00, EACH, CEMENT badge, and NO MATCH state on garbage input; /display receives a broadcast cart message and shows KES 2,900.00, 2 items, earn 29 pts, last item, John Kamau + GOLD; app shell: sidebar shows Trash + Audit + Utilities links, Trash screen both tabs live with seed/audit data (RESTORE/DELETE/CREATE events), Receipts screen shows Digital Receipts grid (2 recent: SALE INV-2883 + EXPENSE EXP-1) with QRs and Print buttons, Settings Trash + Audit section renders both panels. Zero console/page errors.
+- Final gates: bunx tsc --noEmit -> 0 errors in all my files (3 remaining errors are in src/components/screens/pos-screen.tsx - Task 2-a agent's file, mid-edit on their SuccessState, not mine); eslint on all touched files -> 0 problems; em/en/box-drawing dash sweep on all touched files -> 0; dev.log clean for all new routes (200s).
+
+Stage Summary:
+- All 6 deliverables shipped: public digital receipt portal /receipt/[code] (thermal+A4, print/PDF/WhatsApp/copy, loyalty hero, graceful 404), price-checker kiosk /price-checker (barcode gun + touch keypad + scale-computed + gift card balance), customer display pole /display (BroadcastChannel cart mirror with idle welcome), verification page /verify/[hash], Receipt Studio upgraded with the Digital Receipts twin grid + per-card reprint + Digital twin chip, and governance UI (Trash + Audit screen + sidebar entry + Settings section). Files touched: NEW src/app/receipt/[code]/page.tsx + receipt-view.tsx, src/app/price-checker/page.tsx, src/app/display/page.tsx, src/app/verify/[hash]/page.tsx, src/components/screens/trash-screen.tsx, src/components/df/receipt-doc-adapter.ts; EDIT src/components/screens/receipts-screen.tsx, settings-screen.tsx (Trash + Audit section only), src/app/page.tsx (nav/switch only), src/lib/store.ts (ScreenId + "trash"). All public pages are dependency-free of app auth/store and mobile-first. Not committed.
+
+---
+Task ID: 2-a
+Agent: pos-supermarket-2-a (work recorded by main after agent deadline)
+Task: POS screen Naivas upgrade
+
+Work Log:
+- Global barcode scan engine: keystroke buffer (80ms idle + Enter flush) auto-adds products instantly; scale barcodes (2 AAAAA WWWWW C) parsed via parseScaleBarcode, weight priced qty=kg; unknown barcode toast.
+- Price Check mode toggle: scan shows big price popup without adding to cart.
+- HOLD + resume: HOLD button parks cart via POST /api/pos-hold then clears cart; Resume dialog lists server holds; holds also mirrored in localStorage (dukaflow-pos-holds) merged on mount so they survive refresh/offline/logout.
+- Multi-pay split rows (Cash, M-Pesa, Till, Paybill, Card, Points, Gift Card) with live remaining balance badge, allowPartial switch for customer debt, 423 day-lock dialog with Manager PIN retry.
+- IndexedDB product cache (offline.ts v2 store product-cache): instant boot from cache, background refresh, in-memory search <100ms.
+- Fullscreen toggle button; BroadcastChannel("dukaflow-display") cart broadcasts for the display pole; margin displays gated by canSeeMargin(role).
+- Sale success panel shows digital receipt code + QR (QrImage) linking /receipt/{code}.
+
+Stage Summary:
+- POS now behaves Naivas-grade: scan-to-cart, scale items, price check, persistent holds, split payments, kiosk-friendly. tsc clean.
+
+---
+Task ID: 2-b
+Agent: accounting-reports-2-b (work recorded by main after agent deadline)
+Task: Accounting + Reports print/export suite
+
+Work Log:
+- Print action on every accounting document row (Journal Entry, Payment Entry, Sales Invoice, Purchase Invoice, Expense Claim, Payslip, Stock Entry) rendering ReceiptDocument (a4) via printReceiptArea.
+- New report tabs: General Ledger, Trial Balance, Balance Sheet, Debtors Ledger, Creditors Ledger, Stock Ledger, M-Pesa Reconciliation loading /api/reports/financial with filters.
+- Every report: Print with logo header (ReportPrint wrapper), Export Excel (CSV), verification QR encoding /verify/{hash} + hash text.
+- Reports screen: Print + Export PDF + Export Excel on report tabs, print header with Generated by / date / filters / QR / footer.
+
+Stage Summary:
+- Full accounting print suite live with verification QRs on every document and report.
+
+---
+Task ID: 2-c
+Agent: docs-receipts-2-c (work recorded by main after agent deadline)
+Task: Pipeline maturity chain + receipts for every document type
+
+Work Log:
+- Pipeline: Mature to Proforma / Order / Invoice / Create Payment buttons (PATCH action=mature) + MASTER "Mature All At Once" with animated 5-tick stepper dialog showing generated doc numbers; per-stage docs (deal.docs) each printable individually; "Print Combined" staples all chain docs into one A4 print with page breaks + QRs.
+- Debts: per-payment Debtor Receipt print (kind DEBT_PAYMENT) + customer summary print + Debtors Payment Summary (ALL) print; digital receipts created via POST /api/digital-receipt so QRs link public pages.
+- Payroll: Payslip Receipt print (thermal + A4) with earnings/deductions lines, NET grand total; digital twin per payslip.
+- Day Close: Print Z-Report (kind ZREPORT) with Opening Float, Sales by Payment Method (Cash / M-Pesa Till / M-Pesa Paybill / Card / Points), Discounts, Returns, Closing Cash, Variance; Digital Z chip linking /receipt/{digitalCode}; locked-day badge.
+- Inventory: Expense Receipt print, Stock Adjustment Receipt print (signed qty lines + digital twin), Supplier (Creditor) Payment Receipt individual + Suppliers Summary.
+
+Stage Summary:
+- Every document type now prints a branded receipt with QR verification; quotation-to-payment chain is one click.

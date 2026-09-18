@@ -1,12 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Banknote, CalendarCheck2, ChevronDown, Download, FileDown, GraduationCap, HeartPulse, Home, Info,
-  Landmark, Loader2, Mail, Play, Plus, Send, ShieldCheck, Smartphone, TrendingDown, Users, Wallet,
+  Landmark, Loader2, Mail, Play, Plus, Printer, Send, ShieldCheck, Smartphone, TrendingDown, Users, Wallet,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { KES, PayslipDto } from "@/types";
+import { fmtDate, kes, type ReceiptDocData } from "@/lib/receipt";
+import { ReceiptDocument, printReceiptArea } from "@/components/df/receipt-document";
 import { ScreenHeader, KpiCard, Panel, EmptyState, TableSkeleton } from "@/components/df/shared";
 import { QrImage } from "@/components/df/qr";
 import { toast } from "@/hooks/use-toast";
@@ -29,6 +32,9 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 /* -- contracts & helpers ------------------------------------ */
 
@@ -137,6 +143,87 @@ const ATT_STYLES: Record<string, string> = {
 };
 
 const ATT_SHORT: Record<string, string> = { Present: "P", Late: "L", Absent: "A", Leave: "V", OFF: "-" };
+
+/* -- payslip receipt (ReceiptDocument + digital twin) ------ */
+
+const RECEIPT_HOST_CSS = `
+#df-receipt-host { display: none; }
+@media print {
+  #df-receipt-host { display: block !important; }
+  body > *:not(#df-receipt-host) { display: none !important; }
+  #df-receipt-host .df-receipt { position: static !important; left: auto; top: auto; }
+}
+`;
+
+function ReceiptPrintHost({ docs, mode }: { docs: ReceiptDocData[]; mode: "thermal" | "a4" }) {
+  if (docs.length === 0) return null;
+  // portals only exist client-side; docs start empty so SSR renders null and hydration stays in sync
+  if (typeof document === "undefined") return null;
+  return createPortal(
+    <div id="df-receipt-host" aria-hidden>
+      <style>{RECEIPT_HOST_CSS}</style>
+      {docs.map((d, i) => (
+        <div key={`${i}-${d.docNo}`} style={{ pageBreakAfter: i < docs.length - 1 ? "always" : "auto" }}>
+          <ReceiptDocument data={d} mode={mode} />
+        </div>
+      ))}
+    </div>,
+    document.body
+  );
+}
+
+/** ReceiptDocument for one payslip: earnings + deductions as lines, NET PAY as grand total. */
+function payslipDoc(slip: PayslipDto, receiptCode?: string): ReceiptDocData {
+  const lines: ReceiptDocData["lines"] = [];
+  let n = 1;
+  const add = (name: string, amount: number) => {
+    const v = Math.round(amount * 100) / 100;
+    lines.push({ no: n++, name, qty: 1, unit: "pc", unitPrice: v, discount: 0, total: v });
+  };
+  add("Basic salary", slip.basic);
+  if (slip.houseAllowance > 0) add("House allowance", slip.houseAllowance);
+  if (slip.transport > 0) add("Transport allowance", slip.transport);
+  if (slip.overtime > 0) add("Overtime", slip.overtime);
+  if (slip.nssf > 0) add("NSSF (Tier I + II) deduction", -slip.nssf);
+  if (slip.shif > 0) add("SHIF 2.75% deduction", -slip.shif);
+  if (slip.housingLevy > 0) add("Housing Levy 1.5% deduction", -slip.housingLevy);
+  if (slip.paye > 0) add("PAYE deduction", -slip.paye);
+  if (slip.helb > 0) add("HELB deduction", -slip.helb);
+  const deductions = slip.paye + slip.nssf + slip.shif + slip.housingLevy + slip.helb;
+  return {
+    kind: "PAYSLIP",
+    docNo: `PS-${slip.period}-${String(slip.employeeId).padStart(3, "0")}`,
+    receiptCode,
+    date: fmtDate(new Date()),
+    servedBy: "DukaFlow Payroll",
+    customerName: slip.employeeName,
+    lines,
+    totals: [
+      { label: "GROSS PAY", value: kes(slip.gross), bold: true },
+      { label: "Total deductions", value: `- ${kes(deductions)}`, bold: true },
+    ],
+    grandTotal: kes(slip.net),
+    paymentLines: [{ method: slip.mpesaNumber ? "M-Pesa B2C" : "Bank Transfer", amount: kes(slip.net) }],
+    extraBlocks: [
+      {
+        heading: "Employee details",
+        rows: [
+          { label: "Employee", value: slip.employeeName },
+          { label: "Staff ID", value: `ID ${slip.idNo}` },
+          { label: "Department", value: slip.dept },
+          { label: "Role", value: slip.role },
+          { label: "Pay period", value: periodLabel(slip.period) },
+          {
+            label: "Pay method",
+            value: slip.mpesaNumber ? `M-Pesa ${slip.mpesaNumber}` : slip.bankAccount ? `Bank ${slip.bankAccount}` : "-",
+          },
+          { label: "Status", value: slip.status },
+        ],
+      },
+    ],
+    footerMessage: "Net pay per Kenya 2024 statutory rates - NSSF / SHIF / AHL compliant",
+  };
+}
 
 /** Register cell for one employee-day. */
 function DayChip({ rec }: { rec: AttDay | null }) {
@@ -718,6 +805,33 @@ export default function PayrollScreen() {
   const allPaid = committed && rows.every((r) => r.status === "Paid");
   const deductions = (t?.gross ?? 0) - (t?.net ?? 0);
 
+  /* -- payslip receipt printing (thermal + A4, digital twin for the QR) -- */
+  const [printDocs, setPrintDocs] = useState<ReceiptDocData[]>([]);
+  const [printMode, setPrintMode] = useState<"thermal" | "a4">("thermal");
+  const [slipPrinting, setSlipPrinting] = useState(false);
+
+  const printPayslip = useCallback(async (slip: PayslipDto, mode: "thermal" | "a4") => {
+    setSlipPrinting(true);
+    const doc = payslipDoc(slip);
+    try {
+      const dr = await api.post<{ receiptCode: string }>('/api/digital-receipt', {
+        kind: "PAYSLIP",
+        refNo: doc.docNo,
+        payload: doc,
+      });
+      doc.receiptCode = dr.receiptCode;
+    } catch {
+      // digital twin failed - print anyway, QR falls back to the doc number
+    }
+    setPrintMode(mode);
+    setPrintDocs([doc]);
+    // let React mount the hidden print host + generate the QR before window.print()
+    window.setTimeout(() => {
+      printReceiptArea(mode);
+      setSlipPrinting(false);
+    }, 300);
+  }, []);
+
   return (
     <div className="space-y-4">
       <ScreenHeader
@@ -876,9 +990,31 @@ export default function PayrollScreen() {
                       </span>
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button variant="outline" size="sm" onClick={() => setSlip(r)} className="h-7 rounded-full px-3 text-[11px] font-semibold">
-                            Payslip
-                          </Button>
+                          <div className="flex items-center justify-end gap-1.5">
+                            <Button variant="outline" size="sm" onClick={() => setSlip(r)} className="h-7 rounded-full px-3 text-[11px] font-semibold">
+                              Payslip
+                            </Button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 rounded-full px-2"
+                                  aria-label={`Print payslip for ${r.employeeName}`}
+                                >
+                                  <Printer size={12} />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-44">
+                                <DropdownMenuItem onClick={() => void printPayslip(r, "thermal")}>
+                                  <Printer className="h-4 w-4 text-[#0052CC]" /> Thermal 80mm
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => void printPayslip(r, "a4")}>
+                                  <FileDown className="h-4 w-4 text-[#172B4D]" /> A4 / PDF
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -1023,6 +1159,26 @@ export default function PayrollScreen() {
 
                 <Separator className="my-4" />
 
+                {/* printable payslip receipt (thermal + A4) */}
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    variant="outline"
+                    disabled={slipPrinting}
+                    onClick={() => void printPayslip(slip, "thermal")}
+                    className="h-9 rounded-xl text-[12px] font-semibold"
+                  >
+                    <Printer className="h-3.5 w-3.5 text-[#0052CC]" /> Thermal 80mm
+                  </Button>
+                  <Button
+                    variant="outline"
+                    disabled={slipPrinting}
+                    onClick={() => void printPayslip(slip, "a4")}
+                    className="h-9 rounded-xl text-[12px] font-semibold"
+                  >
+                    <FileDown className="h-3.5 w-3.5 text-[#172B4D]" /> A4 / PDF
+                  </Button>
+                </div>
+
                 <div className="grid grid-cols-3 gap-2">
                   <Button
                     variant="outline"
@@ -1054,6 +1210,9 @@ export default function PayrollScreen() {
           )}
         </SheetContent>
       </Sheet>
+
+      {/* hidden receipt print host (portaled to body, revealed by printReceiptArea) */}
+      <ReceiptPrintHost docs={printDocs} mode={printMode} />
     </div>
   );
 }

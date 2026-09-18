@@ -321,3 +321,31 @@
 /* settings scroll area rhythm */
 .df-settings-nav::-webkit-scrollbar { width: 6px; }
 .df-settings-nav::-webkit-scrollbar-thumb { background: #DFE1E6; border-radius: 999px; }
+
+/* --- Supermarket upgrade: modals, print, POS fit, scrollbars ---------------- */
+
+/* Every dialog/modal expands to fit content but NEVER leaves the window:
+   max-height 90vh with the scroll INSIDE the sheet. */
+[data-slot="dialog-content"], [role="dialog"] {
+  max-height: 90vh;
+}
+.df-modal-scroll { max-height: calc(90vh - 120px); overflow-y: auto; }
+
+/* Generic slim scrollbar for long lists (cart, holds, ledger tables). */
+.df-slim-scroll::-webkit-scrollbar { width: 7px; height: 7px; }
+.df-slim-scroll::-webkit-scrollbar-thumb { background: #C4C9D4; border-radius: 999px; }
+.df-slim-scroll::-webkit-scrollbar-track { background: transparent; }
+
+/* POS must fit 100vh with no page overflow: cart column scrolls internally. */
+.df-pos-root { height: calc(100vh - 1px); overflow: hidden; }
+.df-pos-cart-scroll { overflow-y: auto; overscroll-behavior: contain; }
+
+/* Kiosk pages (price checker, display pole) go full-bleed dark. */
+.df-kiosk { background: #0B1220; color: #F4F7FB; }
+
+/* Receipt print containers are hidden on screen; printReceiptArea reveals. */
+.df-receipt { box-shadow: 0 1px 6px rgba(0,0,0,.08); }
+@media print {
+  .df-no-print { display: none !important; }
+  .df-receipt { box-shadow: none !important; }
+}

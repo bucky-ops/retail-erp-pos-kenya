@@ -4,13 +4,14 @@ import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "re
 import {
   Building2, CalendarClock, Check, Database, Download, Eye, EyeOff, Keyboard, Landmark, Loader2,
   MessageSquare, MonitorSmartphone, Percent, Play, Plug, ReceiptText, RefreshCw, Smartphone,
-  Sparkles, Upload, Users, Warehouse, WifiOff, X,
+  Sparkles, Trash2, Upload, Users, Warehouse, WifiOff, X,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { SettingsDto, StaffDto, StoreDto } from "@/types";
 import { Panel, ScreenHeader, TableSkeleton } from "@/components/df/shared";
 import { DukaMark } from "@/components/df/logo";
 import { usePwaInstall } from "@/components/df/pwa";
+import { TrashBinPanel, AuditTrailPanel } from "@/components/screens/trash-screen";
 import { offlineQueue, syncPendingSales } from "@/lib/offline";
 import { isHappyHourActive } from "@/lib/happy-hour";
 import { useApp } from "@/lib/store";
@@ -36,7 +37,8 @@ const err = (e: unknown) => (e instanceof Error ? e.message : "Something went wr
 
 type SectionId =
   | "company" | "stores" | "users" | "pos" | "print" | "taxes"
-  | "kra" | "mpesa" | "sms" | "loyalty" | "device" | "backup" | "shortcuts";
+  | "kra" | "mpesa" | "sms" | "loyalty" | "device" | "backup" | "shortcuts"
+  | "trashaudit";
 
 const SECTIONS: { id: SectionId; label: string; icon: typeof Building2 }[] = [
   { id: "company", label: "Company", icon: Building2 },
@@ -52,6 +54,7 @@ const SECTIONS: { id: SectionId; label: string; icon: typeof Building2 }[] = [
   { id: "device", label: "Device & Offline", icon: WifiOff },
   { id: "shortcuts", label: "Keyboard Shortcuts", icon: Keyboard },
   { id: "backup", label: "Backup & Restore", icon: Database },
+  { id: "trashaudit", label: "Trash + Audit", icon: Trash2 },
 ];
 
 const PERM_ROWS = ["POS", "Stock", "Reports", "Accounting", "Creditors", "Payroll", "All modules"] as const;
@@ -1279,6 +1282,14 @@ export default function SettingsScreen() {
             {/* -- DEVICE & OFFLINE -- */}
             {section === "device" && (
               <DevicePanel />
+            )}
+
+            {/* -- TRASH + AUDIT -- */}
+            {section === "trashaudit" && (
+              <div className="space-y-4">
+                <TrashBinPanel />
+                <AuditTrailPanel />
+              </div>
             )}
 
             {/* -- KEYBOARD SHORTCUTS -- */}

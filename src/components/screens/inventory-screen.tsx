@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import {
   ArrowRight, Boxes, ClipboardList, Clock, Coins, FileText, FileUp, History, Loader2, Package,
-  PackageX, Receipt, ScanBarcode, Search, ShoppingBag, SlidersHorizontal, TriangleAlert, Truck,
+  PackageX, Printer, Receipt, ScanBarcode, Search, ShoppingBag, SlidersHorizontal, TriangleAlert, Truck,
   Undo2, Wallet, ArrowLeftRight,
 } from "lucide-react";
 import { api } from "@/lib/api";
@@ -13,6 +14,8 @@ import { StockTakeDialog } from "@/components/df/stock-take";
 import { LabelPrinter } from "@/components/df/label-printer";
 import { BulkImportDialog } from "@/components/df/bulk-import";
 import { KES } from "@/types";
+import { fmtDate as receiptDate, kes, type ReceiptDocData } from "@/lib/receipt";
+import { ReceiptDocument, printReceiptArea } from "@/components/df/receipt-document";
 import { ScreenHeader, KpiCard, Panel, EmptyState, TableSkeleton } from "@/components/df/shared";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -32,6 +35,9 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 /* -- types -------------------------------------------------- */
 
@@ -176,6 +182,188 @@ const err = (e: unknown) => (e instanceof Error ? e.message : "Something went wr
 /** Guard against null/NaN numbers from the API (e.g. server-side summary edge cases). */
 const safeNum = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : Number(v) || 0);
 
+/* -- receipt builders (Expense / Stock Adjustment / Creditor Payment) -- */
+
+const RECEIPT_HOST_CSS = `
+#df-receipt-host { display: none; }
+@media print {
+  #df-receipt-host { display: block !important; }
+  body > *:not(#df-receipt-host) { display: none !important; }
+  #df-receipt-host .df-receipt { position: static !important; left: auto; top: auto; }
+}
+`;
+
+function ReceiptPrintHost({ docs, mode }: { docs: ReceiptDocData[]; mode: "thermal" | "a4" }) {
+  if (docs.length === 0) return null;
+  // portals only exist client-side; docs start empty so SSR renders null and hydration stays in sync
+  if (typeof document === "undefined") return null;
+  return createPortal(
+    <div id="df-receipt-host" aria-hidden>
+      <style>{RECEIPT_HOST_CSS}</style>
+      {docs.map((d, i) => (
+        <div key={`${i}-${d.docNo}`} style={{ pageBreakAfter: i < docs.length - 1 ? "always" : "auto" }}>
+          <ReceiptDocument data={d} mode={mode} />
+        </div>
+      ))}
+    </div>,
+    document.body
+  );
+}
+
+/** ReceiptDocument for one expense voucher (EXP-<id>). */
+function expenseDoc(e: ExpDTO, receiptCode?: string): ReceiptDocData {
+  return {
+    kind: "EXPENSE",
+    docNo: `EXP-${e.id}`,
+    receiptCode,
+    date: receiptDate(e.spentAt),
+    servedBy: e.staffName,
+    customerName: e.storeName,
+    lines: [
+      {
+        no: 1,
+        name: `${e.category}${e.note ? ` - ${e.note}` : ""}`,
+        qty: 1,
+        unit: "pc",
+        unitPrice: e.amount,
+        discount: 0,
+        total: e.amount,
+      },
+    ],
+    totals: [{ label: "Paid via", value: e.paidVia }],
+    grandTotal: kes(e.amount),
+    paymentLines: [{ method: e.paidVia, amount: kes(e.amount) }],
+    footerMessage: "Expense voucher - DukaFlow ERP",
+  };
+}
+
+/** ReceiptDocument for a stock adjustment (items carry the signed qty in the name). */
+function adjustmentDoc(args: {
+  docNo: string;
+  productName: string;
+  store: string;
+  reason: string;
+  delta: number;
+  unitCost: number;
+  newQty: number;
+  receiptCode?: string;
+}): ReceiptDocData {
+  const { docNo, productName, store, reason, delta, unitCost, newQty, receiptCode } = args;
+  const impact = Math.round(Math.abs(delta) * unitCost * 100) / 100;
+  const signedDelta = delta > 0 ? `+${delta}` : String(delta);
+  return {
+    kind: "STOCK_ADJUSTMENT",
+    docNo,
+    receiptCode,
+    date: receiptDate(new Date()),
+    servedBy: "Inventory Desk",
+    customerName: store,
+    lines: [
+      {
+        no: 1,
+        name: `${productName} (${signedDelta})`,
+        qty: Math.abs(delta),
+        unit: "pc",
+        unitPrice: unitCost,
+        discount: 0,
+        total: impact,
+      },
+    ],
+    totals: [{ label: "Stock value impact (at cost)", value: kes(impact), bold: true }],
+    grandTotal: kes(impact),
+    extraBlocks: [
+      {
+        heading: "Adjustment details",
+        rows: [
+          { label: "Product", value: productName },
+          { label: "Store", value: store },
+          { label: "Reason", value: reason },
+          { label: "Quantity change", value: signedDelta },
+          { label: "New quantity", value: String(newQty) },
+        ],
+      },
+    ],
+    footerMessage: "Adjustment logged to #stock-alerts - DukaFlow Inventory Pro",
+  };
+}
+
+/** Creditor (supplier) payment receipt: summary of total paid vs orders. */
+function creditorDoc(args: {
+  supplier: { id: number; name: string; kraPin?: string; category?: string };
+  poCount: number;
+  ordered: number;
+  received: number;
+  onOrder: number;
+  receiptCode?: string;
+}): ReceiptDocData {
+  const { supplier, poCount, ordered, received, onOrder, receiptCode } = args;
+  return {
+    kind: "CREDITOR_PAYMENT",
+    docNo: `CRP-S${supplier.id}`,
+    receiptCode,
+    date: receiptDate(new Date()),
+    servedBy: "Procurement Desk",
+    customerName: supplier.name,
+    lines: [],
+    totals: [
+      { label: "Purchase orders", value: String(poCount) },
+      { label: "Total ordered", value: kes(ordered) },
+      { label: "On-order commitment", value: kes(onOrder) },
+    ],
+    grandTotal: kes(received),
+    paymentLines: [{ method: "Supplier Account", amount: kes(received) }],
+    extraBlocks: [
+      {
+        heading: "Supplier account summary",
+        rows: [
+          { label: "Category", value: supplier.category || "-" },
+          { label: "KRA PIN", value: supplier.kraPin || "-" },
+          { label: "Purchase orders", value: String(poCount) },
+          { label: "Total ordered", value: kes(ordered) },
+          { label: "Received / paid", value: kes(received), bold: true },
+          { label: "On-order (draft + sent)", value: kes(onOrder) },
+        ],
+      },
+    ],
+    footerMessage: "Creditor payment summary - DukaFlow Procurement",
+  };
+}
+
+/** Suppliers Summary: every supplier with paid / ordered balances in extraBlocks. */
+function suppliersSummaryDoc(
+  rows: { name: string; category: string; ordered: number; received: number }[],
+  receiptCode?: string
+): ReceiptDocData {
+  const totalOrdered = rows.reduce((a, r) => a + r.ordered, 0);
+  const totalReceived = rows.reduce((a, r) => a + r.received, 0);
+  return {
+    kind: "CREDITOR_PAYMENT",
+    title: "SUPPLIERS SUMMARY",
+    docNo: `CRP-SUMMARY-${new Date().toISOString().slice(0, 10)}`,
+    receiptCode,
+    date: receiptDate(new Date()),
+    servedBy: "Procurement Desk",
+    lines: [],
+    totals: [
+      { label: `${rows.length} suppliers`, value: "" },
+      { label: "Total received (paid)", value: kes(totalReceived), bold: true },
+    ],
+    grandTotal: kes(totalOrdered),
+    extraBlocks: [
+      {
+        heading: "Supplier balances",
+        rows: rows.length
+          ? rows.map((r) => ({
+              label: `${r.name} (${r.category})`,
+              value: `${kes(r.received)} paid / ${kes(r.ordered)} ordered`,
+            }))
+          : [{ label: "No suppliers on record", value: "" }],
+      },
+    ],
+    footerMessage: "Suppliers summary - DukaFlow Procurement",
+  };
+}
+
 /* -- pills -------------------------------------------------- */
 
 function MarginBadge({ m }: { m: number }) {
@@ -232,6 +420,31 @@ export default function InventoryScreen() {
   const [adjReason, setAdjReason] = useState("Recount");
   const [adjBusy, setAdjBusy] = useState(false);
   const [tfBusy, setTfBusy] = useState(false);
+
+  /* stock adjustment receipt printing (digital twin + A4) */
+  const [printDocs, setPrintDocs] = useState<ReceiptDocData[]>([]);
+  const [printMode, setPrintMode] = useState<"thermal" | "a4">("a4");
+
+  const printAdjustmentReceipt = useCallback(
+    async (args: { docNo: string; productName: string; store: string; reason: string; delta: number; unitCost: number; newQty: number }) => {
+      const doc = adjustmentDoc(args);
+      try {
+        const dr = await api.post<{ receiptCode: string }>("/api/digital-receipt", {
+          kind: "STOCK_ADJUSTMENT",
+          refNo: doc.docNo,
+          payload: doc,
+        });
+        doc.receiptCode = dr.receiptCode;
+      } catch {
+        // digital twin failed - print anyway, QR falls back to the doc number
+      }
+      setPrintMode("a4");
+      setPrintDocs([doc]);
+      // let React mount the hidden print host + generate the QR before window.print()
+      window.setTimeout(() => printReceiptArea("a4"), 300);
+    },
+    []
+  );
 
   const load = useCallback(async () => {
     const params = new URLSearchParams({ storeId: String(storeId), tab });
@@ -761,18 +974,29 @@ export default function InventoryScreen() {
                         onClick={async () => {
                           if (!selected) return;
                           setAdjBusy(true);
+                          const delta = Number(adjQty);
                           try {
-                            const r = await api.post<{ ok: boolean; product: string; store: string }>("/api/inventory/adjust", {
+                            const r = await api.post<{ ok: boolean; level: { qty: number }; product: string; store: string }>("/api/inventory/adjust", {
                               productId: selected.productId,
                               storeId: selected.storeId,
-                              delta: Number(adjQty),
+                              delta,
                               reason: adjReason,
                             });
                             toast({
                               title: `Stock adjusted: ${r.product}`,
-                              description: `${Number(adjQty) > 0 ? "+" : ""}${adjQty} at ${r.store} • ${adjReason} • #stock-alerts notified`,
+                              description: `${delta > 0 ? "+" : ""}${delta} at ${r.store} • ${adjReason} • #stock-alerts notified`,
                             });
                             setAdjQty("");
+                            // printable stock adjustment receipt (digital twin + QR)
+                            void printAdjustmentReceipt({
+                              docNo: `ADJ-${selected.productId}-${String(Date.now()).slice(-6)}`,
+                              productName: r.product ?? selected.name,
+                              store: r.store ?? selected.store,
+                              reason: adjReason,
+                              delta,
+                              unitCost: selected.cost,
+                              newQty: r.level?.qty ?? selected.qty + delta,
+                            });
                             // refresh drawer + table
                             const fresh = await api.get<InvResponse>(
                               `/api/inventory?storeId=${storeId === "all" ? "all" : storeId}&tab=${encodeURIComponent(tab)}&q=${encodeURIComponent(q)}`
@@ -929,6 +1153,9 @@ export default function InventoryScreen() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* hidden receipt print host (portaled to body, revealed by printReceiptArea) */}
+      <ReceiptPrintHost docs={printDocs} mode={printMode} />
     </div>
   );
 }
@@ -1005,6 +1232,70 @@ function SuppliersTab() {
   const [sups, setSups] = useState<SupDTO[] | null>(null);
   const [pos, setPos] = useState<PODTO[] | null>(null);
 
+  /* creditor payment receipt printing */
+  const [printDocs, setPrintDocs] = useState<ReceiptDocData[]>([]);
+  const [printMode, setPrintMode] = useState<"thermal" | "a4">("a4");
+
+  const printDocsNow = useCallback((docs: ReceiptDocData[], mode: "thermal" | "a4") => {
+    setPrintMode(mode);
+    setPrintDocs(docs);
+    // let React mount the hidden print host + generate QRs before window.print()
+    window.setTimeout(() => printReceiptArea(mode), 300);
+  }, []);
+
+  const printCreditorReceipt = useCallback(
+    async (s: SupDTO, stats: { count: number; ordered: number; received: number; onOrder: number }) => {
+      const doc = creditorDoc({
+        supplier: { id: s.id, name: s.name, kraPin: s.kraPin, category: s.category },
+        poCount: stats.count,
+        ordered: stats.ordered,
+        received: stats.received,
+        onOrder: stats.onOrder,
+      });
+      try {
+        const dr = await api.post<{ receiptCode: string }>("/api/digital-receipt", {
+          kind: "CREDITOR_PAYMENT",
+          refNo: doc.docNo,
+          payload: doc,
+        });
+        doc.receiptCode = dr.receiptCode;
+      } catch {
+        // digital twin failed - print anyway
+      }
+      printDocsNow([doc], "a4");
+    },
+    [printDocsNow]
+  );
+
+  const printSuppliersSummary = useCallback(
+    (supplierRows: SupDTO[], poRows: PODTO[]) => {
+      const rows = supplierRows.map((s) => {
+        const mine = poRows.filter((p) => p.supplierId === s.id);
+        return {
+          name: s.name,
+          category: s.category,
+          ordered: mine.reduce((a, p) => a + p.total, 0),
+          received: mine.filter((p) => p.status === "Received").reduce((a, p) => a + p.total, 0),
+        };
+      });
+      const doc = suppliersSummaryDoc(rows);
+      void (async () => {
+        try {
+          const dr = await api.post<{ receiptCode: string }>("/api/digital-receipt", {
+            kind: "CREDITOR_PAYMENT",
+            refNo: doc.docNo,
+            payload: doc,
+          });
+          doc.receiptCode = dr.receiptCode;
+        } catch {
+          // digital twin failed - print anyway
+        }
+        printDocsNow([doc], "a4");
+      })();
+    },
+    [printDocsNow]
+  );
+
   useEffect(() => {
     let alive = true;
     Promise.all([api.get<SupDTO[]>("/api/suppliers"), api.get<PODTO[]>("/api/purchase-orders")])
@@ -1041,6 +1332,20 @@ function SuppliersTab() {
   const avgLead = sups?.length ? Math.round(sups.reduce((s, x) => s + x.leadDays, 0) / sups.length) : 0;
   const loading = sups === null;
 
+  /** Per-supplier PO stats for the payment receipts. */
+  const statsFor = useCallback(
+    (supplierId: number) => {
+      const mine = (pos ?? []).filter((p) => p.supplierId === supplierId);
+      return {
+        count: mine.length,
+        ordered: mine.reduce((a, p) => a + p.total, 0),
+        received: mine.filter((p) => p.status === "Received").reduce((a, p) => a + p.total, 0),
+        onOrder: mine.filter((p) => p.status === "Draft" || p.status === "Sent").reduce((a, p) => a + p.total, 0),
+      };
+    },
+    [pos]
+  );
+
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 @6xl:grid-cols-4">
@@ -1073,7 +1378,21 @@ function SuppliersTab() {
       </div>
 
       <Panel padding={false} className="overflow-hidden">
-        <TabPanelHeader title="Supplier directory" sub="Procurement masters with live on-order commitments" />
+        <TabPanelHeader
+          title="Supplier directory"
+          sub="Procurement masters with live on-order commitments"
+          action={
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 rounded-full px-3 text-[11px] font-semibold"
+              onClick={() => sups && printSuppliersSummary(sups, pos ?? [])}
+              disabled={!sups || sups.length === 0}
+            >
+              <Printer size={13} /> Suppliers Summary
+            </Button>
+          }
+        />
         {loading ? (
           <div className="p-4"><TableSkeleton rows={5} cols={6} /></div>
         ) : sups!.length === 0 ? (
@@ -1085,7 +1404,7 @@ function SuppliersTab() {
             <Table className="text-[12px]">
               <TableHeader>
                 <TableRow className="bg-[#FAFBFC]">
-                  {["Supplier", "Category", "Phone", "Contact", "Lead", "POs", "On order"].map((h) => (
+                  {["Supplier", "Category", "Phone", "Contact", "Lead", "POs", "On order", ""].map((h) => (
                     <TableHead key={h} className={cn("p-3 text-[11px] font-bold uppercase tracking-widest text-[#6B778C]", ["Lead", "POs", "On order"].includes(h) && "text-right")}>
                       {h}
                     </TableHead>
@@ -1109,6 +1428,25 @@ function SuppliersTab() {
                     <TableCell className="p-3 text-right font-bold tabular-nums text-[#172B4D]">
                       {KES(onOrder.get(s.id)?.value ?? 0)}
                     </TableCell>
+                    <TableCell className="p-3 text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 rounded-full px-2"
+                            aria-label={`Print payment receipt for ${s.name}`}
+                          >
+                            <Printer size={12} />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-52">
+                          <DropdownMenuItem onClick={() => void printCreditorReceipt(s, statsFor(s.id))}>
+                            <Printer className="h-4 w-4 text-[#172B4D]" /> Payment Receipt (Creditor)
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -1116,6 +1454,9 @@ function SuppliersTab() {
           </div>
         )}
       </Panel>
+
+      {/* hidden receipt print host (portaled to body, revealed by printReceiptArea) */}
+      <ReceiptPrintHost docs={printDocs} mode={printMode} />
     </div>
   );
 }
@@ -1458,6 +1799,31 @@ const EXP_TINTS = ["#E8F5E9", "#FFF8E1", "#E9F2FF", "#F4F5F7", "#FFEBEE"];
 function ExpensesTab() {
   const [data, setData] = useState<ExpPayload | null>(null);
 
+  /* expense receipt printing (digital twin + thermal slip) */
+  const [printDocs, setPrintDocs] = useState<ReceiptDocData[]>([]);
+  const [printMode, setPrintMode] = useState<"thermal" | "a4">("thermal");
+
+  const printExpenseReceipt = useCallback(
+    async (e: ExpDTO) => {
+      const doc = expenseDoc(e);
+      try {
+        const dr = await api.post<{ receiptCode: string }>("/api/digital-receipt", {
+          kind: "EXPENSE",
+          refNo: doc.docNo,
+          payload: doc,
+        });
+        doc.receiptCode = dr.receiptCode;
+      } catch {
+        // digital twin failed - print anyway, QR falls back to the voucher number
+      }
+      setPrintMode("thermal");
+      setPrintDocs([doc]);
+      // let React mount the hidden print host + generate the QR before window.print()
+      window.setTimeout(() => printReceiptArea("thermal"), 300);
+    },
+    []
+  );
+
   useEffect(() => {
     let alive = true;
     api
@@ -1532,8 +1898,8 @@ function ExpensesTab() {
             <Table className="text-[12px]">
               <TableHeader>
                 <TableRow className="bg-[#FAFBFC]">
-                  {["Date", "Category", "Note", "Paid via", "Store", "By", "Amount"].map((h) => (
-                    <TableHead key={h} className={cn("p-3 text-[11px] font-bold uppercase tracking-widest text-[#6B778C]", h === "Amount" && "text-right")}>
+                  {["Date", "Category", "Note", "Paid via", "Store", "By", "Amount", "Rcpt"].map((h) => (
+                    <TableHead key={h} className={cn("p-3 text-[11px] font-bold uppercase tracking-widest text-[#6B778C]", (h === "Amount" || h === "Rcpt") && "text-right")}>
                       {h}
                     </TableHead>
                   ))}
@@ -1556,6 +1922,16 @@ function ExpensesTab() {
                     <TableCell className="p-3 text-[#6B778C]">{e.storeName}</TableCell>
                     <TableCell className="p-3 text-[#6B778C]">{e.staffName}</TableCell>
                     <TableCell className="p-3 text-right font-bold tabular-nums text-[#172B4D]">{KES(e.amount)}</TableCell>
+                    <TableCell className="p-3 text-right">
+                      <button
+                        onClick={() => void printExpenseReceipt(e)}
+                        title={`Print expense receipt EXP-${e.id}`}
+                        aria-label={`Print receipt for expense EXP-${e.id}`}
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[#DFE1E6] bg-white text-[#172B4D] transition hover:border-[#0052CC] hover:text-[#0052CC]"
+                      >
+                        <Printer size={13} />
+                      </button>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -1563,6 +1939,9 @@ function ExpensesTab() {
           </div>
         )}
       </Panel>
+
+      {/* hidden receipt print host (portaled to body, revealed by printReceiptArea) */}
+      <ReceiptPrintHost docs={printDocs} mode={printMode} />
     </div>
   );
 }

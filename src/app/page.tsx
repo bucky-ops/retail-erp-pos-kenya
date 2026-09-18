@@ -5,7 +5,7 @@ import {
   LayoutDashboard, ShoppingCart, KanbanSquare, Boxes, Users, HandCoins, ReceiptText,
   Banknote, MessageSquare, MessagesSquare, BarChart3, Settings2, Palette, LogOut,
   ChevronLeft, Wifi, WifiOff, Search, Store as StoreIcon, RefreshCw, PackageCheck, Menu,
-  CalendarClock, Landmark,
+  CalendarClock, Landmark, Trash2, ExternalLink, ScanBarcode, Monitor,
 } from "lucide-react";
 import { useApp, useSync, ScreenId } from "@/lib/store";
 import { api } from "@/lib/api";
@@ -31,6 +31,7 @@ import ReportsScreen from "@/components/screens/reports-screen";
 import SettingsScreen from "@/components/screens/settings-screen";
 import DayCloseScreen from "@/components/screens/day-close-screen";
 import AccountingScreen from "@/components/screens/accounting-screen";
+import TrashScreen from "@/components/screens/trash-screen";
 
 const NAV: { id: ScreenId; label: string; icon: typeof LayoutDashboard }[] = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -46,8 +47,15 @@ const NAV: { id: ScreenId; label: string; icon: typeof LayoutDashboard }[] = [
   { id: "reports", label: "Reports", icon: BarChart3 },
   { id: "dayclose", label: "Day Close", icon: CalendarClock },
   { id: "accounting", label: "Accounting", icon: Landmark },
+  { id: "trash", label: "Trash + Audit", icon: Trash2 },
   { id: "settings", label: "Settings", icon: Settings2 },
   { id: "design", label: "Design System", icon: Palette },
+];
+
+/* Standalone kiosk pages that open outside the app shell. */
+const UTILITIES: { href: string; label: string; icon: typeof ScanBarcode }[] = [
+  { href: "/price-checker", label: "Price Checker", icon: ScanBarcode },
+  { href: "/display", label: "Display Pole", icon: Monitor },
 ];
 
 export default function App() {
@@ -207,6 +215,25 @@ export default function App() {
                     </button>
                   );
                 })}
+
+                {/* Utilities: standalone kiosk pages (new tab) */}
+                {!sidebarCollapsed && (
+                  <p className="px-3 pb-1 pt-3 text-[10px] font-bold uppercase tracking-[0.2em] text-white/30">Utilities</p>
+                )}
+                {UTILITIES.map((u) => (
+                  <a
+                    key={u.href}
+                    href={u.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={u.label}
+                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-[12.5px] font-medium text-white/50 transition hover:bg-white/10 hover:text-white"
+                  >
+                    <u.icon size={17} />
+                    {!sidebarCollapsed && <span className="flex-1 text-left">{u.label}</span>}
+                    {!sidebarCollapsed && <ExternalLink size={11} className="text-white/30" />}
+                  </a>
+                ))}
               </nav>
 
               <div className="space-y-3 border-t border-white/10 p-3">
@@ -221,7 +248,7 @@ export default function App() {
                       <div>
                         <p className="text-[12px] font-semibold text-white">DukaFlow POS</p>
                         <p className={cn("text-[11px]", online ? "text-white/60" : "text-[#FFAB00]")}>
-                          Tablet v1.2.0 • {online ? "Online" : `Offline${unsynced ? ` • ${unsynced} queued` : ""}`}
+                          Tablet v1.3.0 • {online ? "Online" : `Offline${unsynced ? ` • ${unsynced} queued` : ""}`}
                         </p>
                       </div>
                     </div>
@@ -243,7 +270,7 @@ export default function App() {
                   <LogOut size={16} /> {!sidebarCollapsed && "Sign Out"}
                 </button>
                 <p className={cn("select-none text-center text-[10px] font-medium text-white/30", sidebarCollapsed && "tracking-tight")}>
-                  {sidebarCollapsed ? "v1.2.0" : "DukaFlow v1.2.0"}
+                  {sidebarCollapsed ? "v1.3.0" : "DukaFlow v1.3.0"}
                 </p>
               </div>
             </aside>
@@ -365,6 +392,7 @@ export default function App() {
                 {page === "reports" && <ReportsScreen />}
                 {page === "dayclose" && <DayCloseScreen />}
                 {page === "accounting" && <AccountingScreen />}
+                {page === "trash" && <TrashScreen />}
                 {page === "settings" && <SettingsScreen />}
               </main>
 
@@ -372,7 +400,7 @@ export default function App() {
               <footer className="mt-auto flex items-center justify-between border-t border-[#DFE1E6] bg-white px-4 py-2.5 text-[11px] text-[#6B778C] @4xl:px-8">
                 <span className="flex items-center gap-1.5">
                   <PackageCheck size={12} className="text-[#00C853]" />
-                  DukaFlow v1.2.0 - Multi-store • Offline-first POS • KRA eTIMS • M-Pesa Ready
+                  DukaFlow v1.3.0 - Multi-store • Offline-first POS • KRA eTIMS • M-Pesa Ready
                 </span>
                 <span className="hidden @md:inline">
                   {activeStore ? `${activeStore.name}, ${activeStore.location}` : "All Stores"} • Nairobi, Kenya
@@ -408,6 +436,21 @@ export default function App() {
                 <c.icon size={17} className={page === c.id ? "text-[#0052CC]" : ""} />
                 {c.label}
               </button>
+            ))}
+
+            <p className="px-3 pb-1 pt-4 text-[10px] font-bold uppercase tracking-[0.2em] text-white/30">Utilities</p>
+            {UTILITIES.map((u) => (
+              <a
+                key={u.href}
+                href={u.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-medium text-white/70 transition hover:bg-white/10 hover:text-white"
+              >
+                <u.icon size={17} />
+                {u.label}
+                <ExternalLink size={11} className="ml-auto text-white/30" />
+              </a>
             ))}
           </nav>
           <button

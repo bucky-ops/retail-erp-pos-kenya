@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const period = searchParams.get("period") ?? currentPeriod();
 
-  const employees = await db.employee.findMany({ where: { active: true } });
+  const employees = await db.employee.findMany({ where: { active: true, archivedAt: null } });
   const payslips = await db.payslip.findMany({
     where: { period },
     include: { employee: true },
@@ -78,7 +78,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const body = await req.json();
   const period = body.period ?? currentPeriod();
-  const employees = await db.employee.findMany({ where: { active: true } });
+  const employees = await db.employee.findMany({ where: { active: true, archivedAt: null } });
 
   for (const e of employees) {
     const calc = calculatePayroll({

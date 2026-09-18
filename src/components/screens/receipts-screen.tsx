@@ -2,11 +2,14 @@
 
 import { type ChangeEvent, type CSSProperties, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ClipboardList, FileText, Gift, LayoutTemplate, Maximize2, MessageCircle, Printer, Receipt,
-  RotateCcw, ShieldCheck, Smartphone, Upload, X,
+  ClipboardList, ExternalLink, FileText, Gift, LayoutTemplate, Maximize2, MessageCircle, Printer,
+  QrCode, Receipt, RefreshCw, RotateCcw, ShieldCheck, Smartphone, Upload, X,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { KES, SaleDto, SaleItemDto } from "@/types";
+import { ReceiptDocData } from "@/lib/receipt";
+import { ReceiptDocument, printReceiptArea } from "@/components/df/receipt-document";
+import { kindLabel, payloadToReceiptDoc } from "@/components/df/receipt-doc-adapter";
 import { KpiCard, Panel, ScreenHeader } from "@/components/df/shared";
 import { DukaMark } from "@/components/df/logo";
 import { cn } from "@/lib/utils";
@@ -113,6 +116,28 @@ const TIER_STYLE: Record<string, { bg: string; fg: string; border: string }> = {
   Silver: { bg: "#ECEFF1", fg: "#546E7A", border: "#B0BEC5" },
   Bronze: { bg: "#EFEBE9", fg: "#8D6E63", border: "#BCAAA4" },
 };
+
+/* -- digital receipts (public QR twins) ---------------------- */
+
+interface DigitalReceiptDto {
+  receiptCode: string;
+  kind: string;
+  refNo: string;
+  url: string;
+  qrDataUrl: string;
+  createdAt: string;
+}
+
+/** /api/sales rows carry the digital twin code for every committed sale. */
+type SaleWithDigital = SaleDto & { digitalCode?: string | null };
+
+const KIND_TONE: Record<string, string> = {
+  SALE: "bg-[#E8F5E9] text-[#1B7A2E] border-[#C8E6C9]",
+  ZREPORT: "bg-[#FFF8E1] text-[#B8860B] border-[#FFE0B2]",
+  PAYSLIP: "bg-[#F3E8FF] text-[#7C3AED] border-[#E9D5FF]",
+  DEBT_PAYMENT: "bg-[#E9F2FF] text-[#0052CC] border-[#B3D4FF]",
+};
+const kindTone = (k: string) => KIND_TONE[k] ?? "bg-[#F4F5F7] text-[#6B778C] border-[#DFE1E6]";
 
 /* -- helpers ------------------------------------------------ */
 
@@ -783,6 +808,17 @@ export default function ReceiptsScreen() {
   const [fullOpen, setFullOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  /* digital receipts (public QR twins) + one-shot reprint doc */
+  const [digitals, setDigitals] = useState<DigitalReceiptDto[] | null>(null);
+  const [printDoc, setPrintDoc] = useState<{ doc: ReceiptDocData; mode: "thermal" | "a4" } | null>(null);
+
+  const loadDigitals = () => {
+    api
+      .get<{ receipts: DigitalReceiptDto[] }>("/api/digital-receipt?list=1&limit=60")
+      .then((d) => setDigitals(d.receipts))
+      .catch(() => setDigitals([]));
+  };
+
   useEffect(() => {
     let alive = true;
     api
@@ -798,6 +834,7 @@ export default function ReceiptsScreen() {
         setSampleKey((cur) => cur ?? "walkin");
         toast({ title: "Could not load recent sales", description: err(e), variant: "destructive" });
       });
+    loadDigitals();
     return () => {
       alive = false;
     };
@@ -813,6 +850,8 @@ export default function ReceiptsScreen() {
     const found = sales?.find((s) => String(s.id) === sampleKey);
     return found ?? sales?.[0] ?? WALKIN_SALE;
   }, [sampleKey, sales]);
+
+  const selectedDigitalCode = (selected as SaleWithDigital).digitalCode ?? null;
 
   const items = selected.items?.length ? selected.items : SAMPLE_ITEMS;
 
@@ -871,6 +910,38 @@ export default function ReceiptsScreen() {
 
   const toggle = (key: keyof BrandToggles, checked: boolean) => setToggles((t) => ({ ...t, [key]: checked }));
 
+  /* reprint a digital twin straight from its card (loads payload, then prints) */
+  const printDigital = async (code: string, mode: "thermal" | "a4" = "thermal") => {
+    try {
+      const d = await api.get<{
+        ok: boolean;
+        receipt?: { payload: unknown; kind: string; title: string; refNo: string; createdAt: string };
+      }>(`/api/digital-receipt?code=${encodeURIComponent(code)}`);
+      if (!d.receipt) throw new Error("Receipt not found");
+      setPrintDoc({
+        doc: payloadToReceiptDoc(d.receipt.payload, {
+          receiptCode: code,
+          kind: d.receipt.kind,
+          title: d.receipt.title,
+          refNo: d.receipt.refNo,
+          createdAt: d.receipt.createdAt,
+        }),
+        mode,
+      });
+    } catch (e) {
+      toast({ title: "Could not load that receipt", description: err(e), variant: "destructive" });
+    }
+  };
+
+  useEffect(() => {
+    if (!printDoc) return;
+    const t = setTimeout(() => {
+      printReceiptArea(printDoc.mode);
+      setPrintDoc(null);
+    }, 150);
+    return () => clearTimeout(t);
+  }, [printDoc]);
+
   return (
     <div>
       <ScreenHeader
@@ -901,6 +972,77 @@ export default function ReceiptsScreen() {
           sub={`${verifiedCount} of ${sales?.length ?? 0} recent receipts stamped`}
         />
       </div>
+
+      {/* Digital receipts - the public QR twin every printed document carries */}
+      <Panel className="mb-4 p-4 md:p-5">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <QrCode size={16} className="text-[#0052CC]" />
+            <h2 className="font-display text-[15px] font-bold text-[#172B4D]">Digital Receipts</h2>
+            <Badge variant="outline" className="text-[10px]">
+              {digitals ? `${digitals.length} recent` : "..."}
+            </Badge>
+          </div>
+          <Button variant="ghost" size="sm" onClick={loadDigitals} className="h-8 gap-1.5 text-[12px] text-[#6B778C]">
+            <RefreshCw size={13} /> Refresh
+          </Button>
+        </div>
+
+        {digitals === null ? (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="h-44 animate-pulse rounded-xl bg-[#F4F5F7]" />
+            ))}
+          </div>
+        ) : digitals.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-[#DFE1E6] bg-[#FAFBFC] px-4 py-6 text-center text-[12px] text-[#6B778C]">
+            No digital receipts yet - one is created automatically with every sale, Z-report and payment.
+          </p>
+        ) : (
+          <div className="df-slim-scroll grid max-h-[330px] grid-cols-2 gap-3 overflow-y-auto pr-1 sm:grid-cols-3 xl:grid-cols-4">
+            {digitals.map((d) => (
+              <div
+                key={d.receiptCode}
+                className="group rounded-xl border border-[#DFE1E6] bg-white p-3 transition hover:border-[#0052CC]/50 hover:shadow-md"
+              >
+                <button
+                  type="button"
+                  onClick={() => window.open(`/receipt/${d.receiptCode}`, "_blank", "noopener")}
+                  aria-label={`Open digital receipt ${d.receiptCode} in a new tab`}
+                  className="flex w-full flex-col items-center gap-2"
+                >
+                  {d.qrDataUrl ? (
+                    <img src={d.qrDataUrl} alt={`QR code for ${d.receiptCode}`} className="h-20 w-20" />
+                  ) : (
+                    <div className="flex h-20 w-20 items-center justify-center rounded border border-[#DFE1E6] text-[10px] font-bold tracking-widest text-[#6B778C]">
+                      QR
+                    </div>
+                  )}
+                  <span className="font-mono text-[11px] font-semibold text-[#172B4D] group-hover:text-[#0052CC]">
+                    {d.receiptCode}
+                  </span>
+                  <Badge variant="outline" className={cn("text-[9px] uppercase tracking-wide", kindTone(d.kind))}>
+                    {kindLabel(d.kind)}
+                  </Badge>
+                  <span className="text-[10px] text-[#6B778C]">
+                    {d.refNo || "-"} - {fmtDate(d.createdAt)}
+                  </span>
+                </button>
+                <div className="mt-2 flex justify-center border-t border-[#F4F5F7] pt-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => printDigital(d.receiptCode)}
+                    className="h-7 gap-1 px-2 text-[11px] text-[#6B778C]"
+                  >
+                    <Printer size={12} /> Print
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Panel>
 
       {/* split view: editor (40%) + previews (60%) */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-5 lg:gap-6">
@@ -1046,6 +1188,17 @@ export default function ReceiptsScreen() {
               <Badge variant="outline" className="text-[10px]">{KES(selected.total)}</Badge>
               <Badge variant="outline" className="text-[10px]">{selected.paymentMethod}</Badge>
               <Badge variant="outline" className="text-[10px]">KRA {selected.kraStatus}</Badge>
+              {selectedDigitalCode && (
+                <a
+                  href={`/receipt/${selectedDigitalCode}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Open the digital twin of this receipt in a new tab"
+                  className="inline-flex items-center gap-1 rounded-full border border-[#C8E6C9] bg-[#E8F5E9] px-2.5 py-0.5 text-[10px] font-semibold text-[#1B7A2E] transition hover:bg-[#DCEFDD]"
+                >
+                  <ExternalLink size={10} /> Digital twin
+                </a>
+              )}
             </div>
           </Panel>
         </div>
@@ -1110,6 +1263,13 @@ export default function ReceiptsScreen() {
           </Panel>
         </div>
       </div>
+
+      {/* off-screen print host for digital twin reprints */}
+      {printDoc && (
+        <div aria-hidden className="fixed -left-[9999px] top-0">
+          <ReceiptDocument data={printDoc.doc} mode={printDoc.mode} />
+        </div>
+      )}
 
       {/* fullscreen dialog */}
       <Dialog open={fullOpen} onOpenChange={setFullOpen}>

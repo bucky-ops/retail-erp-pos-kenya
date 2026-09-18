@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * POS - the offline-first point of sale.
+ * POS - the offline-first point of sale (Naivas supermarket mode).
  *
  * Flow: every sale is written to the IndexedDB queue FIRST (survives refresh,
  * crash and full offline), then M-Pesa STK runs when applicable, then the sale
@@ -9,6 +9,13 @@
  * failures keep the sale queued and show the success modal with an
  * "OFFLINE QUEUED" badge. syncPendingSales() runs on mount and whenever
  * connectivity returns.
+ *
+ * Supermarket floor features: global barcode-gun capture (fast keystroke
+ * buffer -> instant cart add with beep + flash), weight-scale barcodes,
+ * price-check mode, hold/resume (server + localStorage mirror), multi-pay
+ * split tenders, day-lock manager PIN override, digital receipt QR, offline
+ * product cache for instant boots, fullscreen till mode and a customer
+ * display pole broadcast (second window at /display).
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -21,17 +28,24 @@ import {
   CreditCard,
   Gift,
   HandCoins,
+  History,
+  KeyRound,
   Landmark,
   Loader2,
   Lock,
   Mail,
+  Maximize2,
+  Minimize2,
   Minus,
   MonitorSmartphone,
   Package,
+  Pause,
   Plus,
   Printer,
   RotateCcw,
+  Scale as ScaleIcon,
   ScanBarcode,
+  ScanSearch,
   Search,
   Send,
   Shield,
@@ -48,10 +62,13 @@ import {
 import { api } from "@/lib/api";
 import { useApp, useSync } from "@/lib/store";
 import { happyHourLabel, happyHourMatchesCategory, isHappyHourActive, type HappyHourConfig } from "@/lib/happy-hour";
+import { canSeeMargin } from "@/lib/roles";
+import { kes } from "@/lib/receipt";
 import {
   KES,
   type CartLine,
   type CustomerDto,
+  type PaySplit,
   type PaymentMethod,
   type ProductDto,
   type SaleDto,
@@ -62,7 +79,23 @@ import { StockBadge, TierBadge } from "@/components/df/badges";
 import { DukaMark } from "@/components/df/logo";
 import { PosQuickReturn } from "@/components/df/pos-quick-return";
 import { QrImage } from "@/components/df/qr";
-import { offlineQueue, syncPendingSales } from "@/lib/offline";
+import { getCachedProducts, offlineQueue, saveProductCache, syncPendingSales } from "@/lib/offline";
+import {
+  ScannerBuffer,
+  addLocalHold,
+  createDisplayChannel,
+  fromHoldLines,
+  mergeHolds,
+  playScanTone,
+  readLocalHolds,
+  remotePriceCheck,
+  removeLocalHold,
+  resolveScan,
+  toHoldLines,
+  timeAgo,
+  type DisplayCartMessage,
+  type HoldRecord,
+} from "@/lib/pos-engine";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -82,6 +115,8 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
@@ -103,7 +138,7 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 const stockQty = (p: ProductDto, storeId: number | "all"): number => {
   if (storeId === "all") return p.stock.reduce((a, s) => a + s.qty, 0);
   const s = p.stock.find((st) => st.storeId === storeId);
-  return s ? s.qty : (p.stock[0]?.qty ?? 0);
+  return s ? s.qty : 0;
 };
 
 const tierColor = (tier?: string | null) =>
@@ -203,6 +238,40 @@ interface SuccessState {
   sale: SaleDto;
   loyalty: { earned: number; balance: number; redeemed: number } | null;
   offline: boolean;
+  /** digital twin from the API: NVS code + public URL rendered as a QR */
+  digitalReceipt: { code: string; url: string } | null;
+}
+
+/** Tenders available inside one split payment (Points redeems loyalty). */
+const SPLIT_METHODS = ["Cash", "M-Pesa", "M-Pesa Till", "M-Pesa Paybill", "Card", "Points", "Gift Card"] as const;
+
+/** Map a split tender label onto the SalePayload PaymentMethod union. */
+function mapSplitMethod(m: string): PaymentMethod {
+  if (m === "M-Pesa Till") return "Till";
+  if (m === "M-Pesa Paybill") return "Paybill";
+  if (m === "Points") return "Cash"; // points value rides on pointsRedeemed
+  return m as PaymentMethod;
+}
+
+interface DayLockState {
+  open: boolean;
+  pin: string;
+  error: string | null;
+  zNo: string | null;
+  busy: boolean;
+}
+
+interface PricePopupState {
+  at: number;
+  name: string;
+  emoji: string;
+  price: number;
+  unit: string;
+  kg?: number;
+  computed?: number;
+  stock?: number;
+  /** owner/manager/accountant eyes only (canSeeMargin) */
+  margin?: number;
 }
 
 /* -- component ------------------------------------------------- */
@@ -217,6 +286,10 @@ export default function PosScreen() {
   const unsynced = useSync((s) => s.unsynced);
   const setUnsynced = useSync((s) => s.setUnsynced);
 
+  /* margins are Owner / Manager / Accountant eyes only (Naivas rule) */
+  const canMargin = canSeeMargin(user?.role);
+  const resolvedStoreId = activeStoreId === "all" ? (user?.storeId ?? 1) : activeStoreId;
+
   /* catalog */
   const [search, setSearch] = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
@@ -229,6 +302,8 @@ export default function PosScreen() {
 
   /* cart */
   const [cart, setCart] = useState<CartLine[]>([]);
+  /* weight lines: productId -> kg captured from EAN-13 scale barcodes */
+  const [scaleKg, setScaleKg] = useState<Record<number, number>>({});
   const [customer, setCustomer] = useState<CustomerDto | null>(null);
   const [promo, setPromo] = useState<string | null>(null);
   const [promoInput, setPromoInput] = useState("");
@@ -268,6 +343,31 @@ export default function PosScreen() {
   /* quick-return at the till (F4) */
   const [quickReturnOpen, setQuickReturnOpen] = useState(false);
 
+  /* -- Naivas floor mode -------------------------------------- */
+  /* price check: scans pop a big price tag instead of adding to cart */
+  const [priceCheckOn, setPriceCheckOn] = useState(false);
+  const [pricePopup, setPricePopup] = useState<PricePopupState | null>(null);
+  /* scan feedback: green/red wash + WebAudio beep */
+  const [scanFlash, setScanFlash] = useState<"ok" | "err" | null>(null);
+  const [flashAt, setFlashAt] = useState(0);
+  /* fullscreen till mode (F11 style) */
+  const [isFs, setIsFs] = useState(false);
+  /* hold + resume */
+  const [holds, setHolds] = useState<HoldRecord[]>([]);
+  const [holdsOpen, setHoldsOpen] = useState(false);
+  const [holding, setHolding] = useState(false);
+  /* multi-pay split dialog */
+  const [payOpen, setPayOpen] = useState(false);
+  const [splits, setSplits] = useState<{ method: string; amount: string }[]>([]);
+  const [allowPartial, setAllowPartial] = useState(false);
+  /* day lock (423): manager PIN override dialog + retry payload */
+  const [dayLock, setDayLock] = useState<DayLockState | null>(null);
+  const retryRef = useRef<{ payload: SalePayload; clientId: string } | null>(null);
+  /* customer display pole (second window) */
+  const displayRef = useRef<BroadcastChannel | null>(null);
+  /* guards against a late gun Enter double-firing the search handler */
+  const lastScanAtRef = useRef(0);
+
   const vatRate = settings?.vatRate ?? 0.16;
   const pointValue = settings?.loyaltyPointValue ?? 1;
 
@@ -300,9 +400,9 @@ export default function PosScreen() {
     };
   }, [online, setUnsynced]);
 
-  /* -- debounced search ---------------------------------------- */
+  /* -- debounced search (fast, the filter itself is in-memory) -- */
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedQ(search), 250);
+    const t = setTimeout(() => setDebouncedQ(search), 120);
     return () => clearTimeout(t);
   }, [search]);
 
@@ -341,44 +441,272 @@ export default function PosScreen() {
   );
 
   const setLineQty = (productId: number, qty: number) => {
+    if (scaleKg[productId] != null) {
+      // weight lines keep decimals (0.75 kg of bananas, not 1)
+      const q = Math.max(0.01, Math.round(qty * 1000) / 1000 || 0.01);
+      setScaleKg((prev) => ({ ...prev, [productId]: q }));
+      setCart((prev) => prev.map((l) => (l.productId === productId ? { ...l, qty: q } : l)));
+      return;
+    }
     const q = Math.max(1, Math.min(9999, Math.round(qty) || 1));
     setCart((prev) => prev.map((l) => (l.productId === productId ? { ...l, qty: q } : l)));
   };
 
-  const removeLine = (productId: number) => setCart((prev) => prev.filter((l) => l.productId !== productId));
+  const removeLine = (productId: number) => {
+    setCart((prev) => prev.filter((l) => l.productId !== productId));
+    setScaleKg((prev) => {
+      if (prev[productId] == null) return prev;
+      const next = { ...prev };
+      delete next[productId];
+      return next;
+    });
+  };
 
-  /* -- catalog fetch (debounced, barcode-aware) ---------------- */
+  /* -- scan feedback: color wash + beep ------------------------- */
+  const flash = useCallback((kind: "ok" | "err") => {
+    setScanFlash(kind);
+    setFlashAt(Date.now());
+    window.setTimeout(() => setScanFlash((s) => (s === kind ? null : s)), 400);
+  }, []);
+
+  /* -- weight lines: add qty = kg from an EAN-13 scale barcode -- */
+  const addToCartWeighted = useCallback(
+    (p: ProductDto, kg: number) => {
+      const available = stockQty(p, activeStoreId);
+      if (available <= 0) {
+        toast({ title: "Out of stock", description: `${p.name} is unavailable at this store`, variant: "destructive" });
+        return;
+      }
+      setScaleKg((prev) => ({ ...prev, [p.id]: Math.round(((prev[p.id] ?? 0) + kg) * 1000) / 1000 }));
+      setCart((prev) => {
+        const idx = prev.findIndex((l) => l.productId === p.id);
+        if (idx === -1) {
+          return [...prev, { productId: p.id, name: p.name, emoji: p.emoji, sku: p.sku, unitPrice: p.price, qty: kg, category: p.category }];
+        }
+        return prev.map((l, i) => (i === idx ? { ...l, qty: Math.round((l.qty + kg) * 1000) / 1000 } : l));
+      });
+      toast({
+        title: `${kg} kg x ${KES(p.price)}`,
+        description: `${p.name} - ${kes(p.price * kg)} weighed and added`,
+      });
+    },
+    [activeStoreId]
+  );
+
+  /* -- price check popup (never touches the cart) --------------- */
+  const showPricePopup = useCallback(
+    (p: ProductDto, kg?: number) => {
+      setPricePopup({
+        at: Date.now(),
+        name: p.name,
+        emoji: p.emoji,
+        price: p.price,
+        unit: p.unit,
+        kg,
+        computed: kg ? Math.round(p.price * kg * 100) / 100 : undefined,
+        stock: stockQty(p, activeStoreId),
+        margin: canMargin && p.price > 0 ? Math.round(((p.price - p.cost) / p.price) * 100) : undefined,
+      });
+    },
+    [activeStoreId, canMargin]
+  );
+
+  /* -- scan resolution: local catalog first, then price-check API */
+  const clearTypedScan = useCallback((code: string) => {
+    // the gun's characters may have landed in the focused input - sweep them
+    setSearch("");
+    try {
+      const el = document.activeElement as HTMLInputElement | null;
+      if (el && el.tagName === "INPUT" && el.value && el.value.replace(/\s/g, "").endsWith(code)) {
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+        setter?.call(el, "");
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    } catch {
+      /* non-critical */
+    }
+  }, []);
+
+  const handleRemoteScan = useCallback(
+    (code: string) => {
+      void (async () => {
+        try {
+          const r = await remotePriceCheck(code);
+          const local = r.found && r.name ? products.find((p) => p.name === r.name) : undefined;
+          if (r.found && r.type === "product" && local) {
+            if (priceCheckOn) {
+              showPricePopup(local, r.kg ?? (r.isScale ? r.qty : undefined));
+              playScanTone(true);
+              return;
+            }
+            addToCartWeighted(local, r.kg ?? r.qty ?? 1);
+            playScanTone(true);
+            flash("ok");
+            clearTypedScan(code);
+            return;
+          }
+        } catch {
+          /* offline / failed - falls through to unknown */
+        }
+        playScanTone(false);
+        flash("err");
+        toast({ title: `Unknown barcode: ${code}`, description: "No product matches this code", variant: "destructive" });
+        clearTypedScan(code);
+      })();
+    },
+    [products, priceCheckOn, showPricePopup, addToCartWeighted, flash, clearTypedScan]
+  );
+
+  const handleScanCode = useCallback(
+    (raw: string) => {
+      const code = raw.trim();
+      lastScanAtRef.current = Date.now();
+      if (!code) return;
+      const res = resolveScan(code, products);
+      if (res.kind === "product") {
+        if (priceCheckOn) {
+          showPricePopup(res.product, res.kg);
+          playScanTone(true);
+        } else if (res.kg) {
+          addToCartWeighted(res.product, res.kg);
+          playScanTone(true);
+        } else {
+          addToCart(res.product);
+          playScanTone(true);
+        }
+        flash("ok");
+        clearTypedScan(code);
+        return;
+      }
+      if (res.kind === "scale-unresolved") {
+        // catalog has no scaleCode map (or it is stale) - ask the public
+        // price-check API to resolve the embedded item + weight
+        handleRemoteScan(code);
+        return;
+      }
+      playScanTone(false);
+      flash("err");
+      toast({ title: `Unknown barcode: ${code}`, description: "No product matches this code", variant: "destructive" });
+      clearTypedScan(code);
+    },
+    [products, priceCheckOn, showPricePopup, addToCart, addToCartWeighted, flash, clearTypedScan, handleRemoteScan]
+  );
+
+  /* -- GLOBAL barcode-gun capture --------------------------------
+     Window-level listener: scanners type characters <80 ms apart and
+     finish with Enter (or go silent for no-enter guns). Human typing
+     fragments the buffer, so it stays safe while focus is anywhere in
+     the POS. Dialogs (PIN entry, customer picker) pause the gun. */
+  useEffect(() => {
+    const buffer = new ScannerBuffer({
+      gapMs: 80,
+      idleMs: 80,
+      minEnterLen: 6,
+      minIdleLen: 8,
+      onScan: (code) => {
+        handleScanCode(code);
+      },
+    });
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key.length > 1 && e.key !== "Enter") return; // F-keys, arrows etc.
+      const target = e.target as HTMLElement | null;
+      const typing =
+        !!target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
+      if (typing && target?.closest('[role="dialog"]')) return; // modal inputs (PIN etc.) pause the gun
+      const consumed = buffer.key(e);
+      if (consumed) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => {
+      window.removeEventListener("keydown", onKey, true);
+      buffer.dispose();
+    };
+  }, [handleScanCode]);
+
+  /* -- price check popup auto-dismiss (4 s) ---------------------- */
+  useEffect(() => {
+    if (!pricePopup) return;
+    const t = setTimeout(() => setPricePopup(null), 4000);
+    return () => clearTimeout(t);
+  }, [pricePopup]);
+
+  /* -- fullscreen till mode (F11 style) --------------------------- */
+  const toggleFullscreen = useCallback(() => {
+    try {
+      if (document.fullscreenElement) {
+        void document.exitFullscreen().catch(() => {});
+      } else {
+        void document.documentElement.requestFullscreen().catch(() => {});
+      }
+    } catch {
+      /* fullscreen blocked - no-op */
+    }
+  }, []);
+  useEffect(() => {
+    const onFs = () => setIsFs(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", onFs);
+    return () => document.removeEventListener("fullscreenchange", onFs);
+  }, []);
+
+  /* -- customer display pole (second window at /display) ---------- */
+  useEffect(() => {
+    displayRef.current = createDisplayChannel();
+    return () => {
+      displayRef.current?.close();
+      displayRef.current = null;
+    };
+  }, []);
+
+  /* -- catalog: IndexedDB cache first, then a fresh full fetch --
+     The whole catalog lives in memory; search/category filter it
+     client side (<100 ms) and the POS keeps selling offline. */
   useEffect(() => {
     let alive = true;
     void (async () => {
-      setProductsLoading(true);
+      // 1. instant boot from the offline product cache (DB v2)
       try {
-        const params = new URLSearchParams();
-        if (debouncedQ.trim()) params.set("q", debouncedQ.trim());
-        if (category !== "All") params.set("category", category);
-        if (activeStoreId !== "all") params.set("storeId", String(activeStoreId));
-        const list = await api.get<ProductDto[]>(`/api/products?${params.toString()}`);
-        if (!alive) return;
-        setProducts(list);
-
-        // barcode gun / all-digit entry → auto-add first match
-        const q = debouncedQ.trim();
-        if (/^\d{8,}$/.test(q) && list.length > 0) {
-          const match = list.find((p) => p.barcode === q || p.sku === q) ?? list[0];
-          addToCart(match);
-          toast({ title: `Barcode scanned: ${q}`, description: `${match.name} added to cart` });
-          setSearch("");
+        const cached = await getCachedProducts();
+        if (alive && cached.length > 0) {
+          setProducts(cached);
+          setProductsLoading(false);
         }
       } catch {
-        /* offline - keep last catalog so POS never stops selling */
-      } finally {
+        /* IndexedDB unavailable - POS still works in-memory */
+      }
+      // 2. refresh from the server and re-snapshot the cache
+      try {
+        const list = await api.get<ProductDto[]>("/api/products");
+        if (!alive) return;
+        setProducts(list);
+        setProductsLoading(false);
+        void saveProductCache(list).catch(() => {});
+      } catch {
+        /* offline - keep serving the cached catalog */
         if (alive) setProductsLoading(false);
       }
     })();
     return () => {
       alive = false;
     };
-  }, [debouncedQ, category, activeStoreId, catalogNonce, addToCart]);
+  }, [catalogNonce]);
+
+  /* in-memory search + category filter (instant, <100 ms) */
+  const visibleProducts = useMemo(() => {
+    const q = debouncedQ.trim().toLowerCase();
+    return products.filter((p) => {
+      if (category !== "All" && p.category !== category) return false;
+      if (!q) return true;
+      return (
+        p.name.toLowerCase().includes(q) ||
+        p.sku.toLowerCase().includes(q) ||
+        p.barcode.includes(q)
+      );
+    });
+  }, [products, debouncedQ, category]);
 
   /* -- customer picker fetch ----------------------------------- */
   useEffect(() => {
@@ -482,6 +810,30 @@ export default function PosScreen() {
     pointValue,
     vatRate,
   });
+  const cartTotal = totals.total;
+
+  /* broadcast every cart change to the display pole (tenders, discounts
+     and points switches all move the total, so it rides on cartTotal) */
+  useEffect(() => {
+    const ch = displayRef.current;
+    if (!ch) return;
+    const last = cart[cart.length - 1];
+    const msg: DisplayCartMessage = {
+      type: "cart",
+      total: Math.round(cartTotal * 100) / 100,
+      itemCount: cart.reduce((s, l) => s + l.qty, 0),
+      points: Math.floor(cartTotal / (settings?.loyaltyEarnPerKes ?? 100)),
+      storeName: activeStore?.name ?? "All Stores",
+      customerName: customer?.name ?? "Walk-in",
+      lastItem: last ? { name: last.name, qty: last.qty, price: last.unitPrice } : undefined,
+      at: Date.now(),
+    };
+    try {
+      ch.postMessage(msg);
+    } catch {
+      /* channel closed */
+    }
+  }, [cart, cartTotal, customer, activeStore, settings]);
 
   /* -- PAY flow ------------------------------------------------ */
   const markQueue = async (clientId: string, status: "synced" | "failed", error?: string) => {
@@ -530,12 +882,15 @@ export default function PosScreen() {
     setSuccess(null);
     setEmailOpen(false);
     setCart([]);
+    setScaleKg({});
     setCustomer(null);
     setPromo(null);
     setPromoInput("");
     setBillDiscount("");
     setUsePoints(false);
     setPaymentMethod("Cash");
+    setSplits([]);
+    setAllowPartial(false);
   };
 
   /* -- email the e-invoice straight from the success modal ----- */
@@ -579,10 +934,88 @@ export default function PosScreen() {
     }
   };
 
-  const handlePay = async () => {
+  /**
+   * Shared POST /api/sales response handler (used by the first attempt AND
+   * the day-lock manager-PIN retry). Returns "handled" or "daylocked".
+   * Raw fetch on purpose: we need the structured 403 {blocked} / 423 bodies.
+   */
+  const finishSaleResponse = async (res: Response, clientId: string): Promise<"handled" | "daylocked"> => {
+    if (res.status === 423) {
+      const data = (await res.json().catch(() => null)) as { error?: string; zNo?: string } | null;
+      setDayLock({
+        open: true,
+        pin: "",
+        error: data?.error ?? "Day is closed - Manager PIN required",
+        zNo: data?.zNo ?? null,
+        busy: false,
+      });
+      return "daylocked"; // queued item stays pending until retry or cancel
+    }
+
+    if (res.status === 403) {
+      const data = (await res.json().catch(() => null)) as { blocked?: { reason: string; overdueDays: number } } | null;
+      const reason = data?.blocked?.reason ?? "Credit sale blocked";
+      await markQueue(clientId, "failed", reason);
+      setBlocked(data?.blocked ?? { reason, overdueDays: 0 });
+      return "handled";
+    }
+
+    if (!res.ok) {
+      const data = (await res.json().catch(() => null)) as { error?: string } | null;
+      const message = data?.error ?? `Sale failed (${res.status})`;
+      await markQueue(clientId, "failed", message);
+      toast({ title: "Sale rejected", description: message, variant: "destructive" });
+      return "handled";
+    }
+
+    const data = (await res.json()) as SaleResult & { digitalReceipt?: { code: string; url: string } | null };
+    if (!data.ok || !data.sale) {
+      const message = data.error ?? "Sale failed on server";
+      await markQueue(clientId, "failed", message);
+      toast({ title: "Sale rejected", description: message, variant: "destructive" });
+      return "handled";
+    }
+
+    await markQueue(clientId, "synced");
+    setSuccess({
+      sale: data.sale,
+      loyalty: data.loyalty ?? null,
+      offline: false,
+      digitalReceipt: data.digitalReceipt ?? null,
+    });
+    toast({ title: `✅ ${data.sale.receiptNo} recorded`, description: `${data.sale.paymentMethod} • ${KES(data.sale.total)}` });
+    setCatalogNonce((n) => n + 1); // refresh stock badges after server decrement
+    return "handled";
+  };
+
+  /** POST the payload to /api/sales and consume the response. */
+  const postSale = async (payload: SalePayload, clientId: string): Promise<"handled" | "daylocked"> => {
+    try {
+      const res = await fetch("/api/sales", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      return await finishSaleResponse(res, clientId);
+    } catch {
+      /* network dropped mid-payment -> keep queued, show offline-queued receipt */
+      const offlineSale = buildOfflineSale(payload, clientId, totals);
+      const loyalty = {
+        earned: offlineSale.pointsEarned,
+        balance: Math.max(0, (customer?.loyaltyPoints ?? 0) - totals.pointsToUse + offlineSale.pointsEarned),
+        redeemed: totals.pointsToUse,
+      };
+      setSuccess({ sale: offlineSale, loyalty, offline: true, digitalReceipt: null });
+      toast({ title: "Sale saved offline - will auto-sync", description: KES(totals.total) });
+      return "handled";
+    }
+  };
+
+  const handlePay = async (paySplits?: { method: string; amount: number }[], partial?: boolean) => {
     if (cart.length === 0 || paying) return;
     const isOffline = !online || !navigator.onLine;
-    if (paymentMethod === "Credit Sale" && !customer) {
+    const hasSplits = !!paySplits && paySplits.length > 0;
+    if (!hasSplits && paymentMethod === "Credit Sale" && !customer) {
       toast({
         title: "Credit sale needs a customer",
         description: "Select a customer with a credit limit before paying on credit.",
@@ -590,25 +1023,48 @@ export default function PosScreen() {
       });
       return;
     }
+    if (hasSplits && partial && !customer) {
+      toast({ title: "Partial payment needs a customer", description: "The balance is tracked as customer debt.", variant: "destructive" });
+      return;
+    }
 
     setPaying(true);
     const clientId = crypto.randomUUID();
-    const storeId = activeStoreId === "all" ? (user?.storeId ?? 1) : activeStoreId;
+
+    /* Points tendered inside splits redeem loyalty the same way the
+       "use points" switch does - otherwise the arithmetic never adds up. */
+    const pointsFromSplits = hasSplits
+      ? paySplits!.filter((s) => s.method === "Points").reduce((s, x) => s + x.amount, 0)
+      : 0;
+    const extraPoints = Math.round(pointsFromSplits / pointValue);
+    const pointsRedeemed = Math.min(
+      (customer?.loyaltyPoints ?? 0),
+      totals.pointsToUse + extraPoints
+    );
+
     const payload: SalePayload = {
       clientId,
-      storeId,
+      storeId: resolvedStoreId,
       customerId: customer?.id ?? null,
       staffName: user?.name ?? "Counter 1",
       items: cart,
-      paymentMethod,
+      paymentMethod: hasSplits ? mapSplitMethod(paySplits![0].method) : paymentMethod,
       promoCode: promo,
-      pointsRedeemed: totals.pointsToUse,
+      pointsRedeemed,
       billDiscount: totals.billDiscount > 0 ? totals.billDiscount : undefined,
       offlineCreated: isOffline,
       ...(isOffline ? { createdAt: new Date().toISOString() } : {}),
+      ...(hasSplits
+        ? {
+            paySplits: paySplits!.map((s) => ({ method: s.method, amount: s.amount })),
+            allowPartial: partial,
+          }
+        : {}),
     };
 
-    /* 1. ALWAYS write to the offline queue first */
+    /* 1. ALWAYS write to the offline queue first. The payload is also
+       stashed so a 423 day-lock can be retried with a manager PIN. */
+    retryRef.current = { payload, clientId };
     try {
       await offlineQueue.enqueue({ clientId, payload, status: "pending", createdAt: Date.now() });
       const c = await offlineQueue.count();
@@ -618,8 +1074,8 @@ export default function PosScreen() {
     }
 
     try {
-      /* 2. M-Pesa STK push (online only) */
-      if (paymentMethod === "M-Pesa") {
+      /* 2. M-Pesa STK push (online, single tender only) */
+      if (!hasSplits && paymentMethod === "M-Pesa") {
         const phone = customer?.phone ?? "0712345678";
         if (isOffline) {
           toast({ title: "Queued - STK will fire on sync", description: "Sale stored on this device" });
@@ -664,69 +1120,206 @@ export default function PosScreen() {
         const offlineSale = buildOfflineSale(payload, clientId, totals);
         const loyalty = {
           earned: offlineSale.pointsEarned,
-          balance: Math.max(0, (customer?.loyaltyPoints ?? 0) - totals.pointsToUse + offlineSale.pointsEarned),
-          redeemed: totals.pointsToUse,
+          balance: Math.max(0, (customer?.loyaltyPoints ?? 0) - pointsRedeemed + offlineSale.pointsEarned),
+          redeemed: pointsRedeemed,
         };
-        setSuccess({ sale: offlineSale, loyalty, offline: true });
+        setSuccess({ sale: offlineSale, loyalty, offline: true, digitalReceipt: null });
         toast({ title: "Sale saved offline - will auto-sync", description: KES(totals.total) });
         setPaying(false);
         return;
       }
 
-      // raw fetch here on purpose: we need the structured 403 {blocked} body for POS credit blocking
-      const res = await fetch("/api/sales", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      if (res.status === 403) {
-        const data = (await res.json().catch(() => null)) as { blocked?: { reason: string; overdueDays: number } } | null;
-        const reason = data?.blocked?.reason ?? "Credit sale blocked";
-        await markQueue(clientId, "failed", reason);
-        setBlocked(data?.blocked ?? { reason, overdueDays: 0 });
-        setPaying(false);
-        return;
-      }
-
-      if (!res.ok) {
-        const data = (await res.json().catch(() => null)) as { error?: string } | null;
-        const message = data?.error ?? `Sale failed (${res.status})`;
-        await markQueue(clientId, "failed", message);
-        toast({ title: "Sale rejected", description: message, variant: "destructive" });
-        setPaying(false);
-        return;
-      }
-
-      const data = (await res.json()) as SaleResult;
-      if (!data.ok || !data.sale) {
-        const message = data.error ?? "Sale failed on server";
-        await markQueue(clientId, "failed", message);
-        toast({ title: "Sale rejected", description: message, variant: "destructive" });
-        setPaying(false);
-        return;
-      }
-
-      await markQueue(clientId, "synced");
-      setSuccess({ sale: data.sale, loyalty: data.loyalty ?? null, offline: false });
-      toast({ title: `✅ ${data.sale.receiptNo} recorded`, description: `${paymentMethod} • ${KES(data.sale.total)}` });
-      setCatalogNonce((n) => n + 1); // refresh stock badges after server decrement
-    } catch (e) {
-      /* network dropped mid-payment → keep queued, show offline-queued receipt */
-      const offlineSale = buildOfflineSale(payload, clientId, totals);
-      const loyalty = {
-        earned: offlineSale.pointsEarned,
-        balance: Math.max(0, (customer?.loyaltyPoints ?? 0) - totals.pointsToUse + offlineSale.pointsEarned),
-        redeemed: totals.pointsToUse,
-      };
-      setSuccess({ sale: offlineSale, loyalty, offline: true });
-      toast({
-        title: "Sale saved offline - will auto-sync",
-        description: e instanceof Error ? e.message : KES(totals.total),
+      await postSale(payload, clientId).then((outcome) => {
+        if (outcome === "handled") retryRef.current = null; // day-lock retry no longer needed
       });
     } finally {
       setPaying(false);
     }
+  };
+
+  /* -- day lock (423): manager PIN override ---------------------- */
+  const retryDayLockSale = async () => {
+    const r = retryRef.current;
+    if (!r || !dayLock?.pin) return;
+    setDayLock({ ...dayLock, busy: true, error: null });
+    try {
+      const res = await fetch("/api/sales", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...r.payload, managerPin: dayLock.pin }),
+      });
+      const outcome = await finishSaleResponse(res, r.clientId);
+      if (outcome === "handled") {
+        setDayLock(null);
+        retryRef.current = null;
+      } else {
+        setDayLock((s) => (s ? { ...s, busy: false, error: "Override rejected - check the PIN and try again." } : s));
+      }
+    } catch (e) {
+      setDayLock((s) =>
+        s ? { ...s, busy: false, error: e instanceof Error ? e.message : "Retry failed - check the network." } : s
+      );
+    }
+  };
+
+  const cancelDayLockSale = async () => {
+    const r = retryRef.current;
+    if (r) await markQueue(r.clientId, "failed", "Day locked - sale cancelled");
+    retryRef.current = null;
+    setDayLock(null);
+  };
+
+  /* -- HOLD + resume (Naivas park-and-serve) --------------------- */
+  const clearCartState = () => {
+    setCart([]);
+    setScaleKg({});
+    setPromo(null);
+    setPromoInput("");
+    setBillDiscount("");
+    setUsePoints(false);
+  };
+
+  const holdCart = async () => {
+    if (cart.length === 0 || holding) return;
+    setHolding(true);
+    const items = toHoldLines(cart, scaleKg);
+    const base = {
+      storeId: resolvedStoreId,
+      staffName: user?.name ?? "Cashier",
+      customerId: customer?.id ?? null,
+      customerName: customer?.name ?? "",
+      label: "",
+    };
+    let saved: HoldRecord;
+    try {
+      const d = await api.post<{ ok: boolean; hold: HoldRecord }>("/api/pos-hold", { ...base, items });
+      saved = { ...d.hold, items, local: false };
+    } catch {
+      /* network down - park on this device so the cart still survives */
+      const total = items.reduce((s, i) => s + (i.total ?? i.unitPrice * i.qty), 0);
+      saved = {
+        ...base,
+        holdCode: `HOLD-9${String(Date.now()).slice(-3)}`,
+        itemCount: items.reduce((s, i) => s + i.qty, 0),
+        total,
+        items,
+        createdAt: new Date().toISOString(),
+        local: true,
+      };
+    }
+    addLocalHold(saved);
+    setHolds((prev) => [saved, ...prev.filter((h) => h.holdCode !== saved.holdCode)]);
+    clearCartState();
+    setCustomer(null);
+    toast({
+      title: `${saved.holdCode} parked`,
+      description: saved.local
+        ? "Network is down - hold saved on this device and survives refresh"
+        : "Cart cleared - ready for the next customer",
+    });
+    setHolding(false);
+  };
+
+  const refreshHolds = useCallback(async () => {
+    let server: HoldRecord[] = [];
+    try {
+      const d = await api.get<{ holds: HoldRecord[] }>(`/api/pos-hold?storeId=${resolvedStoreId}`);
+      server = (d.holds ?? []).map((h) => ({ ...h, items: h.items ?? [] }));
+    } catch {
+      /* offline - the localStorage mirror keeps holds visible */
+    }
+    setHolds(mergeHolds(server, readLocalHolds()));
+  }, [resolvedStoreId]);
+
+  /* merge server + device holds on mount and whenever connectivity flips */
+  useEffect(() => {
+    void refreshHolds();
+  }, [refreshHolds, online]);
+
+  const resumeHold = async (h: HoldRecord) => {
+    const { lines, scale } = fromHoldLines(h.items ?? []);
+    if (lines.length === 0) {
+      toast({ title: "Hold is empty", description: `${h.holdCode} has no lines to resume`, variant: "destructive" });
+      return;
+    }
+    setCart(lines);
+    setScaleKg(scale);
+    setPromo(null);
+    setPromoInput("");
+    setBillDiscount("");
+    setUsePoints(false);
+    if (h.customerId) {
+      try {
+        const list = await api.get<CustomerDto[]>("/api/customers");
+        const c = list.find((x) => x.id === h.customerId);
+        if (c) setCustomer(c);
+      } catch {
+        /* offline - the cart resumes without the loyalty profile */
+      }
+    }
+    if (h.local || !h.id) {
+      removeLocalHold(h.holdCode);
+      setHolds((prev) => prev.filter((x) => x.holdCode !== h.holdCode));
+    } else {
+      try {
+        await api.del(`/api/pos-hold?id=${h.id}`);
+        removeLocalHold(h.holdCode); // clear any stale device mirror
+        setHolds((prev) => prev.filter((x) => x.holdCode !== h.holdCode));
+      } catch {
+        if (!navigator.onLine) {
+          toast({
+            title: "Resumed offline copy",
+            description: "Network is down - the server hold stays parked",
+          });
+        } else {
+          toast({
+            title: "Could not free the server hold",
+            description: "It may be resumed again - ask a manager to clear it",
+            variant: "destructive",
+          });
+        }
+      }
+    }
+    setHoldsOpen(false);
+    toast({ title: `${h.holdCode} resumed`, description: `${lines.length} line${lines.length > 1 ? "s" : ""} back in the cart` });
+  };
+
+  /* -- multi-pay split dialog helpers ----------------------------- */
+  const splitsSum = splits.reduce((s, x) => s + (Number(x.amount) || 0), 0);
+  const splitRemaining = Math.round((totals.total - splitsSum) * 100) / 100;
+  const fullySplit = splits.length > 0 && Math.abs(splitRemaining) < 0.01;
+  const splitOver = splitsSum > totals.total + 0.009;
+  const pointsInSplits = splits
+    .filter((s) => s.method === "Points")
+    .reduce((s, x) => s + (Number(x.amount) || 0), 0);
+
+  const confirmPay = () => {
+    const clean = splits
+      .map((s) => ({ method: s.method, amount: Math.round((Number(s.amount) || 0) * 100) / 100 }))
+      .filter((s) => s.amount > 0);
+    if (clean.length > 0) {
+      if (splitOver) {
+        toast({ title: "Split exceeds the total", description: `Splits add to ${KES(splitsSum)} but the total is ${KES(totals.total)}`, variant: "destructive" });
+        return;
+      }
+      if (splitRemaining > 0.009 && !allowPartial) {
+        toast({ title: "Split incomplete", description: `${KES(splitRemaining)} still unpaid - complete the split or allow partial.`, variant: "destructive" });
+        return;
+      }
+      if (allowPartial && !customer) {
+        toast({ title: "Partial payment needs a customer", description: "Select a customer so the balance tracks as debt.", variant: "destructive" });
+        return;
+      }
+      if (pointsInSplits > 0) {
+        const available = (customer?.loyaltyPoints ?? 0) - totals.pointsToUse;
+        if (Math.round(pointsInSplits / pointValue) > available) {
+          toast({ title: "Not enough points", description: `${customer?.name ?? "The customer"} has ${available} points left after this bill's redemption.`, variant: "destructive" });
+          return;
+        }
+      }
+    }
+    setPayOpen(false);
+    void handlePay(clean.length > 0 ? clean : undefined, allowPartial);
   };
 
   /* -- render -------------------------------------------------- */
@@ -734,7 +1327,18 @@ export default function PosScreen() {
   const billNum = Number(billDiscount) || 0;
 
   return (
-    <div className="flex min-h-[620px] flex-col overflow-hidden rounded-2xl border border-[#DFE1E6] bg-white shadow-sm @4xl:h-full">
+    <div className="df-pos-root relative flex min-h-[620px] max-h-full! flex-col overflow-hidden rounded-2xl border border-[#DFE1E6] bg-white shadow-sm">
+      {/* scan feedback wash (green ok / red unknown) */}
+      {scanFlash && (
+        <div
+          key={flashAt}
+          aria-hidden
+          className={cn(
+            "pointer-events-none absolute inset-0 z-40 animate-out fade-out duration-500 fill-mode-forwards",
+            scanFlash === "ok" ? "bg-[#00C853]/15" : "bg-[#FF5630]/15"
+          )}
+        />
+      )}
       {/* header strip */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#DFE1E6] bg-[#FAFBFC] px-4 py-2.5">
         <div className="flex items-center gap-2.5">
@@ -759,6 +1363,29 @@ export default function PosScreen() {
           >
             <Landmark size={12} /> Till
             {tillSessionLive && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#00C853]" aria-hidden />}
+          </button>
+          {/* Price check mode - scans pop the price instead of selling */}
+          <button
+            onClick={() => setPriceCheckOn((v) => !v)}
+            aria-pressed={priceCheckOn}
+            className={cn(
+              "inline-flex h-7 items-center gap-1.5 rounded-full border px-3 text-[11px] font-bold transition",
+              priceCheckOn
+                ? "border-[#FFD54F] bg-[#FFF8E1] text-[#B8860B]"
+                : "border-[#DFE1E6] bg-white text-[#172B4D] hover:border-[#B8860B]/50 hover:text-[#B8860B]"
+            )}
+            aria-label="Toggle price check mode"
+          >
+            <ScanSearch size={12} /> Price Check
+          </button>
+          {/* Fullscreen till (F11 style) */}
+          <button
+            onClick={toggleFullscreen}
+            className="inline-flex h-7 items-center gap-1.5 rounded-full border border-[#DFE1E6] bg-white px-3 text-[11px] font-bold text-[#172B4D] transition hover:border-[#0052CC]/50 hover:text-[#0052CC]"
+            aria-label={isFs ? "Exit fullscreen" : "Enter fullscreen"}
+          >
+            {isFs ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+            {isFs ? "Exit Full" : "Fullscreen"}
           </button>
           {/* Quick return - scan a receipt at the till (F4) */}
           <button
@@ -811,19 +1438,36 @@ export default function PosScreen() {
                 onFocus={() => setSearchFocus(true)}
                 onBlur={() => setSearchFocus(false)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && products.length > 0) {
-                    addToCart(products[0]);
-                    toast({ title: `${products[0].name} added`, description: KES(products[0].price) });
-                    setSearch("");
+                  if (e.key === "Enter" && Date.now() - lastScanAtRef.current > 600) {
+                    // a gun burst resolves through the global scanner listener;
+                    // this path is for human typing (first filtered match)
+                    if (priceCheckOn) {
+                      const exact = products.find((p) => p.barcode === search.trim() || p.sku === search.trim());
+                      if (exact) {
+                        showPricePopup(exact);
+                        setSearch("");
+                        return;
+                      }
+                    }
+                    if (visibleProducts.length > 0) {
+                      addToCart(visibleProducts[0]);
+                      toast({ title: `${visibleProducts[0].name} added`, description: KES(visibleProducts[0].price) });
+                      setSearch("");
+                    }
                   }
                 }}
-                placeholder="Scan barcode or search items… (F2)"
+                placeholder={priceCheckOn ? "Scan or type to CHECK a price… (F2)" : "Scan barcode or search items… (F2)"}
                 className="h-10 rounded-xl border-[#DFE1E6] bg-white pl-11 pr-10 text-[13px]"
               />
               <span className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md border border-[#DFE1E6] bg-[#FAFBFC] px-1.5 py-0.5 text-[10px] font-bold text-[#6B778C]">
                 F2
               </span>
             </div>
+            {priceCheckOn && (
+              <span className="df-scan-bar inline-flex shrink-0 items-center gap-1 rounded-full border border-[#FFD54F] bg-[#FFF8E1] px-2.5 py-1 text-[10px] font-bold text-[#B8860B]">
+                <ScanSearch size={11} /> PRICE CHECK MODE
+              </span>
+            )}
           </div>
 
           {/* category pills */}
@@ -902,7 +1546,7 @@ export default function PosScreen() {
                   <Skeleton key={i} className="h-[168px] rounded-2xl" />
                 ))}
               </div>
-            ) : products.length === 0 ? (
+            ) : visibleProducts.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-[#DFE1E6] bg-white/70 py-12 text-center">
                 <Package size={28} className="mx-auto mb-2 text-[#6B778C]" />
                 <p className="font-display text-[14px] font-semibold text-[#172B4D]">No products found</p>
@@ -910,7 +1554,7 @@ export default function PosScreen() {
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-3 @6xl:grid-cols-3">
-                {products.map((p) => {
+                {visibleProducts.map((p) => {
                   const qty = stockQty(p, activeStoreId);
                   const out = qty <= 0;
                   return (
@@ -1054,7 +1698,7 @@ export default function PosScreen() {
           )}
 
           {/* cart lines */}
-          <div className="df-scroll min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
+          <div className="df-scroll df-pos-cart-scroll min-h-0 flex-1 space-y-2 p-3">
             {cart.length === 0 ? (
               <div className="flex h-full flex-col items-center justify-center py-10 text-center">
                 <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#F4F5F7] text-[#6B778C]">
@@ -1064,7 +1708,9 @@ export default function PosScreen() {
                 <p className="mt-1 text-[12px] text-[#6B778C]">Works fully offline; sales queue and auto-sync.</p>
               </div>
             ) : (
-              cart.map((l) => (
+              cart.map((l) => {
+                const kg = scaleKg[l.productId];
+                return (
                 <div
                   key={l.productId}
                   className="flex gap-3 rounded-xl border border-[#F4F5F7] bg-[#FAFBFC] p-2 transition hover:border-[#DFE1E6]"
@@ -1077,27 +1723,39 @@ export default function PosScreen() {
                     <p className="truncate text-[11px] text-[#6B778C]">
                       {l.sku} • {KES(l.unitPrice)}
                     </p>
+                    {kg != null && (
+                      <span className="mt-0.5 inline-flex w-fit items-center gap-1 rounded-full border border-[#C8E6C9] bg-[#E8F5E9] px-1.5 py-0.5 text-[10px] font-bold text-[#1B7A2E]">
+                        <ScaleIcon size={9} /> {l.qty} kg x {KES(l.unitPrice)}/kg
+                      </span>
+                    )}
                     <div className="mt-1 flex items-center gap-2">
                       <div className="flex items-center gap-1 rounded-full border border-[#DFE1E6] bg-white px-1">
                         <button
                           type="button"
                           aria-label="Decrease quantity"
-                          onClick={() => setLineQty(l.productId, l.qty - 1)}
+                          onClick={() => setLineQty(l.productId, kg != null ? l.qty - 0.05 : l.qty - 1)}
                           className="flex h-7 w-7 items-center justify-center rounded-full text-[#6B778C] transition hover:bg-[#F4F5F7] hover:text-[#172B4D]"
                         >
                           <Minus size={12} />
                         </button>
                         <input
                           value={l.qty}
-                          onChange={(e) => setLineQty(l.productId, Number(e.target.value.replace(/\D/g, "")) || 1)}
-                          inputMode="numeric"
+                          onChange={(e) =>
+                            setLineQty(
+                              l.productId,
+                              kg != null
+                                ? Number(e.target.value.replace(/[^\d.]/g, "")) || 0.01
+                                : Number(e.target.value.replace(/\D/g, "")) || 1
+                            )
+                          }
+                          inputMode="decimal"
                           aria-label={`Quantity for ${l.name}`}
-                          className="w-9 border-0 bg-transparent text-center text-[12px] font-bold text-[#172B4D] outline-none"
+                          className="w-10 border-0 bg-transparent text-center text-[12px] font-bold text-[#172B4D] outline-none"
                         />
                         <button
                           type="button"
                           aria-label="Increase quantity"
-                          onClick={() => setLineQty(l.productId, l.qty + 1)}
+                          onClick={() => setLineQty(l.productId, kg != null ? l.qty + 0.05 : l.qty + 1)}
                           className="flex h-7 w-7 items-center justify-center rounded-full text-[#6B778C] transition hover:bg-[#F4F5F7] hover:text-[#172B4D]"
                         >
                           <Plus size={12} />
@@ -1106,7 +1764,7 @@ export default function PosScreen() {
                     </div>
                   </div>
                   <div className="flex shrink-0 flex-col items-end justify-between">
-                    <p className="whitespace-nowrap text-[13px] font-bold text-[#172B4D]">{KES(l.unitPrice * l.qty)}</p>
+                    <p className="whitespace-nowrap text-[13px] font-bold text-[#172B4D]">{kes(l.unitPrice * l.qty)}</p>
                     <button
                       type="button"
                       aria-label={`Remove ${l.name}`}
@@ -1117,8 +1775,50 @@ export default function PosScreen() {
                     </button>
                   </div>
                 </div>
-              ))
+                );
+              })
             )}
+          </div>
+
+          {/* hold + resume + clear (Naivas park-and-serve) */}
+          <div className="flex items-center gap-2 border-t border-[#DFE1E6] bg-[#FAFBFC] px-3 py-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={cart.length === 0 || holding}
+              onClick={() => void holdCart()}
+              className="h-8 flex-1 rounded-lg border-[#DFE1E6] bg-white px-2 text-[11px] font-bold text-[#172B4D] hover:border-[#B8860B]/60 hover:text-[#B8860B]"
+              aria-label="Hold the current cart and serve the next customer"
+            >
+              {holding ? <Loader2 size={13} className="animate-spin" /> : <Pause size={13} />} HOLD
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setHoldsOpen(true);
+                void refreshHolds();
+              }}
+              className="h-8 flex-1 rounded-lg border-[#DFE1E6] bg-white px-2 text-[11px] font-bold text-[#172B4D] hover:border-[#0052CC]/60 hover:text-[#0052CC]"
+              aria-label="Resume a parked cart"
+            >
+              <History size={13} /> RESUME
+              {holds.length > 0 && (
+                <span className="ml-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[#0052CC] px-1 text-[9px] font-bold text-white">
+                  {holds.length}
+                </span>
+              )}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={cart.length === 0}
+              onClick={clearCartState}
+              className="h-8 rounded-lg px-2 text-[11px] font-bold text-[#6B778C] hover:text-[#FF5630]"
+              aria-label="Clear the cart"
+            >
+              <Trash2 size={13} /> CLEAR
+            </Button>
           </div>
 
           {/* totals footer */}
@@ -1285,11 +1985,11 @@ export default function PosScreen() {
               })}
             </div>
 
-            {/* PAY */}
+            {/* PAY - opens the payment dialog (single tender or split) */}
             <Button
               type="button"
               disabled={cart.length === 0 || paying}
-              onClick={() => void handlePay()}
+              onClick={() => setPayOpen(true)}
               className="h-12 w-full rounded-xl bg-[#0052CC] text-[15px] font-bold text-white shadow-[0_8px_24px_rgba(0,82,204,0.35)] hover:bg-[#0041A8]"
             >
               {paying ? <Loader2 size={18} className="animate-spin" /> : <ShoppingBag size={18} />}
@@ -1314,7 +2014,7 @@ export default function PosScreen() {
               </button>
               <button
                 type="button"
-                onClick={() => toast({ title: "Customer display mirrored" })}
+                onClick={() => toast({ title: "Display pole live", description: "Open /display in a second window - it mirrors this cart live" })}
                 className="flex items-center gap-1 transition hover:text-[#172B4D]"
               >
                 <MonitorSmartphone size={12} /> Display
@@ -1489,6 +2189,28 @@ export default function PosScreen() {
                   </div>
                 )}
 
+                {/* digital receipt twin: NVS code + QR + thermal print */}
+                {success.digitalReceipt && !success.offline && (
+                  <div className="mx-auto mt-4 flex w-fit max-w-full items-center gap-4 rounded-xl border border-[#C8E6C9] bg-[#F6FBF6] p-3">
+                    <QrImage text={success.digitalReceipt.url} size={92} alt="Digital receipt QR" />
+                    <div className="min-w-0 text-left">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-[#1B7A2E]">Digital receipt</p>
+                      <p className="truncate font-mono text-[13px] font-bold text-[#172B4D]">{success.digitalReceipt.code}</p>
+                      <p className="mt-0.5 max-w-[190px] text-[10px] leading-tight text-[#6B778C]">
+                        Scan to view, print or verify anytime - the QR never dies.
+                      </p>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => window.print()}
+                        className="mt-1.5 h-7 rounded-lg border-[#DFE1E6] bg-white px-2.5 text-[11px] font-bold text-[#172B4D]"
+                      >
+                        <Printer size={12} /> Print Receipt
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
                 {/* loyalty QR */}
                 {success.loyalty && success.sale.customerId && !success.offline && (
                   <div className="mt-4 flex items-center justify-center gap-4 rounded-xl border border-[#FFE082] bg-[#FFFDE7] p-3">
@@ -1641,6 +2363,290 @@ export default function PosScreen() {
         </DialogContent>
       </Dialog>
 
+      {/* -- payment dialog: single tender OR multi-pay split ---- */}
+      <Dialog open={payOpen} onOpenChange={(o) => !o && setPayOpen(false)}>
+        <DialogContent className="df-modal-scroll max-w-[540px] rounded-2xl df-scroll">
+          <DialogHeader>
+            <DialogTitle className="font-display flex items-center justify-between text-[16px] font-bold text-[#172B4D]">
+              <span>Complete sale</span>
+              <span className="font-display text-[20px] font-extrabold text-[#0052CC]">{KES(totals.total)}</span>
+            </DialogTitle>
+            <DialogDescription className="text-[12px]">
+              {splits.length === 0
+                ? `Single payment on ${paymentMethod} - or split across up to 4 tenders.`
+                : `Splitting ${KES(splitsSum)} across ${splits.length} tender${splits.length > 1 ? "s" : ""}.`}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            {/* split rows */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] font-bold uppercase tracking-widest text-[#6B778C]">Split payment</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={splits.length >= 4}
+                  onClick={() => setSplits((prev) => [...prev, { method: "Cash", amount: "" }])}
+                  className="h-7 rounded-lg border-[#DFE1E6] px-2.5 text-[11px] font-bold text-[#172B4D]"
+                >
+                  <Plus size={12} /> Add split
+                </Button>
+              </div>
+
+              {splits.length === 0 && (
+                <p className="rounded-xl border border-dashed border-[#DFE1E6] bg-[#FAFBFC] px-3 py-2.5 text-[12px] text-[#6B778C]">
+                  No splits - the full {KES(totals.total)} charges to <b className="text-[#172B4D]">{paymentMethod}</b>.
+                </p>
+              )}
+
+              {splits.map((s, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <Select
+                    value={s.method}
+                    onValueChange={(v) =>
+                      setSplits((prev) => prev.map((x, j) => (j === i ? { ...x, method: v } : x)))
+                    }
+                  >
+                    <SelectTrigger className="h-9 flex-1 rounded-xl border-[#DFE1E6] text-[12px]" aria-label={`Split ${i + 1} method`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SPLIT_METHODS.map((m) => (
+                        <SelectItem key={m} value={m} className="text-[12px]">
+                          {m}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    value={s.amount}
+                    onChange={(e) =>
+                      setSplits((prev) => prev.map((x, j) => (j === i ? { ...x, amount: e.target.value } : x)))
+                    }
+                    placeholder="0"
+                    aria-label={`Split ${i + 1} amount`}
+                    className="h-9 w-[120px] rounded-xl border-[#DFE1E6] text-right text-[13px] font-bold"
+                  />
+                  <button
+                    type="button"
+                    aria-label={`Remove split ${i + 1}`}
+                    onClick={() => setSplits((prev) => prev.filter((_, j) => j !== i))}
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[#6B778C] transition hover:bg-[#FFEBEE] hover:text-[#FF5630]"
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {/* live balance */}
+            {splits.length > 0 && (
+              <div className="flex items-center justify-between rounded-xl border border-[#DFE1E6] bg-[#FAFBFC] px-3 py-2.5">
+                <span className="text-[12px] font-semibold text-[#6B778C]">
+                  Remaining after splits ({KES(splitsSum)} tendered)
+                </span>
+                <Badge
+                  className={cn(
+                    "rounded-full px-3 py-1 text-[11px] font-bold",
+                    fullySplit
+                      ? "border border-[#C8E6C9] bg-[#E8F5E9] text-[#1B7A2E]"
+                      : splitOver
+                        ? "border border-[#FFCDD2] bg-[#FFEBEE] text-[#C62828]"
+                        : "border border-[#FFE0B2] bg-[#FFF8E1] text-[#B8860B]"
+                  )}
+                >
+                  {fullySplit ? "Fully split" : splitOver ? `${KES(splitsSum - totals.total)} over` : `${KES(splitRemaining)} remaining`}
+                </Badge>
+              </div>
+            )}
+
+            {/* allow partial */}
+            <div className={cn("flex items-center gap-3 rounded-xl border px-3 py-2.5", allowPartial ? "border-[#FFE0B2] bg-[#FFF8E1]" : "border-[#DFE1E6] bg-white")}>
+              <Switch
+                checked={allowPartial}
+                onCheckedChange={setAllowPartial}
+                disabled={!customer}
+                className="data-[state=checked]:bg-[#B8860B]"
+                aria-label="Allow partial payment"
+              />
+              <div className="min-w-0">
+                <p className="text-[12px] font-bold text-[#172B4D]">Allow partial (customer pays balance later)</p>
+                <p className="text-[10px] text-[#6B778C]">
+                  {customer
+                    ? `Unpaid balance goes to ${customer.name}'s debt account`
+                    : "Requires a customer on the sale - the balance tracks as debt"}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <Button
+            onClick={confirmPay}
+            disabled={paying}
+            className="h-12 w-full rounded-xl bg-[#0052CC] text-[14px] font-bold text-white hover:bg-[#0041A8]"
+          >
+            {paying ? <Loader2 size={16} className="animate-spin" /> : <ShoppingBag size={16} />}
+            {paying
+              ? "Processing…"
+              : splits.length > 0
+                ? `Charge ${KES(Math.min(splitsSum, totals.total))} split`
+                : `Charge ${KES(totals.total)} via ${paymentMethod}`}
+          </Button>
+        </DialogContent>
+      </Dialog>
+
+      {/* -- hold/resume dialog (server + device mirror merged) --- */}
+      <Dialog open={holdsOpen} onOpenChange={setHoldsOpen}>
+        <DialogContent className="max-w-[640px] rounded-2xl p-0">
+          <DialogHeader className="border-b border-[#DFE1E6] bg-[#FAFBFC] p-4">
+            <DialogTitle className="font-display flex items-center gap-2 text-[15px] font-bold text-[#172B4D]">
+              <History size={15} className="text-[#0052CC]" /> Parked carts - {activeStore?.name ?? "This store"}
+            </DialogTitle>
+            <DialogDescription className="text-[12px]">
+              Holds live on the server and are mirrored on this device - they survive refresh, offline mode and logout.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="df-modal-scroll df-scroll space-y-2 p-3">
+            {holds.length === 0 ? (
+              <p className="py-8 text-center text-[12px] text-[#6B778C]">
+                No parked carts. Press HOLD at the till to park one.
+              </p>
+            ) : (
+              holds.map((h) => {
+                const names = (h.items ?? []).slice(0, 3).map((i) => i.name).join(" • ");
+                const more = (h.items?.length ?? 0) > 3 ? ` +${h.items.length - 3} more` : "";
+                return (
+                  <div key={h.holdCode} className="flex items-center gap-3 rounded-xl border border-[#DFE1E6] bg-white p-3">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#FFF8E1] text-[#B8860B]">
+                      <Pause size={15} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="flex flex-wrap items-center gap-1.5 text-[12px] font-bold text-[#172B4D]">
+                        <span className="font-mono">{h.holdCode}</span>
+                        <Badge variant="outline" className="rounded-full px-1.5 py-0 text-[9px] font-bold text-[#6B778C]">
+                          {timeAgo(h.createdAt)}
+                        </Badge>
+                        {h.local && (
+                          <Badge className="rounded-full bg-[#FFF8E1] px-1.5 py-0 text-[9px] font-bold text-[#B8860B]">
+                            ON THIS DEVICE
+                          </Badge>
+                        )}
+                      </p>
+                      <p className="truncate text-[11px] text-[#6B778C]">
+                        {names}
+                        {more} • {h.staffName}
+                        {h.customerName ? ` • for ${h.customerName}` : ""}
+                      </p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="font-display text-[13px] font-bold text-[#172B4D]">{KES(h.total)}</p>
+                      <p className="text-[10px] text-[#6B778C]">{h.itemCount} item{h.itemCount === 1 ? "" : "s"}</p>
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={() => void resumeHold(h)}
+                      className="h-8 shrink-0 rounded-lg bg-[#0052CC] px-3 text-[11px] font-bold text-white hover:bg-[#0041A8]"
+                    >
+                      Resume
+                    </Button>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* -- day lock (423): manager PIN override ------------------ */}
+      <Dialog
+        open={!!dayLock?.open}
+        onOpenChange={(o) => {
+          if (!o) void cancelDayLockSale();
+        }}
+      >
+        <DialogContent className="max-w-[440px] rounded-2xl" showCloseButton={false}>
+          <DialogHeader>
+            <div className="mb-1 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#FFEBEE] text-[#C62828]">
+              <Lock size={22} />
+            </div>
+            <DialogTitle className="font-display text-[15px] font-bold text-[#C62828]">
+              Day is closed - Manager PIN required
+            </DialogTitle>
+            <DialogDescription className="text-[12px] leading-relaxed">
+              {dayLock?.error}
+              {dayLock?.zNo ? ` (Z ${dayLock.zNo})` : ""} The sale is parked in the offline queue - a Manager or Owner
+              PIN overrides the lock and posts it.
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            type="password"
+            inputMode="numeric"
+            autoComplete="off"
+            value={dayLock?.pin ?? ""}
+            onChange={(e) => setDayLock((s) => (s ? { ...s, pin: e.target.value.replace(/\D/g, "") } : s))}
+            onKeyDown={(e) => e.key === "Enter" && void retryDayLockSale()}
+            placeholder="Manager or Owner PIN"
+            aria-label="Manager override PIN"
+            autoFocus
+            className="h-11 rounded-xl text-center font-mono text-[16px] font-bold tracking-[0.4em]"
+          />
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => void cancelDayLockSale()}
+              className="h-10 flex-1 rounded-xl border-[#DFE1E6] font-bold text-[#172B4D]"
+            >
+              Cancel sale
+            </Button>
+            <Button
+              onClick={() => void retryDayLockSale()}
+              disabled={!dayLock?.pin || dayLock?.busy}
+              className="h-10 flex-1 rounded-xl bg-[#172B4D] font-bold text-white hover:bg-[#0F1E38]"
+            >
+              {dayLock?.busy ? <Loader2 size={14} className="animate-spin" /> : <KeyRound size={14} />} Override &amp; retry
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* -- price check popup (auto-dismiss 4 s, never adds) ------ */}
+      {pricePopup && (
+        <div className="pointer-events-none fixed inset-0 z-[70] flex items-center justify-center p-4">
+          <div
+            key={pricePopup.at}
+            className="df-point-pop w-full max-w-[400px] rounded-3xl border-2 border-[#00A84A] bg-white p-6 text-center shadow-2xl"
+            role="status"
+          >
+            <p className="text-5xl">{pricePopup.emoji}</p>
+            <h3 className="font-display mt-2 text-[19px] font-bold text-[#172B4D]">{pricePopup.name}</h3>
+            {pricePopup.kg ? (
+              <>
+                <p className="mt-1 font-mono text-[14px] font-bold text-[#1B7A2E]">
+                  {pricePopup.kg} kg x {KES(pricePopup.price)}/kg
+                </p>
+                <p className="font-display text-[30px] font-extrabold text-[#172B4D]">{kes(pricePopup.computed ?? 0)}</p>
+              </>
+            ) : (
+              <p className="font-display mt-2 text-[34px] font-extrabold text-[#172B4D]">{KES(pricePopup.price)}</p>
+            )}
+            <p className="mt-1 text-[12px] text-[#6B778C]">
+              per {pricePopup.unit}
+              {pricePopup.stock != null ? ` • ${pricePopup.stock} in stock` : ""}
+            </p>
+            {canMargin && pricePopup.margin != null && (
+              <p className="mt-2 inline-flex rounded-full border border-[#C8E6C9] bg-[#E8F5E9] px-2.5 py-1 text-[10px] font-bold text-[#1B7A2E]">
+                Margin {pricePopup.margin}% (staff never see this)
+              </p>
+            )}
+            <p className="mt-3 text-[10px] font-bold uppercase tracking-[0.3em] text-[#6B778C]">Price check</p>
+          </div>
+        </div>
+      )}
+
       {/* -- credit-sale blocked alert --------------------------- */}
       <AlertDialog open={!!blocked} onOpenChange={(o) => !o && setBlocked(null)}>
         <AlertDialogContent className="max-w-[460px] rounded-2xl border-[#FFCDD2]">
@@ -1679,14 +2685,14 @@ export default function PosScreen() {
   );
 }
 
-/* ══════════════════════════════════════════════════════════════
+/* ---------------------------------------------------------------
    TillDialog - cash-drawer shift management (X & Z reports).
 
    X-Report: mid-shift snapshot. Drawer stays in, shift continues.
    Z-Report: end-of-shift close. Counted cash is reconciled against
    the expected drawer (opening float + cash sales) and the shift is
    locked with a variance figure - exactly like a real hardware till.
-   ══════════════════════════════════════════════════════════════ */
+   --------------------------------------------------------------- */
 
 interface TillSessionDto {
   id: number;

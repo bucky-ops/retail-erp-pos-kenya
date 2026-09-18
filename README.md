@@ -90,6 +90,40 @@ Or use the one-shot installer: `bash install.sh`
 6. Explore **Debts → Payment Plan builder** (auto-SMS + auto-block toggles), **Debts → row menu → Account statement** (print / CSV), **Payroll → Run Payroll**, **Messages → Birthday blast**, **Raven Chat** doc cards.
 7. With the live-feed service running, keep the **Dashboard** open in one tab and ring a sale in POS from another tab - the feed row, KPI glow and (for low-stock crossings) the ⚠️ toast fire instantly over socket.io.
 
+## 🛒 Supermarket mode (Naivas grade)
+
+The POS behaves like a Naivas till, end to end:
+
+- **Scan to cart** - a USB barcode gun (keyboard wedge) adds items instantly: the global listener buffers keystrokes (<80 ms gaps) and fires on Enter or idle. No clicks, no focus juggling.
+- **Weight scale items** - EAN-13 scale barcodes (`20 AAAAA WWWWW C`) resolve the embedded item + weight: `2010001012501` = Fresh Bananas 1.25 kg x KES 129. Seeded greengrocery: bananas, sukuma wiki, tomatoes, oranges.
+- **Price check** - toggle **Price Check** (or the kiosk at `/price-checker`) to scan and show prices without adding to the cart. Gift card codes show balances.
+- **HOLD + resume** - park a cart with one click (server table `pos_hold` + localStorage mirror), serve the next customer, resume any time. Holds survive refresh, module switches, logout and offline mode.
+- **Multi-pay split** - one receipt paid 50% M-Pesa + 30% Cash + 20% Points (or any mix). Optional partial payment moves the balance onto the customer's account.
+- **Day lock** - once a Z-Report closes the day, new sales for that date need a Manager PIN override (audited).
+- **Margin privacy** - cost and profit figures are visible only to Owner / Manager / Accountant.
+
+### Digital receipts + QR that never dies
+
+Every document (sale, Z-Report, payslip, debtor/creditor payment, quotation, proforma, order, invoice, expense, stock adjustment) gets a **public digital twin** at `/receipt/NVS-DUKA-YYYY-XXXXX` hosted on Vercel. The printed QR points there - scannable from any phone, no app, no login. Receipts render in 80 mm thermal and A4 modes, with Print / Save PDF / WhatsApp share / Copy link.
+
+### Quotation → Payment in one click
+
+In **Pipeline**, mature a quotation stage by stage (**Mature to Proforma → Order → Invoice → Payment**) or hit **Mature All At Once** for the animated 5-tick stepper that issues QT → PF → SO → INV → PAY documents with digital receipts, then prints them individually or stapled into one combined PDF.
+
+### Governance: full CRUD with Trash + Audit
+
+Every module supports create / read / update / delete. Deletes are soft: records move to **Trash** with a reason and can be restored by managers. Every create, update, delete, restore, maturity step and day close lands in the **Audit Trail** (Trash + Audit screen), and updates record ERPNext-style version history.
+
+### Accounting + reports print suite
+
+Print buttons on every document; General Ledger, Trial Balance, Balance Sheet, Debtors / Creditors / Stock Ledgers and M-Pesa Reconciliation reports with logo headers, filters used, verification QR (`/verify/{hash}`) and Export Excel (CSV).
+
+### Kiosk extras
+
+- `/price-checker` - customer price-check pillar (scan → huge price, scale math).
+- `/display` - customer display pole (BroadcastChannel: live total, points, last item).
+- `/verify/{hash}` - public report verification page.
+
 ## 🏗 Project Structure
 
 ```

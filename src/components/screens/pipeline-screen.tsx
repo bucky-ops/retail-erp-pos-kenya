@@ -1,11 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
-  ArrowRight, Check, Plus, Trash2, TrendingUp, Box, ClipboardList, LayoutList,
+  ArrowRight, Check, Files, Loader2, Plus, Printer, Sparkles, Trash2, TrendingUp, Box, ClipboardList, LayoutList, Zap,
 } from "lucide-react";
 import { api } from "@/lib/api";
-import { DealDto, KES } from "@/types";
+import { ChainDoc, DealDto, KES } from "@/types";
+import { customerPointsLine, fmtDate, kes, type ReceiptDocData } from "@/lib/receipt";
+import { ReceiptDocument, printReceiptArea } from "@/components/df/receipt-document";
 import { ScreenHeader, EmptyState, TableSkeleton } from "@/components/df/shared";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -23,6 +26,10 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
+  DropdownMenuSeparator, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 /* -- stage config ------------------------------------------- */
 
@@ -37,6 +44,80 @@ const STAGES = [
 type StageId = (typeof STAGES)[number]["id"];
 
 const stageTitle = (id: string) => STAGES.find((s) => s.id === id)?.title ?? id;
+
+/* -- maturity chain (mirrors PATCH /api/pipeline/[id]) ------ */
+
+const CHAIN_STEPS = [
+  { id: "quotation", label: "Quotation", short: "QT" },
+  { id: "proforma", label: "Proforma", short: "PF" },
+  { id: "order", label: "Sales Order", short: "SO" },
+  { id: "invoiced", label: "Invoice", short: "INV" },
+  { id: "paid", label: "Payment", short: "PAY" },
+] as const;
+
+type ChainStepId = (typeof CHAIN_STEPS)[number]["id"];
+
+const MATURE_LABEL: Record<ChainStepId, string> = {
+  quotation: "Quotation",
+  proforma: "Mature to Proforma",
+  order: "Mature to Order",
+  invoiced: "Mature to Invoice",
+  paid: "Create Payment",
+};
+
+const MATURE_SHORT: Record<ChainStepId, string> = {
+  quotation: "Quotation",
+  proforma: "Proforma",
+  order: "Order",
+  invoiced: "Invoice",
+  paid: "Payment",
+};
+
+/** Next logical maturity step for a stage (null when fully paid). */
+function nextMature(stage: string): ChainStepId | null {
+  const i = CHAIN_STEPS.findIndex((s) => s.id === stage);
+  if (i < 0 || i >= CHAIN_STEPS.length - 1) return null;
+  return CHAIN_STEPS[i + 1].id;
+}
+
+/** ReceiptDocData for one chain document (A4 print with digital QR). */
+function chainDocData(deal: DealDto, doc: ChainDoc): ReceiptDocData {
+  const qty = Math.max(1, deal.itemCount || 1);
+  return {
+    kind: doc.kind,
+    docNo: doc.no,
+    receiptCode: doc.digitalCode,
+    date: fmtDate(doc.at),
+    servedBy: deal.assignee === "M" ? "Mary Wanjiku" : deal.assignee === "J" ? "James Otieno" : deal.assignee === "G" ? "Grace Akinyi" : "Owner",
+    customerName: deal.customerName,
+    customerLine: customerPointsLine(deal.customerName, null),
+    lines: [
+      {
+        no: 1,
+        name: deal.title || "Goods as quoted",
+        qty,
+        unit: "pc",
+        unitPrice: Math.round((deal.amount / qty) * 100) / 100,
+        discount: 0,
+        total: deal.amount,
+      },
+    ],
+    totals:
+      doc.kind === "PAYMENT"
+        ? [{ label: "Received in full for the above invoice", value: kes(deal.amount), bold: true }]
+        : doc.kind === "INVOICE"
+          ? [{ label: "Payment due on receipt", value: "" }]
+          : [],
+    grandTotal: kes(deal.amount),
+    paymentLines: doc.kind === "PAYMENT" ? [{ method: "Cash", amount: kes(deal.amount) }] : undefined,
+    footerMessage:
+      doc.kind === "QUOTATION"
+        ? "Quotation valid for 14 days - prices subject to confirmation"
+        : doc.kind === "PAYMENT"
+          ? "Received with thanks - keep this receipt"
+          : undefined,
+  };
+}
 
 const ASSIGNEE_COLORS: Record<string, string> = {
   M: "#0052CC", // Mary Wanjiku
@@ -65,6 +146,37 @@ function fmtStamp(iso: string): string {
 }
 
 const err = (e: unknown) => (e instanceof Error ? e.message : "Something went wrong");
+
+/* -- print host: receipts portal to <body>; hidden on screen, exclusive in print -- */
+
+const RECEIPT_HOST_CSS = `
+#df-receipt-host { display: none; }
+@media print {
+  #df-receipt-host { display: block !important; }
+  body > *:not(#df-receipt-host) { display: none !important; }
+  #df-receipt-host .df-receipt { position: static !important; left: auto; top: auto; }
+}
+`;
+
+function ReceiptPrintHost({ docs, mode }: { docs: ReceiptDocData[]; mode: "thermal" | "a4" }) {
+  if (docs.length === 0) return null;
+  // portals only exist client-side; docs start empty so SSR renders null and hydration stays in sync
+  if (typeof document === "undefined") return null;
+  return createPortal(
+    <div id="df-receipt-host" aria-hidden>
+      <style>{RECEIPT_HOST_CSS}</style>
+      {docs.map((d, i) => (
+        <div
+          key={`${i}-${d.docNo}`}
+          style={{ pageBreakAfter: i < docs.length - 1 ? "always" : "auto" }}
+        >
+          <ReceiptDocument data={d} mode={mode} />
+        </div>
+      ))}
+    </div>,
+    document.body
+  );
+}
 
 /* -- screen ------------------------------------------------- */
 
@@ -202,6 +314,136 @@ export default function PipelineScreen() {
 
   const nextStage = selected ? STAGES[STAGES.findIndex((s) => s.id === selected.stage) + 1] : undefined;
 
+  /* -- maturity chain: one click + master button -- */
+  const [matureBusy, setMatureBusy] = useState(false);
+  const [chain, setChain] = useState<{
+    open: boolean;
+    busy: boolean;
+    deal: DealDto | null;
+    steps: { id: ChainStepId; label: string; docNo: string | null; code: string | null; status: "pending" | "active" | "done" }[];
+  }>({ open: false, busy: false, deal: null, steps: [] });
+  const chainTimer = useRef<number | null>(null);
+
+  const closeChain = useCallback(() => {
+    if (chainTimer.current) {
+      window.clearInterval(chainTimer.current);
+      chainTimer.current = null;
+    }
+    setChain({ open: false, busy: false, deal: null, steps: [] });
+  }, []);
+
+  useEffect(() => () => {
+    if (chainTimer.current) window.clearInterval(chainTimer.current);
+  }, []);
+
+  /** ONE CLICK: PATCH /api/pipeline/[id] { action: "mature", to } */
+  const matureOne = useCallback(async (deal: DealDto, to: ChainStepId) => {
+    setMatureBusy(true);
+    try {
+      const res = await api.patch<{ ok: boolean; docs: Record<string, ChainDoc>; deal: DealDto }>(
+        `/api/pipeline/${deal.id}`,
+        { action: "mature", to, by: "Owner" }
+      );
+      setDeals((prev) => (prev ? prev.map((d) => (d.id === deal.id ? (res.deal ?? d) : d)) : prev));
+      toast({
+        title: `${MATURE_SHORT[to]} issued`,
+        description: `${deal.customerName} • doc ${res.docs?.[to]?.no ?? "-"} • ${KES(deal.amount)}`,
+      });
+    } catch (e) {
+      toast({ title: "Could not mature deal", description: err(e), variant: "destructive" });
+    } finally {
+      setMatureBusy(false);
+    }
+  }, []);
+
+  /** MASTER BUTTON: PATCH { action: "matureAll" } with an animated stepper dialog. */
+  const matureAll = useCallback(
+    (deal: DealDto) => {
+      setChain({
+        open: true,
+        busy: true,
+        deal,
+        steps: CHAIN_STEPS.map((s) => ({ id: s.id, label: s.label, docNo: null, code: null, status: "pending" as const })),
+      });
+      // simulate per-step progress on a 400ms timer while awaiting the response
+      if (chainTimer.current) window.clearInterval(chainTimer.current);
+      let tick = 0;
+      chainTimer.current = window.setInterval(() => {
+        tick += 1;
+        if (tick > CHAIN_STEPS.length - 1) {
+          if (chainTimer.current) window.clearInterval(chainTimer.current);
+          chainTimer.current = null;
+          return;
+        }
+        setChain((c) => ({
+          ...c,
+          steps: c.steps.map((st, i) =>
+            i < tick ? { ...st, status: "done" as const } : i === tick ? { ...st, status: "active" as const } : st
+          ),
+        }));
+      }, 400);
+      void (async () => {
+        try {
+          const res = await api.patch<{ ok: boolean; docs: Record<string, ChainDoc>; deal: DealDto }>(
+            `/api/pipeline/${deal.id}`,
+            { action: "matureAll", by: "Owner" }
+          );
+          if (chainTimer.current) {
+            window.clearInterval(chainTimer.current);
+            chainTimer.current = null;
+          }
+          const docs = res.docs ?? {};
+          setChain((c) => ({
+            ...c,
+            busy: false,
+            deal: res.deal ?? c.deal,
+            steps: CHAIN_STEPS.map((s) => ({
+              id: s.id,
+              label: s.label,
+              status: "done" as const,
+              docNo: docs[s.id]?.no ?? null,
+              code: docs[s.id]?.digitalCode ?? null,
+            })),
+          }));
+          setDeals((prev) => (prev ? prev.map((d) => (d.id === deal.id ? (res.deal ?? d) : d)) : prev));
+          toast({
+            title: "Matured end to end",
+            description: `Quotation to Payment complete - ${Object.keys(docs).length} documents issued (incl. sales invoice).`,
+          });
+        } catch (e) {
+          if (chainTimer.current) {
+            window.clearInterval(chainTimer.current);
+            chainTimer.current = null;
+          }
+          setChain({ open: false, busy: false, deal: null, steps: [] });
+          toast({ title: "Could not mature deal", description: err(e), variant: "destructive" });
+        }
+      })();
+    },
+    []
+  );
+
+  /* -- printing: single doc or the combined (stapled) set -- */
+  const [printDocs, setPrintDocs] = useState<ReceiptDocData[]>([]);
+  const [printMode, setPrintMode] = useState<"thermal" | "a4">("a4");
+
+  const printDealDocs = useCallback((deal: DealDto, docs: ChainDoc[]) => {
+    if (docs.length === 0) return;
+    setPrintMode("a4");
+    setPrintDocs(docs.map((d) => chainDocData(deal, d)));
+    // let React mount the hidden print host + generate QRs before window.print()
+    window.setTimeout(() => printReceiptArea("a4"), 300);
+  }, []);
+
+  const dealChainDocs = useCallback(
+    (deal: DealDto): { stage: ChainStepId; doc: ChainDoc }[] =>
+      CHAIN_STEPS.map((s) => {
+        const doc = deal.docs?.[s.id];
+        return doc ? { stage: s.id, doc } : null;
+      }).filter((x): x is { stage: ChainStepId; doc: ChainDoc } => x !== null),
+    []
+  );
+
   /* -- render -- */
 
   return (
@@ -315,6 +557,9 @@ export default function PipelineScreen() {
                         deal={d}
                         dragging={dragId === d.id}
                         moving={movingId === d.id}
+                        matureBusy={matureBusy}
+                        onMature={(deal, to) => void matureOne(deal, to)}
+                        onMatureAll={matureAll}
                         onDragStart={() => setDragId(d.id)}
                         onDragEnd={() => {
                           setDragId(null);
@@ -335,7 +580,14 @@ export default function PipelineScreen() {
           </div>
         </div>
       ) : (
-        <DealTable deals={deals} onOpen={setSelectedId} />
+        <DealTable
+          deals={deals}
+          onOpen={setSelectedId}
+          matureBusy={matureBusy}
+          onMature={(deal, to) => void matureOne(deal, to)}
+          onMatureAll={matureAll}
+          onPrintCombined={printDealDocs}
+        />
       )}
 
       {/* -- deal detail drawer -- */}
@@ -411,29 +663,38 @@ export default function PipelineScreen() {
                   <p className="mt-1 text-[10px] text-[#6B778C]">Saved automatically when you click away.</p>
                 </div>
 
-                {/* one-click maturing */}
+                {/* maturity chain actions */}
                 <div className="space-y-3">
                   {nextStage ? (
                     <Button
-                      onClick={() => void patchStage(selected.id, nextStage.id)}
-                      disabled={movingId === selected.id}
+                      onClick={() => void matureOne(selected, nextStage.id)}
+                      disabled={matureBusy || movingId === selected.id}
                       className="h-11 w-full rounded-xl bg-[#0052CC] text-[13px] font-semibold text-white shadow-sm hover:bg-[#0041A8]"
                     >
-                      Advance to {nextStage.title} <ArrowRight size={15} />
+                      {MATURE_LABEL[nextStage.id]} <ArrowRight size={15} />
                     </Button>
                   ) : (
                     <div className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#E8F5E9] text-[13px] font-semibold text-[#1B7A2E]">
                       <Check size={15} /> Fully paid - deal closed
                     </div>
                   )}
+                  {selected.stage !== "paid" && (
+                    <Button
+                      onClick={() => matureAll(selected)}
+                      disabled={matureBusy}
+                      className="h-11 w-full rounded-xl bg-gradient-to-r from-[#B8860B] to-[#D04A1E] text-[13px] font-bold text-white shadow-sm hover:opacity-90"
+                    >
+                      <Sparkles size={15} /> Mature All At Once
+                    </Button>
+                  )}
                   <div>
-                    <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-[#6B778C]">Jump to stage</p>
+                    <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-[#6B778C]">Jump to stage (issues the doc)</p>
                     <div className="flex flex-wrap gap-1.5">
                       {STAGES.map((s) => (
                         <button
                           key={s.id}
-                          onClick={() => void patchStage(selected.id, s.id)}
-                          disabled={movingId === selected.id || s.id === selected.stage}
+                          onClick={() => void matureOne(selected, s.id)}
+                          disabled={matureBusy || s.id === selected.stage}
                           className={cn(
                             "rounded-full border px-2.5 py-1 text-[11px] font-semibold transition",
                             s.id === selected.stage
@@ -446,6 +707,53 @@ export default function PipelineScreen() {
                       ))}
                     </div>
                   </div>
+                </div>
+
+                {/* chain documents - printable individually + combined */}
+                <div>
+                  <h4 className="mb-2 text-[11px] font-bold uppercase tracking-widest text-[#6B778C]">Documents</h4>
+                  {dealChainDocs(selected).length === 0 ? (
+                    <p className="rounded-xl border border-dashed border-[#DFE1E6] px-3 py-2.5 text-[11px] text-[#6B778C]">
+                      No documents yet - mature the deal to generate the QT / PF / SO / INV / PAY chain.
+                    </p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {dealChainDocs(selected).map(({ stage, doc }) => (
+                        <div key={doc.no} className="flex items-center gap-2 rounded-xl border border-[#DFE1E6] bg-[#FAFBFC] px-3 py-2">
+                          <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#0052CC] ring-1 ring-[#DFE1E6]">
+                            {CHAIN_STEPS.find((s) => s.id === stage)?.short ?? doc.kind}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate font-mono text-[11px] font-bold text-[#172B4D]">{doc.no}</p>
+                            <a
+                              href={`/receipt/${doc.digitalCode}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="block truncate text-[10px] text-[#0052CC] hover:underline"
+                            >
+                              {doc.digitalCode}
+                            </a>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 shrink-0 rounded-full px-2.5 text-[10px] font-semibold"
+                            onClick={() => printDealDocs(selected, [doc])}
+                          >
+                            <Printer size={12} /> Print
+                          </Button>
+                        </div>
+                      ))}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 w-full rounded-xl text-[11px] font-semibold"
+                        onClick={() => printDealDocs(selected, dealChainDocs(selected).map((x) => x.doc))}
+                      >
+                        <Files size={13} /> Print Combined (stapled set with QRs)
+                      </Button>
+                    </div>
+                  )}
                 </div>
 
                 <Separator />
@@ -572,6 +880,83 @@ export default function PipelineScreen() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* -- Mature All stepper dialog -- */}
+      <Dialog open={chain.open} onOpenChange={(o) => !o && closeChain()}>
+        <DialogContent className="rounded-2xl sm:max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle className="font-display text-[16px] font-bold text-[#172B4D]">Mature All At Once</DialogTitle>
+            <DialogDescription className="text-[12px] text-[#6B778C]">
+              {chain.deal ? `${chain.deal.customerName} • ${KES(chain.deal.amount)}` : ""} - generating the full document chain.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2.5 py-1">
+            {chain.steps.map((s, i) => (
+              <div key={s.id} className="flex items-center gap-3">
+                <span
+                  className={cn(
+                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 transition-all duration-300",
+                    s.status === "done"
+                      ? "border-[#00C853] bg-[#00C853] text-white"
+                      : s.status === "active"
+                        ? "border-[#0052CC] text-[#0052CC]"
+                        : "border-[#DFE1E6] text-[#C1C7D0]"
+                  )}
+                >
+                  {s.status === "done" ? (
+                    <Check size={14} strokeWidth={3} />
+                  ) : s.status === "active" ? (
+                    <Loader2 size={13} className="animate-spin" />
+                  ) : (
+                    <span className="text-[11px] font-bold">{i + 1}</span>
+                  )}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className={cn("text-[13px] font-semibold transition-colors duration-300", s.status === "pending" ? "text-[#C1C7D0]" : "text-[#172B4D]")}>
+                    {s.label}
+                  </p>
+                  <p className="truncate font-mono text-[10px] text-[#6B778C]">
+                    {s.status === "done"
+                      ? s.docNo ?? `${CHAIN_STEPS[i].short}-…`
+                      : s.status === "active"
+                        ? "Generating…"
+                        : "Queued"}
+                  </p>
+                </div>
+                {s.status === "done" && s.code && (
+                  <a
+                    href={`/receipt/${s.code}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="shrink-0 rounded-full bg-[#E9F2FF] px-2 py-0.5 text-[9px] font-bold text-[#0052CC] hover:underline"
+                  >
+                    Digital
+                  </a>
+                )}
+              </div>
+            ))}
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={closeChain} className="rounded-xl">
+              Close
+            </Button>
+            <Button
+              disabled={chain.busy || !chain.deal}
+              onClick={() => {
+                if (!chain.deal) return;
+                const docs = dealChainDocs(chain.deal).map((x) => x.doc);
+                if (docs.length > 0) printDealDocs(chain.deal, docs);
+              }}
+              className="rounded-xl bg-[#0052CC] text-white hover:bg-[#0041A8]"
+            >
+              {chain.busy ? <Loader2 size={14} className="animate-spin" /> : <Printer size={14} />} Print Combined
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* hidden receipt print host (portaled to body, revealed by printReceiptArea) */}
+      <ReceiptPrintHost docs={printDocs} mode={printMode} />
     </div>
   );
 }
@@ -579,15 +964,20 @@ export default function PipelineScreen() {
 /* -- pieces ------------------------------------------------- */
 
 function DealCard({
-  deal, dragging, moving, onDragStart, onDragEnd, onOpen,
+  deal, dragging, moving, matureBusy, onMature, onMatureAll, onDragStart, onDragEnd, onOpen,
 }: {
   deal: DealDto;
   dragging: boolean;
   moving: boolean;
+  matureBusy: boolean;
+  onMature: (deal: DealDto, to: ChainStepId) => void;
+  onMatureAll: (deal: DealDto) => void;
   onDragStart: () => void;
   onDragEnd: () => void;
   onOpen: () => void;
 }) {
+  const next = nextMature(deal.stage);
+  const docCount = Object.keys(deal.docs ?? {}).length;
   return (
     <div
       draggable
@@ -623,6 +1013,38 @@ function DealCard({
           <AssigneeChip id={deal.assignee} />
         </span>
       </div>
+      {(next || docCount > 0) && (
+        <div
+          className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-dashed border-[#F4F5F7] pt-2"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {next && (
+            <button
+              onClick={() => onMature(deal, next)}
+              disabled={matureBusy}
+              title={MATURE_LABEL[next]}
+              className="inline-flex items-center gap-1 rounded-full border border-[#B9C4D6] bg-white px-2 py-1 text-[10px] font-bold text-[#0052CC] transition hover:border-[#0052CC] hover:bg-[#E9F2FF] disabled:opacity-50"
+            >
+              <Zap size={10} /> {MATURE_SHORT[next]}
+            </button>
+          )}
+          {deal.stage === "quotation" && (
+            <button
+              onClick={() => onMatureAll(deal)}
+              disabled={matureBusy}
+              title="Mature the full chain: Quotation → Proforma → Order → Invoice → Payment"
+              className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-[#B8860B] to-[#D04A1E] px-2 py-1 text-[10px] font-bold text-white transition hover:opacity-90 disabled:opacity-50"
+            >
+              <Sparkles size={10} /> Mature All
+            </button>
+          )}
+          {docCount > 0 && (
+            <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-[#E8F5E9] px-2 py-0.5 text-[9px] font-bold text-[#1B7A2E]">
+              <Files size={9} /> {docCount} docs
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -656,13 +1078,22 @@ function StageBadge({ stage }: { stage: string }) {
   );
 }
 
-function DealTable({ deals, onOpen }: { deals: DealDto[]; onOpen: (id: string) => void }) {
+function DealTable({
+  deals, onOpen, matureBusy, onMature, onMatureAll, onPrintCombined,
+}: {
+  deals: DealDto[];
+  onOpen: (id: string) => void;
+  matureBusy: boolean;
+  onMature: (deal: DealDto, to: ChainStepId) => void;
+  onMatureAll: (deal: DealDto) => void;
+  onPrintCombined: (deal: DealDto, docs: ChainDoc[]) => void;
+}) {
   return (
     <div className="overflow-hidden rounded-2xl border border-[#DFE1E6] bg-white shadow-sm">
       <Table className="text-[12px]">
         <TableHeader>
           <TableRow className="bg-[#FAFBFC] hover:bg-[#FAFBFC]">
-            {["Customer", "Title", "Stage", "Amount", "Items", "Assignee", "Age", "Created"].map((h) => (
+            {["Customer", "Title", "Stage", "Amount", "Docs", "Assignee", "Age", "Created", ""].map((h) => (
               <TableHead key={h} className="p-3 text-[11px] font-bold uppercase tracking-widest text-[#6B778C]">
                 {h}
               </TableHead>
@@ -682,13 +1113,71 @@ function DealTable({ deals, onOpen }: { deals: DealDto[]; onOpen: (id: string) =
                 <StageBadge stage={d.stage} />
               </TableCell>
               <TableCell className="font-display p-3 font-bold text-[#172B4D]">{KES(d.amount)}</TableCell>
-              <TableCell className="p-3">{d.itemCount}</TableCell>
+              <TableCell className="p-3">
+                {Object.keys(d.docs ?? {}).length > 0 ? (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const docs = CHAIN_STEPS.map((s) => d.docs?.[s.id]).filter((x): x is ChainDoc => !!x);
+                      onPrintCombined(d, docs);
+                    }}
+                    className="inline-flex items-center gap-1 rounded-full bg-[#E8F5E9] px-2 py-0.5 text-[10px] font-bold text-[#1B7A2E] transition hover:bg-[#D7EEDB]"
+                    title="Print the combined document set"
+                  >
+                    <Files size={9} /> {Object.keys(d.docs ?? {}).length}
+                  </button>
+                ) : (
+                  <span className="text-[#C1C7D0]">-</span>
+                )}
+              </TableCell>
               <TableCell className="p-3">
                 <AssigneeChip id={d.assignee} />
               </TableCell>
               <TableCell className="p-3 text-[#6B778C]">{ago(d.createdAt)}</TableCell>
               <TableCell className="p-3 text-[#6B778C]">
                 {new Date(d.createdAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}
+              </TableCell>
+              <TableCell className="p-3 text-right">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 rounded-full px-2"
+                      disabled={matureBusy}
+                      onClick={(e) => e.stopPropagation()}
+                      aria-label={`Maturity actions for ${d.customerName}`}
+                    >
+                      <Zap size={12} />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56" onClick={(e) => e.stopPropagation()}>
+                    <DropdownMenuLabel className="text-[11px] text-[#6B778C]">{d.customerName}</DropdownMenuLabel>
+                    {nextMature(d.stage) && (
+                      <DropdownMenuItem onClick={() => onMature(d, nextMature(d.stage)!)}>
+                        <Zap className="h-4 w-4 text-[#0052CC]" /> {MATURE_LABEL[nextMature(d.stage)!]}
+                      </DropdownMenuItem>
+                    )}
+                    {d.stage !== "paid" && (
+                      <DropdownMenuItem onClick={() => onMatureAll(d)}>
+                        <Sparkles className="h-4 w-4 text-[#B8860B]" /> Mature All At Once
+                      </DropdownMenuItem>
+                    )}
+                    {Object.keys(d.docs ?? {}).length > 0 && (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onClick={() => {
+                            const docs = CHAIN_STEPS.map((s) => d.docs?.[s.id]).filter((x): x is ChainDoc => !!x);
+                            onPrintCombined(d, docs);
+                          }}
+                        >
+                          <Printer className="h-4 w-4 text-[#172B4D]" /> Print combined set
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </TableCell>
             </TableRow>
           ))}

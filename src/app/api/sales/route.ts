@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { submitToEtims, generateInvoiceQr } from "@/lib/etims";
 import { happyHourMatchesCategory, isHappyHourActive } from "@/lib/happy-hour";
 import { emitLive } from "@/lib/live-emit";
+import { checkDayLock, createDigitalReceipt, logAudit, businessDate } from "@/lib/supermarket-server";
 import { SalePayload } from "@/types";
 
 export const dynamic = "force-dynamic";
@@ -54,6 +55,21 @@ export async function POST(req: NextRequest) {
 
     if (!items?.length) {
       return NextResponse.json({ ok: false, error: "Cart is empty" }, { status: 400 });
+    }
+
+    // -- 0. Naivas day lock: closed business date needs a manager PIN -----
+    const saleAt = payload.createdAt ? new Date(payload.createdAt) : new Date();
+    const lock = await checkDayLock(storeId, saleAt, payload.managerPin);
+    if (lock.locked) {
+      await logAudit({
+        actor: payload.staffName ?? "cashier",
+        action: "LOCK_OVERRIDE_DENIED",
+        entity: "Sale",
+        label: lock.zNo ?? "",
+        details: lock.reason,
+        storeId,
+      });
+      return NextResponse.json({ ok: false, error: lock.reason, dayLocked: true, zNo: lock.zNo }, { status: 423 });
     }
 
     // offline dedupe
@@ -178,6 +194,32 @@ export async function POST(req: NextRequest) {
     const count = await db.sale.count();
     const receiptNo = `INV-${2848 + count}`;
 
+    // -- 6b. Multi-pay split validation -------------------
+    // One receipt can be paid 50% M-Pesa + 30% Cash + 20% Points. The sum of
+    // splits must equal the total, or allowPartial moves the remainder onto
+    // the customer's account (debt).
+    const splits = (payload.paySplits ?? []).filter((s) => s.amount > 0);
+    const splitsSum = Math.round(splits.reduce((s, x) => s + x.amount, 0));
+    let partialDebt = 0;
+    let saleStatus = "Completed";
+    if (splits.length) {
+      if (splitsSum < total) {
+        if (!payload.allowPartial || !customer) {
+          return NextResponse.json(
+            { ok: false, error: `Split payments add to KES ${splitsSum.toLocaleString()} but the total is KES ${total.toLocaleString()}. Complete the split or allow partial payment.` },
+            { status: 400 },
+          );
+        }
+        partialDebt = total - splitsSum;
+        saleStatus = "Partial";
+      } else if (splitsSum > total) {
+        return NextResponse.json(
+          { ok: false, error: `Split payments (KES ${splitsSum.toLocaleString()}) exceed the total (KES ${total.toLocaleString()}).` },
+          { status: 400 },
+        );
+      }
+    }
+
     // -- 8. eTIMS -----------------------------------------
     let kraStatus: string = "Pending";
     let cuInvoiceNumber: string | null = null;
@@ -208,6 +250,8 @@ export async function POST(req: NextRequest) {
         paymentMethod, pointsRedeemed, pointsEarned,
         tierAtSale: customer?.tier ?? null,
         promoCode: appliedPromo,
+        status: saleStatus,
+        paySplitsJson: JSON.stringify(splits),
         kraStatus, cuInvoiceNumber, qrCodeBase64,
         offlineCreated: payload.offlineCreated ?? false,
         clientId: payload.clientId ?? null,
@@ -291,6 +335,59 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // -- 11c. Digital receipt (NVS-DUKA-YYYY-XXXXX) --------
+    // Every sale gets a public digital twin at /receipt/{code} - the QR the
+    // customer scans. Built from the committed row so the snapshot is exact.
+    let digitalCode: string | null = null;
+    let digitalUrl = "";
+    try {
+      const freshSale = await db.sale.findUnique({ where: { id: sale.id }, include: { items: true, store: true, customer: true } });
+      if (freshSale) {
+        const doc = await createDigitalReceipt("SALE", {
+          saleId: sale.id,
+          receiptNo: freshSale.receiptNo,
+          businessDate: businessDate(saleAt),
+          storeName: freshSale.store.name,
+          storeAddress: settings.companyAddress,
+          storePhone: settings.companyPhone,
+          tillNo: settings.tillNo,
+          kraPin: settings.kraPin,
+          cuInvoiceNumber: freshSale.cuInvoiceNumber,
+          etimsEnabled: settings.etimsEnabled,
+          servedBy: freshSale.staffName,
+          customerName: freshSale.customer?.name ?? null,
+          customerLine: freshSale.customer
+            ? `${freshSale.customer.name} - ${freshSale.customer.tier} Tier - Earned: ${pointsEarned} pts | Balance: ${loyaltyBalance} pts | Value KES ${Math.round(loyaltyBalance * settings.loyaltyPointValue)}`
+            : null,
+          items: freshSale.items.map((it, idx) => ({
+            no: idx + 1, name: it.name, emoji: it.emoji, qty: it.qty,
+            unit: "pc", unitPrice: it.unitPrice, discount: it.discount, total: it.total,
+          })),
+          subtotal: freshSale.subtotal,
+          discount: freshSale.discount,
+          vat: freshSale.vat,
+          total: freshSale.total,
+          paymentMethod: freshSale.paymentMethod,
+          paySplits: splits,
+          pointsEarned,
+          pointsRedeemed,
+          pointsBalance: loyaltyBalance,
+          pointValue: settings.loyaltyPointValue,
+          createdAt: freshSale.createdAt,
+        }, { saleId: sale.id, refNo: receiptNo });
+        digitalCode = doc.receiptCode;
+        digitalUrl = doc.url;
+        await db.sale.update({ where: { id: sale.id }, data: { digitalCode } });
+      }
+    } catch (e) {
+      console.error("digital receipt failed (sale stands)", e);
+    }
+
+    // -- 11d. Partial payment becomes customer debt --------
+    if (partialDebt > 0 && customer) {
+      await db.customer.update({ where: { id: customer.id }, data: { debtBalance: { increment: partialDebt } } });
+    }
+
     // -- 12. Realtime broadcast + low-stock watchdog -----
     // Push the committed sale to every open dashboard (socket.io via the
     // live-feed service). Best-effort - must never fail the sale.
@@ -351,9 +448,20 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    await logAudit({
+      actor: sale.staffName,
+      action: "CREATE",
+      entity: "Sale",
+      entityId: sale.id,
+      label: receiptNo,
+      details: JSON.stringify({ total, paymentMethod, splits, partial: partialDebt }),
+      storeId,
+    });
+
     return NextResponse.json({
       ok: true,
-      sale: { ...sale, storeName: store?.name, customerName: customer?.name ?? "Walk-in" },
+      sale: { ...sale, storeName: store?.name, customerName: customer?.name ?? "Walk-in", digitalCode, digitalUrl },
+      digitalReceipt: digitalCode ? { code: digitalCode, url: digitalUrl } : null,
       loyalty: { earned: pointsEarned, balance: loyaltyBalance, redeemed: pointsRedeemed },
     });
   } catch (err) {

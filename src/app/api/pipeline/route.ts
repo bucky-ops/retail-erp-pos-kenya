@@ -7,10 +7,11 @@ export const dynamic = "force-dynamic";
 const toDto = (d: {
   id: string; stage: string; customerName: string; customerPhone: string | null;
   title: string; amount: number; itemCount: number; assignee: string; notes: string | null;
-  history: string; createdAt: Date;
+  history: string; docsJson: string; createdAt: Date;
 }): DealDto => ({
   ...d,
   history: JSON.parse(d.history || "[]"),
+  docs: JSON.parse(d.docsJson || "{}"),
   createdAt: d.createdAt.toISOString(),
 });
 

@@ -12,6 +12,7 @@ export async function GET(req: NextRequest) {
 
   const products = await db.product.findMany({
     where: {
+      archivedAt: null,
       active: true,
       ...(q
         ? { OR: [{ name: { contains: q } }, { sku: { contains: q } }, { barcode: { contains: q } }] }

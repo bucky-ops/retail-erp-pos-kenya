@@ -12,6 +12,7 @@ export async function GET(req: NextRequest) {
 
   const customers = await db.customer.findMany({
     where: {
+      archivedAt: null,
       ...(q ? { OR: [{ name: { contains: q } }, { phone: { contains: q } }] } : {}),
       ...(tier ? { tier } : {}),
       ...(hasDebt === "1" ? { debtBalance: { gt: 0 } } : {}),

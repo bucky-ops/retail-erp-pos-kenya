@@ -11,7 +11,10 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   const suppliers = await db.supplier.findMany({
-    where: { active: true },
+    where: {
+      archivedAt: null,
+      active: true,
+    },
     include: { _count: { select: { purchaseOrders: true } } },
     orderBy: { name: "asc" },
   });

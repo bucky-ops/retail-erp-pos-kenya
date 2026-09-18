@@ -1,12 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   BellRing, CalendarClock, ChartNoAxesColumnIncreasing, Download, Eye, FileText, HandCoins, Landmark, Loader2, Mail, MoreHorizontal,
-  Plus, Printer, Send, ShieldAlert, Smartphone, TrendingUp, TriangleAlert, X,
+  Plus, Printer, ReceiptText, Send, ShieldAlert, Smartphone, TrendingUp, TriangleAlert, X,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { CustomerDto, DebtPlanDto, KES } from "@/types";
+import { customerPointsLine, fmtDate, kes, type ReceiptDocData } from "@/lib/receipt";
+import { ReceiptDocument, printReceiptArea } from "@/components/df/receipt-document";
 import { ScreenHeader, KpiCard, Panel, EmptyState, TableSkeleton } from "@/components/df/shared";
 import { TierBadge, OverdueBadge, KraBadge } from "@/components/df/badges";
 import { toast } from "@/hooks/use-toast";
@@ -103,6 +106,158 @@ const fmtDay = (iso: string) =>
   new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
 const compact = (n: number) => (Math.abs(n) >= 1000 ? `${Math.round(Math.abs(n) / 1000)}k` : `${Math.abs(n)}`);
 
+/* -- receipt builders (ReceiptDocument + digital twin) ----- */
+
+const RECEIPT_HOST_CSS = `
+#df-receipt-host { display: none; }
+@media print {
+  #df-receipt-host { display: block !important; }
+  body > *:not(#df-receipt-host) { display: none !important; }
+  #df-receipt-host .df-receipt { position: static !important; left: auto; top: auto; }
+}
+`;
+
+function ReceiptPrintHost({ docs, mode }: { docs: ReceiptDocData[]; mode: "thermal" | "a4" }) {
+  if (docs.length === 0) return null;
+  // portals only exist client-side; docs start empty so SSR renders null and hydration stays in sync
+  if (typeof document === "undefined") return null;
+  return createPortal(
+    <div id="df-receipt-host" aria-hidden>
+      <style>{RECEIPT_HOST_CSS}</style>
+      {docs.map((d, i) => (
+        <div key={`${i}-${d.docNo}`} style={{ pageBreakAfter: i < docs.length - 1 ? "always" : "auto" }}>
+          <ReceiptDocument data={d} mode={mode} />
+        </div>
+      ))}
+    </div>,
+    document.body
+  );
+}
+
+/** Fresh statement payload (also used to locate the newest payment row). */
+async function fetchStatement(planId: number): Promise<StatementData | null> {
+  try {
+    return await api.get<StatementData>(`/api/debt-plans/${planId}/statement`);
+  } catch {
+    return null;
+  }
+}
+
+/** ReceiptDocument for one DebtPayment (docNo RCP-D-<paymentId>). */
+function debtPaymentDoc(args: {
+  planId: number;
+  invoiceNo: string | null;
+  payment: { id: number; amount: number; method: string; note: string | null; createdAt: string };
+  customerName: string;
+  tier?: string | null;
+  pointsBalance?: number;
+  remainingBalance?: number;
+  receiptCode?: string;
+}): ReceiptDocData {
+  const { planId, invoiceNo, payment, customerName, tier, pointsBalance, remainingBalance, receiptCode } = args;
+  return {
+    kind: "DEBT_PAYMENT",
+    docNo: `RCP-D-${payment.id}`,
+    receiptCode,
+    date: fmtDate(payment.createdAt),
+    servedBy: "Accounts Desk",
+    customerName,
+    customerLine: customerPointsLine(customerName, tier, undefined, pointsBalance),
+    lines: [
+      {
+        no: 1,
+        name: `Payment towards ${invoiceNo ?? `payment plan #${planId}`}`,
+        qty: 1,
+        unit: "pc",
+        unitPrice: payment.amount,
+        discount: 0,
+        total: payment.amount,
+      },
+    ],
+    totals: [
+      ...(typeof remainingBalance === "number"
+        ? [{ label: "Remaining balance", value: kes(remainingBalance) }]
+        : []),
+      { label: "Amount received", value: kes(payment.amount), bold: true },
+    ],
+    grandTotal: kes(payment.amount),
+    paymentLines: [{ method: payment.method, amount: kes(payment.amount) }],
+    footerMessage: "Thank you for your payment - Asante!",
+  };
+}
+
+/** Statement summary as a ReceiptDocument (all invoices + payments in extraBlocks). */
+function statementReceiptDoc(st: StatementData, receiptCode?: string): ReceiptDocData {
+  return {
+    kind: "STATEMENT",
+    title: "ACCOUNT STATEMENT",
+    docNo: `STMT-D-${st.plan.id}`,
+    receiptCode,
+    date: fmtDate(st.summary.generatedAt),
+    servedBy: "Accounts Desk",
+    customerName: st.customer.name,
+    customerLine: customerPointsLine(st.customer.name, st.customer.tier),
+    lines: [],
+    totals: [{ label: "Balance due", value: kes(st.summary.balance), bold: true }],
+    grandTotal: kes(st.summary.balance),
+    extraBlocks: [
+      {
+        heading: "Credit invoices",
+        rows: st.invoices.map((i) => ({ label: `${i.receiptNo} - ${fmtDay(i.createdAt)}`, value: kes(i.total) })),
+      },
+      {
+        heading: "Payments received",
+        rows: st.payments.map((p) => ({ label: `${fmtDay(p.createdAt)} - ${p.method}`, value: `- ${kes(p.amount)}` })),
+      },
+      {
+        heading: "Account summary",
+        rows: [
+          { label: "Invoiced total", value: kes(st.summary.invoicedTotal) },
+          { label: "Paid to date", value: kes(st.summary.paidTotal) },
+          { label: "Installment", value: `${kes(st.plan.installmentAmount)} / ${st.plan.installmentType.toLowerCase()}` },
+          { label: "Next due", value: fmtDay(st.plan.nextDueDate) },
+          { label: "Overdue days", value: String(st.plan.overdueDays) },
+          { label: "Credit limit", value: kes(st.summary.creditLimit) },
+          { label: "Available credit", value: kes(st.summary.availableCredit) },
+        ],
+      },
+    ],
+    footerMessage: "Statement generated by DukaFlow ERP - Asante!",
+  };
+}
+
+/** Debtors Payment Summary (ALL): every customer with outstanding totals. */
+function debtorsSummaryDoc(plans: PlanRow[]): ReceiptDocData {
+  const total = plans.reduce((a, p) => a + p.totalDebt, 0);
+  const overdue = plans.filter((p) => p.overdueDays > 0 && p.status === "Active");
+  return {
+    kind: "STATEMENT",
+    title: "DEBTORS PAYMENT SUMMARY",
+    docNo: `STMT-ALL-${new Date().toISOString().slice(0, 10)}`,
+    date: fmtDate(new Date().toISOString()),
+    servedBy: "Accounts Desk",
+    lines: [],
+    totals: [
+      { label: `${plans.length} debt ledgers`, value: "" },
+      { label: `${overdue.length} overdue`, value: kes(overdue.reduce((a, p) => a + p.totalDebt, 0)), bold: true },
+    ],
+    grandTotal: kes(total),
+    extraBlocks: [
+      {
+        heading: "Outstanding per customer",
+        rows: plans.length
+          ? plans.map((p) => ({
+              label: `${p.customerName}${p.invoiceNo ? ` - ${p.invoiceNo}` : ""}`,
+              value: kes(p.totalDebt),
+              bold: p.overdueDays > 0,
+            }))
+          : [{ label: "No open debt plans", value: "" }],
+      },
+    ],
+    footerMessage: "Debtors summary - DukaFlow credit control",
+  };
+}
+
 /* -- screen ------------------------------------------------- */
 
 export default function DebtsScreen() {
@@ -147,6 +302,12 @@ export default function DebtsScreen() {
   const [stmtEmailLoading, setStmtEmailLoading] = useState(false);
   const [stmtEmailSending, setStmtEmailSending] = useState(false);
 
+  /* receipt printing (payment receipts, statement receipts, debtors summary) */
+  const [payMethod, setPayMethod] = useState("Cash");
+  const [printDocs, setPrintDocs] = useState<ReceiptDocData[]>([]);
+  const [printMode, setPrintMode] = useState<"thermal" | "a4">("thermal");
+  const [stmtReceiptBusy, setStmtReceiptBusy] = useState(false);
+
   const load = useCallback(async () => {
     try {
       const [debt, custs] = await Promise.all([
@@ -170,6 +331,95 @@ export default function DebtsScreen() {
 
   const plans = data?.plans ?? [];
   const s = data?.summary;
+
+  const printDocsNow = useCallback((docs: ReceiptDocData[], mode: "thermal" | "a4") => {
+    setPrintMode(mode);
+    setPrintDocs(docs);
+    // let React mount the hidden print host + generate QRs before window.print()
+    window.setTimeout(() => printReceiptArea(mode), 300);
+  }, []);
+
+  /** Debt payment receipt: digital twin first (QR), then print (thermal roll). */
+  const printDebtPayment = useCallback(
+    async (
+      plan: { id: number; invoiceNo: string | null },
+      payment: { id: number; amount: number; method: string; note: string | null; createdAt: string },
+      customerName: string,
+      opts?: { tier?: string | null; pointsBalance?: number; remainingBalance?: number }
+    ) => {
+      const doc = debtPaymentDoc({
+        planId: plan.id,
+        invoiceNo: plan.invoiceNo,
+        payment,
+        customerName,
+        tier: opts?.tier,
+        pointsBalance: opts?.pointsBalance,
+        remainingBalance: opts?.remainingBalance,
+      });
+      try {
+        const dr = await api.post<{ receiptCode: string; url: string }>("/api/digital-receipt", {
+          kind: "DEBT_PAYMENT",
+          refNo: doc.docNo,
+          payload: doc,
+        });
+        doc.receiptCode = dr.receiptCode;
+      } catch {
+        // digital twin failed - print anyway, QR falls back to the doc number
+      }
+      printDocsNow([doc], "thermal");
+    },
+    [printDocsNow]
+  );
+
+  /** Customer statement as a summary ReceiptDocument with extraBlocks. */
+  const printStatementReceipt = useCallback(
+    async (plan: PlanRow) => {
+      setStmtReceiptBusy(true);
+      try {
+        const st = await fetchStatement(plan.id);
+        if (!st) throw new Error("Statement not found");
+        const doc = statementReceiptDoc(st);
+        try {
+          const dr = await api.post<{ receiptCode: string }>("/api/digital-receipt", {
+            kind: "STATEMENT",
+            refNo: doc.docNo,
+            payload: doc,
+          });
+          doc.receiptCode = dr.receiptCode;
+        } catch {
+          // print without the digital code if the twin fails
+        }
+        printDocsNow([doc], "a4");
+      } catch (e) {
+        toast({ title: "Could not print statement receipt", description: err(e) });
+      } finally {
+        setStmtReceiptBusy(false);
+      }
+    },
+    [printDocsNow]
+  );
+
+  /** Debtors Payment Summary (ALL): one receipt listing every customer. */
+  const printDebtorsSummary = useCallback(() => {
+    if (plans.length === 0) {
+      toast({ title: "Nothing to summarise", description: "No debt plans are open right now." });
+      return;
+    }
+    const doc = debtorsSummaryDoc(plans);
+    void (async () => {
+      try {
+        const dr = await api.post<{ receiptCode: string }>("/api/digital-receipt", {
+          kind: "STATEMENT",
+          refNo: doc.docNo,
+          payload: doc,
+        });
+        doc.receiptCode = dr.receiptCode;
+      } catch {
+        // print without the digital code if the twin fails
+      }
+      printDocsNow([doc], "a4");
+    })();
+  }, [plans, printDocsNow]);
 
   const filtered = useMemo(() => {
     switch (filter) {
@@ -360,13 +610,29 @@ export default function DebtsScreen() {
     }
     setPayBusy(true);
     try {
-      await api.patch(`/api/debt-plans/${payPlan.id}`, { action: "recordPayment", amount });
+      await api.patch(`/api/debt-plans/${payPlan.id}`, { action: "recordPayment", amount, method: payMethod });
       toast({
         title: `KES ${amount.toLocaleString()} received • SMS sent`,
         description: `Receipt sent to ${payPlan.customerPhone} • balance KES ${Math.max(0, payPlan.totalDebt - amount).toLocaleString()}`,
       });
+      const plan = payPlan;
       setPayPlan(null);
       await load();
+      // auto-print the debtor payment receipt (digital twin + QR on the slip)
+      try {
+        const st = await fetchStatement(plan.id);
+        const payment = st?.payments.slice().sort((a, b) => b.id - a.id)[0];
+        const cust = customers?.find((c) => c.id === plan.customerId);
+        if (st && payment) {
+          await printDebtPayment(plan, payment, plan.customerName, {
+            tier: st.customer.tier,
+            pointsBalance: cust?.loyaltyPoints,
+            remainingBalance: st.summary.balance,
+          });
+        }
+      } catch {
+        // best effort - payment already recorded
+      }
     } catch (e) {
       toast({ title: "Payment failed", description: err(e) });
     } finally {
@@ -515,9 +781,18 @@ export default function DebtsScreen() {
         title="Debtors & Creditors"
         subtitle="Credit control • Payment plans • Aging"
         actions={
-          <Button onClick={openBuilder} className="h-9 rounded-xl bg-[#0052CC] px-4 text-[13px] font-semibold hover:bg-[#0041A8]">
-            <Plus className="h-4 w-4" /> Payment Plan
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={printDebtorsSummary}
+              className="h-9 rounded-xl text-[13px] font-semibold"
+            >
+              <Printer className="h-4 w-4" /> Debtors Summary
+            </Button>
+            <Button onClick={openBuilder} className="h-9 rounded-xl bg-[#0052CC] px-4 text-[13px] font-semibold hover:bg-[#0041A8]">
+              <Plus className="h-4 w-4" /> Payment Plan
+            </Button>
+          </div>
         }
       />
 
@@ -799,6 +1074,9 @@ export default function DebtsScreen() {
                               <DropdownMenuItem onClick={() => void openStatement(p)}>
                                 <FileText className="h-4 w-4 text-[#0052CC]" /> Account statement
                               </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => void printStatementReceipt(p)} disabled={stmtReceiptBusy}>
+                                <Printer className="h-4 w-4 text-[#172B4D]" /> Print statement receipt
+                              </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
                                 onClick={() =>
@@ -948,6 +1226,19 @@ export default function DebtsScreen() {
               placeholder="0"
               className="h-11 rounded-xl text-lg font-bold"
             />
+            <div className="space-y-1.5">
+              <Label className="text-[12px] font-semibold text-[#172B4D]">Payment method</Label>
+              <Select value={payMethod} onValueChange={setPayMethod}>
+                <SelectTrigger className="h-10 rounded-xl"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Cash">Cash</SelectItem>
+                  <SelectItem value="M-Pesa">M-Pesa</SelectItem>
+                  <SelectItem value="Bank Transfer">Bank Transfer</SelectItem>
+                  <SelectItem value="Cheque">Cheque</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-[10px] text-[#6B778C]">Shown on the printable payment receipt (RCP-D).</p>
+            </div>
             <div className="flex gap-2">
               {[0.25, 0.5, 1].map((f) => (
                 <button
@@ -1153,18 +1444,36 @@ export default function DebtsScreen() {
                           <th className="py-1.5 font-semibold">Method</th>
                           <th className="py-1.5 font-semibold">Note</th>
                           <th className="py-1.5 text-right font-semibold">Amount</th>
+                          <th className="py-1.5 text-right font-semibold">Rcpt</th>
                         </tr>
                       </thead>
                       <tbody>
                         {stmtData.payments.length === 0 ? (
-                          <tr><td colSpan={4} className="py-2 text-[11px] text-[#6B778C]">No payments recorded yet.</td></tr>
+                          <tr><td colSpan={5} className="py-2 text-[11px] text-[#6B778C]">No payments recorded yet.</td></tr>
                         ) : (
                           stmtData.payments.map((p) => (
                             <tr key={p.id} className="border-b border-[#F4F5F7]">
                               <td className="py-1.5 text-[#6B778C]">{fmtDay(p.createdAt)}</td>
                               <td className="py-1.5 font-semibold text-[#172B4D]">{p.method}</td>
-                              <td className="max-w-[180px] truncate py-1.5 text-[11px] text-[#6B778C]">{p.note ?? "-"}</td>
+                              <td className="max-w-[160px] truncate py-1.5 text-[11px] text-[#6B778C]">{p.note ?? "-"}</td>
                               <td className="py-1.5 text-right font-bold text-[#1B7A2E]">−{KES(p.amount)}</td>
+                              <td className="py-1.5 text-right">
+                                <button
+                                  onClick={() =>
+                                    void printDebtPayment(
+                                      { id: stmtData.plan.id, invoiceNo: stmtData.plan.invoiceNo },
+                                      p,
+                                      stmtData.customer.name,
+                                      { tier: stmtData.customer.tier, remainingBalance: stmtData.summary.balance }
+                                    )
+                                  }
+                                  title={`Print payment receipt RCP-D-${p.id}`}
+                                  aria-label={`Print receipt for payment RCP-D-${p.id}`}
+                                  className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[#DFE1E6] bg-white text-[#172B4D] transition hover:border-[#0052CC] hover:text-[#0052CC]"
+                                >
+                                  <Printer size={13} />
+                                </button>
+                              </td>
                             </tr>
                           ))
                         )}
@@ -1183,6 +1492,14 @@ export default function DebtsScreen() {
               <DialogFooter className="mt-1 gap-2">
                 <Button variant="outline" onClick={downloadStatementCsv} className="rounded-xl">
                   <Download className="h-4 w-4" /> CSV
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => stmtPlan && void printStatementReceipt(stmtPlan)}
+                  disabled={stmtReceiptBusy}
+                  className="rounded-xl"
+                >
+                  {stmtReceiptBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ReceiptText className="h-4 w-4" />} Statement Receipt
                 </Button>
                 <Button
                   onClick={() => void openStatementEmail()}
@@ -1383,6 +1700,9 @@ export default function DebtsScreen() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* hidden receipt print host (portaled to body, revealed by printReceiptArea) */}
+      <ReceiptPrintHost docs={printDocs} mode={printMode} />
     </div>
   );
 }

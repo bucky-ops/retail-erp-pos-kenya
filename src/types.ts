@@ -103,6 +103,12 @@ export interface CartLine {
   category?: string; // used for Happy Hour auto-pricing
 }
 
+export interface PaySplit {
+  method: string; // Cash | M-Pesa | M-Pesa Till | M-Pesa Paybill | Card | Points | Gift Card
+  amount: number;
+  ref?: string; // M-Pesa code / gift card code
+}
+
 export interface SalePayload {
   clientId?: string; // offline dedupe
   storeId: number;
@@ -115,6 +121,9 @@ export interface SalePayload {
   billDiscount?: number; // flat KES
   offlineCreated?: boolean;
   createdAt?: string;
+  paySplits?: PaySplit[]; // multi-pay split (50% M-Pesa + 30% Cash + 20% Points)
+  allowPartial?: boolean; // accept underpayment as customer debt
+  managerPin?: string; // day-lock override (closed business date)
 }
 
 export interface SaleResult {
@@ -154,6 +163,14 @@ export interface GiftCardDto {
   gradient: string;
 }
 
+export interface ChainDoc {
+  no: string;
+  digitalCode: string;
+  url: string;
+  kind: string;
+  at: string;
+}
+
 export interface DealDto {
   id: string;
   stage: string;
@@ -165,6 +182,7 @@ export interface DealDto {
   assignee: string;
   notes: string | null;
   history: { stage: string; at: string; by: string }[];
+  docs?: Record<string, ChainDoc>; // matured chain documents
   createdAt: string;
 }
 

@@ -33,6 +33,7 @@ model Store {
 
 model Staff {
   id      Int     @id @default(autoincrement())
+  archivedAt       DateTime?
   name    String
   role    String // Cashier | Store Keeper | Sales | Manager | Owner | Accountant
   pin     String // 4-digit POS login PIN (demo: stored plain)
@@ -46,6 +47,7 @@ model Staff {
 
 model Customer {
   id              Int           @id @default(autoincrement())
+  archivedAt       DateTime?
   name            String
   phone           String        @unique
   email           String?
@@ -72,6 +74,7 @@ model Customer {
 
 model Product {
   id                  Int                  @id @default(autoincrement())
+  archivedAt       DateTime?
   name                String
   sku                 String               @unique
   barcode             String               @unique
@@ -81,6 +84,8 @@ model Product {
   unit                String               @default("pc")
   emoji               String               @default("📦")
   active              Boolean              @default(true)
+  isScale             Boolean              @default(false) // weight scale item (bananas 1.25kg x price)
+  scaleCode           String?              @unique // 5 digit code embedded in EAN-13 scale barcodes (2XXXXXWWWWWC)
   stocks              StockLevel[]
   saleItems           SaleItem[]
   saleReturnItems     SaleReturnItem[]
@@ -153,6 +158,8 @@ model Sale {
   kraStatus       String        @default("Pending") // Verified | Pending | Failed
   cuInvoiceNumber String?
   qrCodeBase64    String?
+  digitalCode     String? // NVS-DUKA-YYYY-XXXXX digital receipt link
+  paySplitsJson   String        @default("[]") // multi-pay split [{method, amount, ref}]
   offlineCreated  Boolean       @default(false)
   clientId        String? // offline queue dedupe key
   syncedAt        DateTime?
@@ -222,6 +229,7 @@ model SaleReturnItem {
 
 model Supplier {
   id              Int              @id @default(autoincrement())
+  archivedAt       DateTime?
   name            String
   phone           String           @default("")
   email           String           @default("")
@@ -279,6 +287,7 @@ model PurchaseOrderItem {
 
 model Expense {
   id        Int      @id @default(autoincrement())
+  archivedAt       DateTime?
   storeId   Int
   store     Store    @relation(fields: [storeId], references: [id])
   category  String   @default("Other") // Rent | Electricity | Salaries | Transport | Supplies | Marketing | Repairs | Other
@@ -301,6 +310,7 @@ model PipelineDeal {
   assignee      String   @default("M")
   notes         String?
   history       String   @default("[]") // JSON [{stage, at, by}]
+  docsJson      String   @default("{}") // matured chain docs {quotation, proforma, order, invoice, payment} each {no, digitalCode, at}
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
@@ -309,6 +319,7 @@ model PipelineDeal {
 
 model GiftCard {
   id             Int       @id @default(autoincrement())
+  archivedAt       DateTime?
   code           String    @unique
   balance        Float
   initialBalance Float
@@ -414,6 +425,7 @@ model SmsLog {
 
 model PromoCode {
   id        Int       @id @default(autoincrement())
+  archivedAt       DateTime?
   code      String    @unique
   type      String    @default("percent") // percent | flat
   value     Float
@@ -450,6 +462,12 @@ model Settings {
   happyHourPercent         Float     @default(10)
   happyHourCategory        String    @default("All") // "All" or a product category name
   receiptPromoFooter       String    @default("Thank You! You saved KES 300 with points! Come again!")
+  logoUrl                  String    @default("") // company logo (company master) printed on receipts + reports
+  companyPhone             String    @default("0712 345 678")
+  companyAddress           String    @default("Thika Road Mall, Nairobi")
+  tillNo                   String    @default("01")
+  receiptFooterMessage     String    @default("Thank you! Sema na sisi: 0712 345 678")
+  etimsEnabled             Boolean   @default(true) // KRA eTIMS QR + CU invoice number on receipts
   receiptPrimaryColor      String    @default("#0052CC")
   receiptSecondaryColor    String    @default("#00C853")
   companyName              String    @default("DukaFlow Ltd")
@@ -534,6 +552,7 @@ model SupplierReturnItem {
 
 model Employee {
   id              Int            @id @default(autoincrement())
+  archivedAt       DateTime?
   staffNo         String         @unique @default("") // DF-001
   name            String
   idNo            String
@@ -601,6 +620,7 @@ model StaffAdvance {
 model DayClose {
   id           Int       @id @default(autoincrement())
   zNo          String    @unique // Z-2026-0918-THIKA
+  digitalCode  String? // NVS digital receipt twin of the printed Z
   storeId      Int
   store        Store     @relation(fields: [storeId], references: [id])
   businessDate String // "2026-09-18"
@@ -612,6 +632,10 @@ model DayClose {
   mpesaSystem  Float     @default(0)
   mpesaCounted Float?
   cardSystem   Float     @default(0)
+  paybillSystem Float    @default(0) // M-Pesa Paybill tender
+  pointsSystem  Float     @default(0) // Points tender value
+  discountsTotal Float    @default(0)
+  returnsTotal  Float     @default(0)
   variance     Float     @default(0) // counted - system (cash+mpesa)
   approvedBy   String    @default("")
   staffOnDuty  String    @default("") // comma separated names
@@ -671,4 +695,84 @@ model BankStatementLine {
   amount      Float // +money in, -money out
   matched     Boolean @default(false)
   matchRef    String  @default("") // JV-… it reconciles to
+}
+
+// --- Settings receipt branding additions are on the Settings model -----------
+
+// --- Supermarket mode: held carts (Naivas style HOLD + resume) ---------------
+// A cashier can HOLD a cart with one click, serve the next customer, then
+// resume. Holds persist across refresh / module switches / logout because the
+// server keeps them (the POS also mirrors them into localStorage).
+
+model PosHold {
+  id           Int       @id @default(autoincrement())
+  holdCode     String    @unique // HOLD-0001
+  staffName    String // which cashier parked the cart
+  storeId      Int
+  customerId   Int?
+  customerName String    @default("")
+  label        String    @default("") // e.g. "Basket at counter 2"
+  itemsJson    String // JSON [{productId, name, emoji, qty, unitPrice, discount, total, unit}]
+  itemCount    Int       @default(0)
+  subtotal     Float     @default(0)
+  total        Float     @default(0)
+  status       String    @default("Held") // Held | Resumed
+  createdAt    DateTime  @default(now())
+  resumedAt    DateTime?
+}
+
+// --- Digital receipts (QR never dies: public verification page) --------------
+// Every printable document (sale, Z report, payslip, payment, quotation...)
+// gets a public digital twin at /receipt/{receiptCode} - the QR printed on the
+// paper receipt points there.
+
+model DigitalReceipt {
+  id          Int      @id @default(autoincrement())
+  receiptCode String   @unique // NVS-DUKA-YYYY-XXXXX
+  uuid        String   @unique @default(uuid()) // obfuscated public lookup
+  kind        String   @default("SALE") // SALE | ZREPORT | PAYSLIP | DEBT_PAYMENT | CREDITOR_PAYMENT | QUOTATION | PROFORMA | ORDER | INVOICE | PAYMENT | EXPENSE | STOCK_ADJUSTMENT | JOURNAL | PAYMENT_ENTRY | PURCHASE_INVOICE | EXPENSE_CLAIM | STOCK_ENTRY
+  saleId      Int?
+  refNo       String   @default("") // source doc number (R-0012, Z-..., JV-...)
+  url         String   @default("")
+  qrDataUrl   String   @default("")
+  payloadJson String   @default("{}") // full document snapshot rendered by /receipt/[code]
+  createdAt   DateTime @default(now())
+}
+
+// --- Audit log + trash + version history (full CRUD governance) --------------
+
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  actor     String
+  action    String // CREATE | UPDATE | DELETE | RESTORE | LOGIN | MATURE | DAY_CLOSE | LOCK_OVERRIDE
+  entity    String // Customer | Product | Sale | ...
+  entityId  String   @default("")
+  label     String   @default("")
+  details   String   @default("") // JSON diff / reason
+  storeId   Int?
+  createdAt DateTime @default(now())
+}
+
+// Soft delete: records move to Trash with a reason, restorable by managers.
+model TrashItem {
+  id         Int       @id @default(autoincrement())
+  entity     String
+  entityId   Int
+  label      String
+  snapshot   String // full row JSON for restore
+  reason     String    @default("")
+  deletedBy  String    @default("")
+  status     String    @default("InTrash") // InTrash | Restored
+  createdAt  DateTime  @default(now())
+  restoredAt DateTime?
+}
+
+// ERPNext style version log: every update records who changed what.
+model VersionLog {
+  id        Int      @id @default(autoincrement())
+  entity    String
+  entityId  Int
+  editor    String
+  changes   String // JSON [{field, from, to}]
+  createdAt DateTime @default(now())
 }

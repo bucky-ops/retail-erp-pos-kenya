@@ -7,6 +7,7 @@ export const dynamic = "force-dynamic";
 /** GET /api/gift-cards - all gift cards with QR data URLs. */
 export async function GET() {
   const cards = await db.giftCard.findMany({
+    where: { archivedAt: null },
     include: { customer: true },
     orderBy: { createdAt: "desc" },
   });

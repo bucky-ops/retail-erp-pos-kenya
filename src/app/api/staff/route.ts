@@ -22,7 +22,7 @@ export async function GET() {
   const since30 = dateStr(new Date(Date.now() - 30 * 864e5));
 
   const [employees, atts, advances, todayPresent, draftSlips] = await Promise.all([
-    db.employee.findMany({ orderBy: { staffNo: "asc" }, include: { store: { select: { name: true } } } }),
+    db.employee.findMany({ where: { archivedAt: null }, orderBy: { staffNo: "asc" }, include: { store: { select: { name: true } } } }),
     db.attendance.findMany({
       where: { date: { gte: since30 } },
       select: { employeeId: true, status: true },

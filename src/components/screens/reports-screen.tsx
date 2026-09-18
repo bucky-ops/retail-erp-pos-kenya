@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Building2, CalendarClock, ChartColumn, Download, HandCoins, Landmark,
-  Package, PieChart as PieChartIcon, Plus, RefreshCw, Smartphone, TrendingDown, TrendingUp, Users, Wallet,
+  Building2, CalendarClock, ChartColumn, Download, FileSpreadsheet, HandCoins, Landmark,
+  Package, PieChart as PieChartIcon, Plus, Printer, RefreshCw, Smartphone, TrendingDown, TrendingUp, Users, Wallet,
 } from "lucide-react";
 import {
   Area, Bar, BarChart, CartesianGrid, Cell, ComposedChart, Legend, Line, LineChart,
@@ -11,6 +11,10 @@ import {
 } from "recharts";
 import { api } from "@/lib/api";
 import { useApp } from "@/lib/store";
+import { exportCsv as exportReportCsv, hashPayload } from "@/lib/receipt";
+import {
+  ReportPrint, ReportTable, ReportToolbar, printReportArea, useCompanyProfile,
+} from "@/components/df/report-print";
 import { KES, SettingsDto } from "@/types";
 import { Panel, ScreenHeader, TableSkeleton } from "@/components/df/shared";
 import { toast } from "@/hooks/use-toast";
@@ -82,6 +86,30 @@ const REPORTS: { id: ReportId; title: string; desc: string; icon: typeof ChartCo
   { id: "expenses", title: "Operating Expenses", desc: "Petty cash, bills, rent & net P&L", icon: Wallet },
 ];
 
+/** Filters-used line printed on every report (implicit scope of the data). */
+const reportFilters = (id: ReportId): string[] => {
+  switch (id) {
+    case "store":
+      return ["Scope: all stores", "Period: last 7 days"];
+    case "pnl":
+      return ["Period: last 7 days", "Profit: estimated margin model"];
+    case "stock":
+      return ["Valuation: cost (FIFO)", "All stores"];
+    case "debtors":
+      return ["All customers", "Buckets: current / 1-30 / 31-60 / 60+ days"];
+    case "loyalty":
+      return ["Point value: 1 pt = KES 1"];
+    case "staff":
+      return ["Period: this week", "All staff"];
+    case "kra":
+      return ["Scope: all eTIMS submissions"];
+    case "mpesa":
+      return ["Period: last 7 days", "Split: M-Pesa vs Cash vs Other"];
+    case "expenses":
+      return ["Period: last 30 days", "All stores"];
+  }
+};
+
 const rel = (iso: string) => {
   const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
   if (!Number.isFinite(s)) return "-";
@@ -103,6 +131,9 @@ export default function ReportsScreen() {
   const [loading, setLoading] = useState(true);
   const [drill, setDrill] = useState<ReportId | null>(null);
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [printId, setPrintId] = useState<ReportId | null>(null);
+  const user = useApp((s) => s.user);
+  const profile = useCompanyProfile();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -262,6 +293,28 @@ export default function ReportsScreen() {
     a.click();
     URL.revokeObjectURL(url);
     toast({ title: "Report exported", description: `dukaflow-${id}-report.csv saved to downloads.` });
+  };
+
+  /* print + export suite (Print / Export PDF / Export Excel) ---- */
+
+  /** Renders the hidden A4 ReportPrint block, then prints it. */
+  const printReport = (id: ReportId) => {
+    if (!data) return;
+    setPrintId(id);
+    window.setTimeout(() => printReportArea(), 700);
+  };
+
+  /** Export Excel - CSV download via lib/receipt (opens in Excel). */
+  const exportExcel = (id: ReportId) => {
+    const t = tableFor(id);
+    exportReportCsv(`dukaflow-${id}-report`, [t.cols, ...t.rows], REPORTS.find((r) => r.id === id)?.title);
+    toast({ title: "Excel export ready", description: `dukaflow-${id}-report.csv saved to downloads.` });
+  };
+
+  /** Local verification hash for printed reports (client-side data). */
+  const reportHash = (id: ReportId) => {
+    const t = tableFor(id);
+    return hashPayload({ report: id, cols: t.cols, rows: t.rows, generatedAt: data?.generatedAt ?? "" });
   };
 
   /* mini chart renderer (h-24, no axes) -------------------- */
@@ -547,23 +600,44 @@ export default function ReportsScreen() {
       ) : (
         <div className="grid grid-cols-1 gap-4 @2xl:grid-cols-2 @6xl:grid-cols-4">
           {REPORTS.map(({ id, title, desc, icon: Icon }) => (
-            <button
+            <div
               key={id}
-              type="button"
+              role="button"
+              tabIndex={0}
               onClick={() => setDrill(id)}
-              className="rounded-2xl border border-[#DFE1E6] bg-white p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#0052CC]/40 hover:shadow-md"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setDrill(id);
+                }
+              }}
+              className="cursor-pointer rounded-2xl border border-[#DFE1E6] bg-white p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#0052CC]/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0052CC]/40"
             >
               <div className="flex items-center justify-between">
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#F4F5F7] text-[#0052CC]">
                   <Icon size={16} />
                 </div>
-                <span className="text-[11px] text-[#6B778C]">{data ? rel(data.generatedAt) : "-"}</span>
+                <span className="flex items-center gap-1">
+                  <span className="text-[11px] text-[#6B778C]">{data ? rel(data.generatedAt) : "-"}</span>
+                  <button
+                    type="button"
+                    aria-label={`Print ${title}`}
+                    title={`Print ${title}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      printReport(id);
+                    }}
+                    className="rounded-lg p-1.5 text-[#6B778C] transition-colors hover:bg-[#E9F2FF] hover:text-[#0052CC]"
+                  >
+                    <Printer size={14} />
+                  </button>
+                </span>
               </div>
               <h3 className="font-display mt-4 text-[14px] font-bold text-[#172B4D]">{title}</h3>
               <p className="text-[12px] text-[#6B778C]">{desc}</p>
               <div className="mt-3 h-24">{miniChart(id)}</div>
               <p className="mt-2 text-[11px] font-semibold text-[#0052CC]">Click to drill down →</p>
-            </button>
+            </div>
           ))}
         </div>
       )}
@@ -578,6 +652,18 @@ export default function ReportsScreen() {
             </DialogTitle>
             <DialogDescription>{drillMeta?.desc}</DialogDescription>
           </DialogHeader>
+
+          {/* print + export toolbar with verification QR + hash (top right) */}
+          {drill && (
+            <ReportToolbar
+              hash={data ? reportHash(drill) : undefined}
+              onPrint={() => printReport(drill)}
+              onExportPdf={() => printReport(drill)}
+              onExport={() => exportExcel(drill)}
+            >
+              <span className="text-[11px] text-[#6B778C]">Filters: {reportFilters(drill).join(" | ")}</span>
+            </ReportToolbar>
+          )}
 
           <div className="h-64">{drill && bigChart(drill)}</div>
 
@@ -764,6 +850,13 @@ export default function ReportsScreen() {
             </Button>
             <Button
               variant="outline"
+              onClick={() => drill && exportExcel(drill)}
+              className="h-9 flex-1 rounded-xl border-[#DFE1E6] text-[13px] font-bold text-[#172B4D]"
+            >
+              <FileSpreadsheet size={14} /> Export Excel
+            </Button>
+            <Button
+              variant="outline"
               onClick={() => setScheduleOpen(true)}
               className="h-9 flex-1 rounded-xl border-[#DFE1E6] text-[13px] font-bold text-[#172B4D]"
             >
@@ -775,6 +868,59 @@ export default function ReportsScreen() {
 
       {/* scheduled-report email dialog - persists to Settings, sends via /api/cron/report */}
       <ScheduleDialog open={scheduleOpen} onOpenChange={setScheduleOpen} currentReport={drillMeta?.title} />
+
+      {/* hidden A4 print host - revealed by printReportArea() (Print / Export PDF) */}
+      <div className="hidden print:block">
+        {printId && data
+          ? (() => {
+              const meta = REPORTS.find((r) => r.id === printId);
+              if (!meta) return null;
+              const t = tableFor(printId);
+              const summary: (string | number)[][] = [];
+              if (printId === "expenses" && exp) {
+                summary.push(
+                  ["30-day spend (KES)", exp.summary.total],
+                  ["This month (KES)", exp.summary.month],
+                  ["Entries", exp.summary.count]
+                );
+              }
+              return (
+                <ReportPrint
+                  title={meta.title}
+                  company={profile}
+                  generatedBy={user?.name}
+                  generatedAt={data.generatedAt}
+                  filters={reportFilters(printId)}
+                  hash={reportHash(printId)}
+                >
+                  <ReportTable head={t.cols} rows={t.rows} />
+                  {summary.length ? (
+                    <div className="mt-4">
+                      <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-[#6B778C]">Summary</p>
+                      <ReportTable head={["Metric", "Value"]} rows={summary} />
+                    </div>
+                  ) : null}
+                  {printId === "stock" && stockAgingItems.length ? (
+                    <div className="mt-4">
+                      <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-[#6B778C]">Heaviest stock per bucket</p>
+                      <ReportTable
+                        head={["Item", "Store", "Qty", "Age (days)", "Value (KES)"]}
+                        rows={stockAgingItems
+                          .filter((b) => b.topItems.length > 0)
+                          .flatMap((b) =>
+                            b.topItems.slice(0, 3).map((it) => [it.name, it.store, Math.round(it.qty), it.ageDays, it.value] as (string | number)[])
+                          )}
+                      />
+                    </div>
+                  ) : null}
+                  <p className="mt-3 text-[10px] text-[#6B778C]">
+                    Source: live DukaFlow data (sales, stock, debtors, KRA submissions){printId === "pnl" ? " - profit figures are estimated" : ""}.
+                  </p>
+                </ReportPrint>
+              );
+            })()
+          : null}
+      </div>
     </div>
   );
 }
