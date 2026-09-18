@@ -1,0 +1,27 @@
+# Codemagic — free-tier iOS build (500 min/month)
+# 1. Sign up at codemagic.io with the GitHub repo.
+# 2. Start build with workflow "ios-workflow".
+#    * Unsigned IPA: works with zero Apple credentials.
+#    * Signed IPA: add an App Store Connect API key in Codemagic
+#      and replace `ipa --no-codesign` with the signed publish step.
+workflows:
+  ios-workflow:
+    name: DukaFlow iOS
+    max_build_duration: 45
+    environment:
+      flutter: 3.22.3
+      xcode: latest
+    scripts:
+      - name: Bootstrap iOS Runner (repo ships Android; iOS scaffolding is generated)
+        script: |
+          if [ ! -d ios ]; then
+            flutter create . --platforms ios --org site.dukaflow --project-name dukaflow_mobile
+          fi
+      - name: Pub get
+        script: flutter pub get
+      - name: Build unsigned IPA
+        script: flutter build ipa --release --no-codesign
+    publishing:
+      email:
+        recipients:
+          - owner@dukaflow.site

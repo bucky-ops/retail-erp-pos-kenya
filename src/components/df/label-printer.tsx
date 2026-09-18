@@ -21,6 +21,7 @@ import { api } from "@/lib/api";
 import { KES } from "@/types";
 import { QrImage } from "@/components/df/qr";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -389,5 +390,361 @@ export function LabelPrinter({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Label Studio — enhanced inline presentation for the Inventory Pro
+ * "Barcode & Labels" tab. Two thermal presets (80×40mm, 50×25mm), checkbox
+ * multi-select with search, a live 3×8 label-sheet preview (3 columns of
+ * 50mm = 150mm and 2 columns of 80mm = 160mm both fit a 210mm A4 row; rows
+ * cap at 8) and the same `.df-print-area-a4` print isolation as the classic
+ * dialog above, so window.print() only ever prints the sheet.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/** Deterministic decorative 1D bars derived from SKU character codes. */
+export function skuBars(code: string): { w: number; on: boolean }[] {
+  const src = (code || "DUKA00000000").slice(0, 18);
+  const bars: { w: number; on: boolean }[] = [];
+  for (let i = 0; i < src.length; i++) {
+    const c = src.charCodeAt(i);
+    bars.push({ w: 1 + (c % 3), on: i % 2 === 0 });
+    bars.push({ w: 1 + ((c >> 2) % 2), on: false });
+  }
+  bars.push({ w: 2, on: true }); // guard bar
+  return bars;
+}
+
+function StudioLabel({
+  p,
+  company,
+  storeLabel,
+  w,
+  h,
+}: {
+  p: LabelProduct;
+  company: string;
+  storeLabel: string;
+  w: number;
+  h: number;
+}) {
+  const big = w >= 80;
+  return (
+    <div
+      className="df-label overflow-hidden rounded-[3px] border border-[#172B4D]/25 bg-white"
+      style={{ width: `${w}mm`, height: `${h}mm` }}
+    >
+      <div className="flex h-full flex-col px-1.5 py-1">
+        <div className="flex items-baseline justify-between gap-1">
+          <span className="truncate text-[6pt] font-bold uppercase tracking-wide text-[#172B4D]">
+            {company}
+          </span>
+          <span className="shrink-0 font-mono text-[5.5pt] text-[#6B778C]">{p.sku}</span>
+        </div>
+        <p className="truncate text-[7.5pt] font-semibold leading-tight text-[#172B4D]">{p.name}</p>
+        <div className={cn("flex items-end justify-center gap-[0.5px]", big ? "h-[13mm]" : "h-[8mm]")}>
+          {skuBars(p.sku).map((b, i) => (
+            <span
+              key={i}
+              style={{ width: `${b.w}px`, height: "100%", background: b.on ? "#172B4D" : "transparent" }}
+            />
+          ))}
+        </div>
+        <p className="text-center font-mono text-[5pt] tracking-[0.18em] text-[#172B4D]">
+          {p.barcode || p.sku}
+        </p>
+        <div className="mt-auto flex items-baseline justify-between border-t border-dashed border-[#DFE1E6] pt-0.5">
+          <span className="truncate text-[5pt] text-[#6B778C]">{storeLabel}</span>
+          <span className="font-display text-[10.5pt] font-extrabold leading-none text-[#172B4D]">
+            {KES(p.price)}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function LabelStudio({
+  storeId,
+  storeName,
+}: {
+  storeId: number | "all";
+  storeName: string;
+}) {
+  const [data, setData] = useState<LabelData | null>(null);
+  const [q, setQ] = useState("");
+  const [category, setCategory] = useState("All");
+  const [size, setSize] = useState<"80x40" | "50x25">("50x25");
+  const [copies, setCopies] = useState<Record<number, number>>({});
+  const [printing, setPrinting] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const params = new URLSearchParams();
+      if (storeId !== "all") params.set("storeId", String(storeId));
+      const res = await api.get<LabelData>(`/api/labels?${params.toString()}`);
+      setData(res);
+    } catch (e) {
+      toast({ title: "Could not load label data", description: e instanceof Error ? e.message : "Try again" });
+      setData({ company: { name: "DukaFlow", kraPin: null }, products: [] });
+    }
+  }, [storeId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const categories = useMemo(
+    () => ["All", ...Array.from(new Set((data?.products ?? []).map((p) => p.category)))],
+    [data]
+  );
+
+  const filtered = useMemo(() => {
+    const list = data?.products ?? [];
+    const needle = q.trim().toLowerCase();
+    return list.filter(
+      (p) =>
+        (category === "All" || p.category === category) &&
+        (!needle || p.name.toLowerCase().includes(needle) || p.sku.toLowerCase().includes(needle) || p.barcode.includes(needle))
+    );
+  }, [data, q, category]);
+
+  const selected = filtered.filter((p) => (copies[p.id] ?? 0) > 0);
+  const totalLabels = selected.reduce((s, p) => s + (copies[p.id] ?? 0), 0);
+  const printList: LabelProduct[] = useMemo(
+    () => selected.flatMap((p) => Array.from({ length: copies[p.id] ?? 0 }, () => p)),
+    [selected, copies]
+  );
+
+  const labelW = size === "80x40" ? 80 : 50;
+  const labelH = size === "80x40" ? 40 : 25;
+  const SHEET_ROWS = 8;
+  const cols = size === "80x40" ? 2 : 3; // both fit within a 210mm A4 row
+  const preview = printList.slice(0, cols * SHEET_ROWS);
+
+  const setCopiesOf = (id: number, n: number) =>
+    setCopies((c) => ({ ...c, [id]: Math.max(0, Math.min(99, n)) }));
+
+  const doPrint = () => {
+    if (totalLabels === 0) {
+      toast({ title: "No labels selected", description: "Tick a few products first." });
+      return;
+    }
+    setPrinting(true);
+    setTimeout(() => {
+      window.print();
+      setPrinting(false);
+    }, 80);
+  };
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-[#DFE1E6] bg-white shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#DFE1E6] bg-[#FAFBFC] px-4 py-3">
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#E3F2FD] text-[#0052CC]">
+            <ScanBarcode size={15} />
+          </span>
+          <div>
+            <h3 className="font-display text-[14px] font-bold text-[#172B4D]">Barcode &amp; Label Studio</h3>
+            <p className="text-[11.5px] text-[#6B778C]">
+              Shelf stickers for {storeName} — CSS-drawn scannable bars, print-isolated A4 sheet
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5">
+          {(["80x40", "50x25"] as const).map((s) => (
+            <button
+              key={s}
+              onClick={() => setSize(s)}
+              className={cn(
+                "rounded-full border px-3 py-1.5 font-mono text-[11px] font-bold transition",
+                size === s
+                  ? "border-[#172B4D] bg-[#172B4D] text-white"
+                  : "border-[#DFE1E6] bg-white text-[#6B778C] hover:text-[#172B4D]"
+              )}
+            >
+              {s.replace("x", "×")}mm
+            </button>
+          ))}
+          <span className="rounded-full bg-[#E3F2FD] px-2.5 py-1.5 text-[11px] font-bold text-[#0052CC]">
+            {totalLabels} label{totalLabels === 1 ? "" : "s"}
+          </span>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12">
+        {/* LEFT: checkbox multi-select with search */}
+        <div className="flex min-h-0 flex-col border-b border-[#DFE1E6] lg:col-span-5 lg:border-b-0 lg:border-r">
+          <div className="flex items-center gap-2 border-b border-[#DFE1E6] p-3">
+            <div className="relative flex-1">
+              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6B778C]" />
+              <Input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Search name / SKU / barcode…"
+                className="h-9 rounded-xl border-[#DFE1E6] bg-[#FAFBFC] pl-8 text-[12px]"
+              />
+            </div>
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              aria-label="Filter by category"
+              className="h-9 rounded-xl border border-[#DFE1E6] bg-[#FAFBFC] px-2 text-[12px] font-semibold text-[#172B4D] outline-none focus:border-[#0052CC]"
+            >
+              {categories.map((c) => (
+                <option key={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+          <div className="df-scroll max-h-[380px] min-h-0 flex-1 overflow-y-auto p-2 lg:max-h-[460px]">
+            {data === null ? (
+              <div className="space-y-2">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <Skeleton key={i} className="h-11 rounded-xl" />
+                ))}
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="flex flex-col items-center py-10 text-center">
+                <PackageOpen size={24} className="mb-2 text-[#6B778C]" />
+                <p className="text-[12px] font-semibold text-[#172B4D]">No products match this filter</p>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                {filtered.map((p) => {
+                  const n = copies[p.id] ?? 0;
+                  const on = n > 0;
+                  return (
+                    <div
+                      key={p.id}
+                      role="button"
+                      tabIndex={0}
+                      aria-pressed={on}
+                      onClick={() => setCopiesOf(p.id, on ? 0 : 1)}
+                      onKeyDown={(e) => e.key === "Enter" && setCopiesOf(p.id, on ? 0 : 1)}
+                      className={cn(
+                        "flex cursor-pointer items-center gap-2.5 rounded-xl border p-2 transition",
+                        on ? "border-[#0052CC]/50 bg-[#E3F2FD]" : "border-transparent hover:border-[#DFE1E6] hover:bg-[#FAFBFC]"
+                      )}
+                    >
+                      <Checkbox
+                        checked={on}
+                        onClick={(e) => e.stopPropagation()}
+                        onCheckedChange={(v) => setCopiesOf(p.id, v === true ? Math.max(1, n) : 0)}
+                        aria-label={`Select ${p.name} for label printing`}
+                      />
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[#DFE1E6] bg-white text-base">
+                        {p.emoji}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[12.5px] font-semibold text-[#172B4D]">{p.name}</span>
+                        <span className="block truncate font-mono text-[10.5px] text-[#6B778C]">
+                          {p.sku} • {p.barcode || "no barcode"} • {KES(p.price)}
+                        </span>
+                      </span>
+                      <span
+                        className="flex shrink-0 items-center gap-1 rounded-full border border-[#DFE1E6] bg-white px-1"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`Decrease copies for ${p.name}`}
+                          onKeyDown={(e) => e.key === "Enter" && setCopiesOf(p.id, n - 1)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setCopiesOf(p.id, n - 1);
+                          }}
+                          className="flex h-6 w-6 items-center justify-center rounded-full text-[#6B778C] hover:bg-[#F4F5F7]"
+                        >
+                          <Minus size={11} />
+                        </span>
+                        <input
+                          value={n}
+                          onChange={(e) => setCopiesOf(p.id, Number(e.target.value.replace(/\D/g, "")) || 0)}
+                          onClick={(e) => e.stopPropagation()}
+                          inputMode="numeric"
+                          aria-label={`Copies for ${p.name}`}
+                          className={cn(
+                            "w-8 border-0 bg-transparent text-center text-[12px] font-bold outline-none",
+                            on ? "text-[#0052CC]" : "text-[#6B778C]"
+                          )}
+                        />
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`Increase copies for ${p.name}`}
+                          onKeyDown={(e) => e.key === "Enter" && setCopiesOf(p.id, n + 1)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setCopiesOf(p.id, n + 1);
+                          }}
+                          className="flex h-6 w-6 items-center justify-center rounded-full text-[#6B778C] hover:bg-[#F4F5F7]"
+                        >
+                          <Plus size={11} />
+                        </span>
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* RIGHT: live 3×8 sheet preview + print */}
+        <div className="flex min-h-0 flex-col bg-[#F4F5F7] lg:col-span-7">
+          <div className="flex items-center justify-between border-b border-[#DFE1E6] bg-white px-3 py-2">
+            <p className="text-[11px] font-semibold text-[#6B778C]">
+              Live sheet preview — {cols}×{SHEET_ROWS} grid • {labelW}×{labelH}mm stickers
+            </p>
+            {totalLabels > preview.length && (
+              <span className="rounded-full bg-[#FFF8E1] px-2 py-0.5 text-[10.5px] font-bold text-[#B8860B]">
+                showing first {preview.length} of {totalLabels}
+              </span>
+            )}
+          </div>
+          <div className="df-scroll max-h-[420px] min-h-0 flex-1 overflow-auto p-3 lg:max-h-[460px]">
+            {preview.length === 0 ? (
+              <div className="flex h-full min-h-[220px] flex-col items-center justify-center rounded-xl border border-dashed border-[#DFE1E6] bg-white/70 py-10 text-center">
+                <Copy size={24} className="mb-2 text-[#6B778C]" />
+                <p className="font-display text-[13px] font-semibold text-[#172B4D]">No labels yet</p>
+                <p className="mt-1 max-w-[240px] text-[11.5px] text-[#6B778C]">
+                  Tick products on the left — each selection renders a sticker with price + scan bars.
+                </p>
+              </div>
+            ) : (
+              <div
+                className="df-print-area-a4 mx-auto w-fit rounded-lg border border-[#DFE1E6] bg-white p-2 shadow-sm"
+                style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, ${labelW}mm)`, gap: "3mm" }}
+              >
+                {preview.map((p, idx) => (
+                  <StudioLabel
+                    key={`${p.id}-${idx}`}
+                    p={p}
+                    company={data?.company.name ?? "DukaFlow"}
+                    storeLabel={p.storeName ?? storeName}
+                    w={labelW}
+                    h={labelH}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="flex items-center justify-between gap-2 border-t border-[#DFE1E6] bg-white p-3">
+            <p className="text-[10.5px] leading-tight text-[#6B778C]">
+              {labelW}×{labelH}mm thermal stickers • {fmtWhen()} • bars derived from SKU codes
+            </p>
+            <Button
+              onClick={doPrint}
+              disabled={totalLabels === 0 || printing}
+              className="h-9 rounded-xl bg-[#172B4D] px-4 text-[12px] font-bold hover:bg-[#0F1D33]"
+            >
+              {printing ? <Loader2 size={13} className="animate-spin" /> : <Printer size={13} />}
+              Print {totalLabels > 0 ? totalLabels : ""}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
