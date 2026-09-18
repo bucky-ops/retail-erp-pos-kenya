@@ -137,7 +137,7 @@ export default function LoginScreen({
         !embedded && "border border-[#DFE1E6] shadow-2xl"
       )}
     >
-      {/* ── Left: marketing panel ─────────────────────────── */}
+      {/* -- Left: marketing panel --------------------------- */}
       <div className="relative hidden flex-col overflow-hidden bg-gradient-to-br from-[#172B4D] via-[#142748] to-[#0E1B33] p-8 text-white @3xl:flex @3xl:p-10">
         {/* ambient animated blobs */}
         <div
@@ -207,7 +207,7 @@ export default function LoginScreen({
         </div>
       </div>
 
-      {/* ── Right: auth panel ─────────────────────────────── */}
+      {/* -- Right: auth panel ------------------------------- */}
       <div className="relative flex flex-col p-6 md:p-10">
         <div className="mb-6 @3xl:hidden">
           <Logo size={22} />

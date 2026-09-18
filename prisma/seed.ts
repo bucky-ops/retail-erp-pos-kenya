@@ -52,7 +52,7 @@ async function main() {
   await db.store.deleteMany();
   await db.settings.deleteMany();
 
-  // ─── Stores ──────────────────────────────────────────────
+  // --- Stores ----------------------------------------------
   const thika = await db.store.create({
     data: { name: "Thika Road", location: "Nairobi", isMain: true },
   });
@@ -60,7 +60,7 @@ async function main() {
     data: { name: "Kiambu Road", location: "Kiambu" },
   });
 
-  // ─── Staff (PIN login) ───────────────────────────────────
+  // --- Staff (PIN login) -----------------------------------
   await db.staff.createMany({
     data: [
       { name: "Mary Wanjiku", role: "Cashier", pin: "1234", color: "#0052CC", onShift: true, storeId: thika.id },
@@ -70,7 +70,7 @@ async function main() {
     ],
   });
 
-  // ─── Products ────────────────────────────────────────────
+  // --- Products --------------------------------------------
   const productData = [
     { name: "Bamburi Cement 50kg", sku: "CMT-001", category: "Cement", price: 1250, cost: 1100, emoji: "🧱", thika: 45, kiambu: 60, reorder: 20 },
     { name: "Crown Paint Gloss White 4L", sku: "PNT-012", category: "Paint", price: 3450, cost: 2900, emoji: "🎨", thika: 3, kiambu: 14, reorder: 10 },
@@ -103,7 +103,7 @@ async function main() {
     products[p.sku] = { id: created.id, price: p.price, name: p.name, emoji: p.emoji, category: p.category };
   }
 
-  // ─── Customers ───────────────────────────────────────────
+  // --- Customers -------------------------------------------
   const cust = await Promise.all(
     [
       { name: "John Kamau", phone: "0712345678", tier: "Gold", points: 420, spent: 125000, debt: 6000, limit: 50000, gift: 1000, last: "2 days ago" },
@@ -128,7 +128,7 @@ async function main() {
   );
   const [john, wanjiku, otieno, achieng, mutiso, chebet, kamauHw, thikaB] = cust;
 
-  // ─── Sales history (incl. live feed rows) ────────────────
+  // --- Sales history (incl. live feed rows) ----------------
   const mkSale = async (
     receiptNo: string, storeId: number, customerId: number | null, staffName: string,
     lines: { sku: string; qty: number }[], paymentMethod: string, hoursAgo: number,
@@ -192,7 +192,7 @@ async function main() {
   }
   await mkSale("INV-2842", thika.id, chebet.id, "James Otieno", [{ sku: "ELC-021", qty: 5 }], "Cash", 5, "Pending");
 
-  // ─── Pipeline deals ──────────────────────────────────────
+  // --- Pipeline deals --------------------------------------
   const hist = (stages: string[]) =>
     JSON.stringify(stages.map((s, i) => ({ stage: s, at: daysAgo(5 - i, 4).toISOString(), by: "Owner" })));
   await db.pipelineDeal.createMany({
@@ -206,7 +206,7 @@ async function main() {
     ],
   });
 
-  // ─── Gift cards ──────────────────────────────────────────
+  // --- Gift cards ------------------------------------------
   await db.giftCard.createMany({
     data: [
       { code: "GC-1234", balance: 5000, initialBalance: 5000, customerId: john.id, expiry: daysAhead(300), gradient: "blue-green" },
@@ -218,7 +218,7 @@ async function main() {
     ],
   });
 
-  // ─── Debt plans ──────────────────────────────────────────
+  // --- Debt plans ------------------------------------------
   await db.debtPlan.createMany({
     data: [
       { customerId: john.id, invoiceNo: "INV-2847", totalDebt: 6000, installmentType: "Weekly", installmentAmount: 2000, nextDueDate: daysAhead(1), overdueDays: 5 },
@@ -229,7 +229,7 @@ async function main() {
     ],
   });
 
-  // ─── Employees (HRMS) & payslips ─────────────────────────
+  // --- Employees (HRMS) & payslips -------------------------
   const employees = [
     { name: "Mary Wanjiku", idNo: "12345678", dept: "Sales", role: "Cashier", basic: 30000, house: 5000, transport: 3000, helb: 0, mpesa: "0712345678", status: "Active", storeId: thika.id, joined: daysAgo(760), annualUsed: 10, sickUsed: 1, att: 98, late: 2 },
     { name: "James Otieno", idNo: "23456789", dept: "Store", role: "Store Keeper", basic: 25000, house: 3000, transport: 2000, helb: 1500, mpesa: "0722333444", status: "Active", storeId: thika.id, joined: daysAgo(620), annualUsed: 12, sickUsed: 2, att: 95, late: 4 },
@@ -294,7 +294,7 @@ async function main() {
     }
   }
 
-  // ─── Day closing: 2 closed days + today open ─────────────
+  // --- Day closing: 2 closed days + today open -------------
   const mkDayClose = async (date: Date, sales: number, receipts: number, cash: number, mpesa: number, cashCounted: number, mpesaCounted: number, closed: boolean) => {
     const d = date.toISOString().slice(0, 10).replace(/-/g, "");
     const variance = closed ? cashCounted + mpesaCounted - cash - mpesa : 0;
@@ -317,7 +317,7 @@ async function main() {
   const todayNoon = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0);
   await mkDayClose(todayNoon, 96400, 35, 38600, 43100, 0, 0, false);
 
-  // ─── Accounting: chart of accounts + journals + bank stmt ─
+  // --- Accounting: chart of accounts + journals + bank stmt -
   const coa: { code: string; name: string; type: string; parent?: string; isGroup?: boolean }[] = [
     { code: "1000", name: "ASSETS", type: "Asset", isGroup: true },
     { code: "1010", name: "Cash - Thika Road", type: "Asset", parent: "1000" },
@@ -395,7 +395,7 @@ async function main() {
     await db.account.update({ where: { id: g.accountId }, data: { balance: debit - credit } });
   }
 
-  // ─── Bank recon: M-Pesa till statement ───────────────────
+  // --- Bank recon: M-Pesa till statement -------------------
   const stmt: { date: string; ref: string; description: string; amount: number; matched: boolean; matchRef?: string }[] = [
     { date: daysAgo(2).toISOString().slice(0, 10), ref: "SBE4721KL", description: "Customer payment INV-2891", amount: 52800, matched: true, matchRef: "JV-0002" },
     { date: daysAgo(2).toISOString().slice(0, 10), ref: "SBE4722KL", description: "Paybill transfer to Equity", amount: -30000, matched: true, matchRef: "JV-0002" },
@@ -408,7 +408,7 @@ async function main() {
     await db.bankStatementLine.create({ data: { date: s.date, ref: s.ref, description: s.description, amount: s.amount, matched: s.matched, matchRef: s.matchRef ?? "" } });
   }
 
-  // ─── Raven chat ──────────────────────────────────────────
+  // --- Raven chat ------------------------------------------
   const channels = [
     { name: "general", description: "Company-wide announcements", members: 24 },
     { name: "thika-road", description: "Thika Road branch", members: 12 },
@@ -440,7 +440,7 @@ async function main() {
     data: { channelId: chan["general"], author: "Owner", initials: "OK", content: "Welcome to Raven - our in-house chat. Share ERP docs with / command. Karibuni!", createdAt: daysAgo(30) },
   });
 
-  // ─── SMS logs ────────────────────────────────────────────
+  // --- SMS logs --------------------------------------------
   await db.smsLog.createMany({
     data: [
       { customerId: john.id, phone: "0712345678", message: "Hi John Kamau, Receipt INV-2847, Total KES 12,944. Points earned 129. Balance 549 pts. Asante!", type: "Receipt", status: "Delivered", cost: 1, createdAt: daysAgo(0, 0.5) },
@@ -450,7 +450,7 @@ async function main() {
     ],
   });
 
-  // ─── Promo codes ─────────────────────────────────────────
+  // --- Promo codes -----------------------------------------
   await db.promoCode.createMany({
     data: [
       { code: "GOLD10", type: "flat", value: 500, minSpend: 5000 },
@@ -459,7 +459,7 @@ async function main() {
     ],
   });
 
-  // ─── Settings singleton ──────────────────────────────────
+  // --- Settings singleton ----------------------------------
   await db.settings.create({
     data: { kraLastSync: daysAgo(0, 0.05) },
   });

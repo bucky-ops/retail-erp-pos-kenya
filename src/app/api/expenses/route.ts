@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
     take: 200,
   });
 
-  // ── Aggregates ─────────────────────────────────────────────────────────────
+  // -- Aggregates -------------------------------------------------------------
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
   const startOfMonth = new Date();

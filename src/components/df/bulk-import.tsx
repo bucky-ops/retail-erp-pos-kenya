@@ -168,7 +168,7 @@ export function BulkImportDialog({
         </div>
 
         {result ? (
-          /* ── result card ── */
+          /* -- result card -- */
           <div className="p-4">
             <div className="rounded-xl border border-[#C8E6C9] bg-[#E8F5E9] p-4 text-center">
               <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-[#00C853] text-white shadow-[0_6px_18px_rgba(0,200,83,0.4)]">
@@ -212,7 +212,7 @@ export function BulkImportDialog({
             </div>
           </div>
         ) : (
-          /* ── input + preview ── */
+          /* -- input + preview -- */
           <div className="p-4">
             <div className="grid grid-cols-2 gap-2.5">
               <div>

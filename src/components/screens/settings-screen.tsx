@@ -30,7 +30,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 
-/* ── contracts + static config ─────────────────────────────── */
+/* -- contracts + static config ------------------------------- */
 
 const err = (e: unknown) => (e instanceof Error ? e.message : "Something went wrong");
 
@@ -74,7 +74,7 @@ const rel = (iso: string | null) => {
   return `${Math.floor(s / 86400)}d ago`;
 };
 
-/* ── small building blocks ─────────────────────────────────── */
+/* -- small building blocks ----------------------------------- */
 
 function Field({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
   return (
@@ -260,7 +260,7 @@ function PanelHead({ title, sub, icon: Icon }: { title: string; sub: string; ico
   );
 }
 
-/* ── screen ────────────────────────────────────────────────── */
+/* -- screen -------------------------------------------------- */
 
 export default function SettingsScreen() {
   const [section, setSection] = useState<SectionId>("kra");
@@ -393,7 +393,7 @@ export default function SettingsScreen() {
 
         {/* RIGHT content */}
         <div className="col-span-12 @4xl:col-span-9">
-            {/* ── COMPANY ── */}
+            {/* -- COMPANY -- */}
             {section === "company" && (
               <Panel>
                 <PanelHead title="Company" sub="Trading name & statutory VAT used on receipts and eTIMS invoices" icon={Building2} />
@@ -434,7 +434,7 @@ export default function SettingsScreen() {
               </Panel>
             )}
 
-            {/* ── STORES ── */}
+            {/* -- STORES -- */}
             {section === "stores" && (
               <Panel>
                 <PanelHead title="Stores & Warehouses" sub="Branches running DukaFlow terminals right now" icon={Warehouse} />
@@ -480,7 +480,7 @@ export default function SettingsScreen() {
               </Panel>
             )}
 
-            {/* ── USERS & ROLES ── */}
+            {/* -- USERS & ROLES -- */}
             {section === "users" && (
               <Panel>
                 <PanelHead title="Users & Roles" sub="Staff accounts and module permissions" icon={Users} />
@@ -545,7 +545,7 @@ export default function SettingsScreen() {
               </Panel>
             )}
 
-            {/* ── POS PROFILES ── */}
+            {/* -- POS PROFILES -- */}
             {section === "pos" && (
               <Panel>
                 <PanelHead title="POS Profiles" sub="Terminal layouts per device type" icon={MonitorSmartphone} />
@@ -578,7 +578,7 @@ export default function SettingsScreen() {
               </Panel>
             )}
 
-            {/* ── PRINT FORMATS ── */}
+            {/* -- PRINT FORMATS -- */}
             {section === "print" && (
               <Panel>
                 <PanelHead title="Print Formats" sub="Receipt branding - live previews update as you edit" icon={ReceiptText} />
@@ -698,7 +698,7 @@ export default function SettingsScreen() {
               </Panel>
             )}
 
-            {/* ── TAXES ── */}
+            {/* -- TAXES -- */}
             {section === "taxes" && (
               <Panel>
                 <PanelHead title="Taxes" sub="Statutory tax configuration applied at checkout" icon={Percent} />
@@ -737,7 +737,7 @@ export default function SettingsScreen() {
               </Panel>
             )}
 
-            {/* ── KRA eTIMS ── */}
+            {/* -- KRA eTIMS -- */}
             {section === "kra" && (
               <Panel>
                 <PanelHead title="KRA eTIMS Settings" sub="Configure eTIMS for compliant invoicing • CU Serial • Branch • Device" icon={Landmark} />
@@ -815,7 +815,7 @@ export default function SettingsScreen() {
               </Panel>
             )}
 
-            {/* ── M-PESA DARAJA ── */}
+            {/* -- M-PESA DARAJA -- */}
             {section === "mpesa" && (
               <Panel>
                 <PanelHead title="M-Pesa Daraja" sub="STK push + B2C payouts via Safaricom Daraja API" icon={Smartphone} />
@@ -895,7 +895,7 @@ export default function SettingsScreen() {
               </Panel>
             )}
 
-            {/* ── SMS PROVIDER ── */}
+            {/* -- SMS PROVIDER -- */}
             {section === "sms" && (
               <Panel>
                 <PanelHead title="SMS Provider" sub="Africa's Talking gateway + WhatsApp Cloud API" icon={MessageSquare} />
@@ -947,7 +947,7 @@ export default function SettingsScreen() {
               </Panel>
             )}
 
-            {/* ── LOYALTY RULES ── */}
+            {/* -- LOYALTY RULES -- */}
             {section === "loyalty" && (
               <Panel>
                 <PanelHead title="Loyalty Rules" sub="How customers earn and spend points" icon={Sparkles} />
@@ -1007,7 +1007,7 @@ export default function SettingsScreen() {
                   />
                 </div>
 
-                {/* ── Happy Hour auto-pricing ── */}
+                {/* -- Happy Hour auto-pricing -- */}
                 <Separator className="my-6" />
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -1110,7 +1110,7 @@ export default function SettingsScreen() {
               </Panel>
             )}
 
-            {/* ── BACKUP & RESTORE ── */}
+            {/* -- BACKUP & RESTORE -- */}
             {section === "backup" && (
               <Panel>
                 <PanelHead title="Backup & Restore" sub="Nightly snapshots to cloud + one-click local export" icon={Database} />
@@ -1152,7 +1152,7 @@ export default function SettingsScreen() {
                   />
                 </div>
 
-                {/* ── Daily automation jobs ── */}
+                {/* -- Daily automation jobs -- */}
                 <div className="mt-6 rounded-xl border border-[#C8E6C9] bg-[#F0FFF4] p-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
@@ -1196,7 +1196,7 @@ export default function SettingsScreen() {
                   </div>
                 </div>
 
-                {/* ── Scheduled report email (mirrors Reports → Schedule email) ── */}
+                {/* -- Scheduled report email (mirrors Reports → Schedule email) -- */}
                 <div className="mt-4 rounded-xl border border-[#C5CAE9] bg-[#E8EAF6]/60 p-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
@@ -1276,12 +1276,12 @@ export default function SettingsScreen() {
               </Panel>
             )}
 
-            {/* ── DEVICE & OFFLINE ── */}
+            {/* -- DEVICE & OFFLINE -- */}
             {section === "device" && (
               <DevicePanel />
             )}
 
-            {/* ── KEYBOARD SHORTCUTS ── */}
+            {/* -- KEYBOARD SHORTCUTS -- */}
             {section === "shortcuts" && (
               <Panel>
                 <h3 className="font-display text-[15px] font-bold text-[#172B4D]">Keyboard shortcuts</h3>

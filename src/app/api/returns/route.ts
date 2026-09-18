@@ -103,7 +103,7 @@ export async function POST(req: NextRequest) {
      * real money out of the drawer - not the pre-VAT shelf price. */
     const paidRatio = sale.subtotal > 0 ? sale.total / sale.subtotal : 1;
 
-    // ── Validate quantities against originals minus prior returns ────────────
+    // -- Validate quantities against originals minus prior returns ------------
     const validated: {
       saleItemId: number; productId: number | null; name: string;
       emoji: string; qty: number; unitPrice: number; total: number;
@@ -137,7 +137,7 @@ export async function POST(req: NextRequest) {
     const reason = body.reason ?? "Customer changed mind";
     const restock = body.restock ?? true;
 
-    // ── Sequential document numbers (RET / CN) ───────────────────────────────
+    // -- Sequential document numbers (RET / CN) -------------------------------
     const [retCount, cnCount] = await Promise.all([
       db.salesReturn.count(),
       db.salesReturn.count({ where: { creditNoteNo: { not: null } } }),
@@ -145,7 +145,7 @@ export async function POST(req: NextRequest) {
     const returnNo = `RET-${1000 + retCount + 1}`;
     const creditNoteNo = refundMethod === "Credit note" ? `CN-${1000 + cnCount + 1}` : null;
 
-    // ── Method side-effects ──────────────────────────────────────────────────
+    // -- Method side-effects --------------------------------------------------
     let giftCardCode: string | null = null;
     let tillUpdated = false;
 
@@ -216,7 +216,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ── Persist return + lines ───────────────────────────────────────────────
+    // -- Persist return + lines -----------------------------------------------
     const ret = await db.salesReturn.create({
       data: {
         returnNo,
@@ -245,7 +245,7 @@ export async function POST(req: NextRequest) {
       include: { items: true },
     });
 
-    // ── Restock: put goods back on the shelf (fresh receivedAt for aging) ────
+    // -- Restock: put goods back on the shelf (fresh receivedAt for aging) ----
     if (restock) {
       for (const v of validated) {
         if (v.productId == null) continue;
@@ -265,7 +265,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ── Chat audit trail + realtime ──────────────────────────────────────────
+    // -- Chat audit trail + realtime ------------------------------------------
     const lineText = validated.map((v) => `${v.qty} × ${v.name}`).join(", ");
     try {
       const channel = await db.chatChannel.findFirst({ where: { name: "stock-alerts" } });

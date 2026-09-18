@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
-/* ── contracts ─────────────────────────────────────────────── */
+/* -- contracts ----------------------------------------------- */
 
 interface MessagesPayload {
   logs: SmsLogDto[];
@@ -33,7 +33,7 @@ type LogFilter = "All" | "SMS" | "WhatsApp";
 
 const err = (e: unknown) => (e instanceof Error ? e.message : "Something went wrong");
 
-/* ── static config ─────────────────────────────────────────── */
+/* -- static config ------------------------------------------- */
 
 const AUDIENCES: { id: Audience; label: string; icon: typeof Users }[] = [
   { id: "all", label: "All Customers", icon: Users },
@@ -101,7 +101,7 @@ const rel = (iso: string) => {
 const fmtTime = (iso: string) =>
   new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 
-/* ── screen ────────────────────────────────────────────────── */
+/* -- screen -------------------------------------------------- */
 
 export default function MessagesScreen() {
   const [data, setData] = useState<MessagesPayload | null>(null);

@@ -32,7 +32,7 @@ import {
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-/* ── contracts ────────────────────────────────────────────── */
+/* -- contracts ---------------------------------------------- */
 
 /** API enriches plans with the customer's tier (shared DebtPlanDto omits it). */
 type PlanRow = DebtPlanDto & { tier?: string | null };
@@ -61,7 +61,7 @@ interface Creditor {
   terms: string;
 }
 
-/* ── debtor statement (printable / CSV) ─────────────────── */
+/* -- debtor statement (printable / CSV) ------------------- */
 
 interface StatementData {
   customer: { id: number; name: string; phone: string; email: string | null; tier: string };
@@ -103,7 +103,7 @@ const fmtDay = (iso: string) =>
   new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
 const compact = (n: number) => (Math.abs(n) >= 1000 ? `${Math.round(Math.abs(n) / 1000)}k` : `${Math.abs(n)}`);
 
-/* ── screen ───────────────────────────────────────────────── */
+/* -- screen ------------------------------------------------- */
 
 export default function DebtsScreen() {
   const [data, setData] = useState<DebtPlansResponse | null>(null);
@@ -192,7 +192,7 @@ export default function DebtsScreen() {
     }
   }, [plans, filter]);
 
-  /* ── receivables aging buckets from the live ledger ── */
+  /* -- receivables aging buckets from the live ledger -- */
   const agingBuckets = useMemo(() => {
     const active = plans.filter((p) => p.status === "Active");
     const inBucket = (p: (typeof active)[number], lo: number, hi: number) =>
@@ -224,7 +224,7 @@ export default function DebtsScreen() {
     }
   };
 
-  /* ── mutations ──────────────────────────────────────────── */
+  /* -- mutations -------------------------------------------- */
 
   const patchPlan = async (id: number, body: Record<string, unknown>, okMsg: string) => {
     setBusyPlanId(id);
@@ -266,7 +266,7 @@ export default function DebtsScreen() {
     setPayAmount(String(plan.installmentAmount || ""));
   };
 
-  /* ── debtor statement: load → render → print / CSV ────── */
+  /* -- debtor statement: load → render → print / CSV ------ */
   const openStatement = async (plan: PlanRow) => {
     setStmtPlan(plan);
     setStmtData(null);
@@ -290,7 +290,7 @@ export default function DebtsScreen() {
     }, 60);
   };
 
-  /* ── statement email: preview → send ─────────────────── */
+  /* -- statement email: preview → send ------------------- */
   const openStatementEmail = async () => {
     if (!stmtPlan) return;
     setStmtEmailOpen(true);
@@ -421,7 +421,7 @@ export default function DebtsScreen() {
     }
   };
 
-  /* ── plan builder ───────────────────────────────────────── */
+  /* -- plan builder ----------------------------------------- */
 
   const buildSuggested = (total: number, n: number) =>
     total > 0 && n > 0 ? Math.ceil(total / n / 100) * 100 : 0;
@@ -485,7 +485,7 @@ export default function DebtsScreen() {
     }
   };
 
-  /* ── creditors ──────────────────────────────────────────── */
+  /* -- creditors -------------------------------------------- */
 
   const confirmCreditorPay = async () => {
     if (!payCreditor) return;
@@ -502,7 +502,7 @@ export default function DebtsScreen() {
     }
   };
 
-  /* ── render helpers ─────────────────────────────────────── */
+  /* -- render helpers --------------------------------------- */
 
   const netCashflow = (s?.toCollect ?? 0) - TO_PAY_BASE;
   const netPositive = netCashflow >= 0;

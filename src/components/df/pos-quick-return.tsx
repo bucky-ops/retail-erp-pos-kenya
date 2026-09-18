@@ -45,7 +45,7 @@ import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 
-/* ── contracts (mirror /api/sales/lookup + /api/returns) ──── */
+/* -- contracts (mirror /api/sales/lookup + /api/returns) ---- */
 
 interface LookupItem {
   id: number;
@@ -100,7 +100,7 @@ interface DoneState {
 const fmtWhen = (iso: string) =>
   new Date(iso).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 
-/* ── component ────────────────────────────────────────────── */
+/* -- component ---------------------------------------------- */
 
 export function PosQuickReturn({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
   const [query, setQuery] = useState("");
@@ -232,7 +232,7 @@ export function PosQuickReturn({ open, onOpenChange }: { open: boolean; onOpenCh
       }}
     >
       <DialogContent className="max-w-[560px] overflow-hidden rounded-2xl p-0">
-        {/* ── header ── */}
+        {/* -- header -- */}
         <div className="border-b border-[#DFE1E6] bg-[#FAFBFC] p-4">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 font-display text-[15px] font-bold text-[#172B4D]">
@@ -247,7 +247,7 @@ export function PosQuickReturn({ open, onOpenChange }: { open: boolean; onOpenCh
           </DialogHeader>
         </div>
 
-        {/* ── stage 1: lookup ── */}
+        {/* -- stage 1: lookup -- */}
         {!sale && !done && (
           <div className="p-4">
             <div className="relative">
@@ -297,7 +297,7 @@ export function PosQuickReturn({ open, onOpenChange }: { open: boolean; onOpenCh
           </div>
         )}
 
-        {/* ── stage 2: return builder ── */}
+        {/* -- stage 2: return builder -- */}
         {sale && !done && (
           <div className="p-4">
             {/* receipt hero */}
@@ -497,7 +497,7 @@ export function PosQuickReturn({ open, onOpenChange }: { open: boolean; onOpenCh
           </div>
         )}
 
-        {/* ── stage 3: success ── */}
+        {/* -- stage 3: success -- */}
         {done && (
           <div className="p-4">
             <div className="rounded-xl border border-[#C8E6C9] bg-[#E8F5E9] p-4 text-center">

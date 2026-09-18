@@ -135,7 +135,7 @@
   }
 }
 
-/* ── DukaFlow utilities ─────────────────────────────────────── */
+/* -- DukaFlow utilities --------------------------------------- */
 
 .font-display {
   font-family: var(--font-sora), sans-serif;
@@ -268,7 +268,7 @@
   pointer-events: none;
 }
 
-/* ── Live feed (socket.io) ─────────────────────────────────────────────── */
+/* -- Live feed (socket.io) ----------------------------------------------- */
 /* A freshly broadcast sale row slides in with a green flash that fades. */
 @keyframes df-feed-in {
   0% { opacity: 0; transform: translateY(-10px); background-color: rgba(0, 200, 83, 0.16); }

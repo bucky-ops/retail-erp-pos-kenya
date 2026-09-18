@@ -32,7 +32,7 @@ async function runScheduledReport(force = false) {
   const periodEnd = new Date();
   const periodStart = new Date(periodEnd.getTime() - windowDays * 864e5);
 
-  // ── Due check (skipped for force/test sends) ─────────────
+  // -- Due check (skipped for force/test sends) -------------
   if (!force && settings.reportScheduleLastSentAt) {
     const last = new Date(settings.reportScheduleLastSentAt).getTime();
     const elapsedDays = (periodEnd.getTime() - last) / 864e5;
@@ -47,7 +47,7 @@ async function runScheduledReport(force = false) {
     }
   }
 
-  // ── Build the report summary from real sales ─────────────
+  // -- Build the report summary from real sales -------------
   const sales = await db.sale.findMany({
     where: { createdAt: { gte: periodStart, lte: periodEnd }, status: "Completed" },
     include: { items: { include: { product: true } }, store: true },
@@ -96,7 +96,7 @@ async function runScheduledReport(force = false) {
 
   const message = lines.join("\n");
 
-  // ── Log the mock email (auditable in Messages → log) ─────
+  // -- Log the mock email (auditable in Messages → log) -----
   await db.smsLog.create({
     data: {
       phone: settings.reportScheduleEmail,

@@ -1,11 +1,11 @@
 /**
- * DukaFlow service worker — the offline shell for the offline-first POS.
+ * DukaFlow service worker - the offline shell for the offline-first POS.
  *
  * Strategy:
  *  - Navigations (the single `/` route): network-first, fall back to the cached
  *    shell so the app still boots with zero connectivity (IndexedDB queue takes
- *    over for sales — see src/lib/offline.ts).
- *  - Static assets (`/_next/static`, `/icons`, fonts): cache-first — they are
+ *    over for sales - see src/lib/offline.ts).
+ *  - Static assets (`/_next/static`, `/icons`, fonts): cache-first - they are
  *    content-hashed in production, so cache hits are always correct.
  *  - `/api/*`: NEVER cached. POS data must be live; offline sales are queued
  *    client-side and replayed by the sync engine.

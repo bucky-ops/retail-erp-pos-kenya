@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
   const storeId = searchParams.get("storeId");
   const status = searchParams.get("status");
 
-  // ── Reorder suggestions mode ───────────────────────────────────────────────
+  // -- Reorder suggestions mode -----------------------------------------------
   if (searchParams.get("suggestions")) {
     // SQLite/Prisma can't compare two columns directly in `where`, so fetch all
     // levels for the store (catalog is small) and filter in JS.
@@ -71,7 +71,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ suggestions });
   }
 
-  // ── Normal PO list mode ────────────────────────────────────────────────────
+  // -- Normal PO list mode ----------------------------------------------------
   const orders = await db.purchaseOrder.findMany({
     where: {
       ...(storeId && storeId !== "all" ? { storeId: Number(storeId) } : {}),

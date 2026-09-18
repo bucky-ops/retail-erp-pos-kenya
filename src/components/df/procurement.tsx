@@ -33,7 +33,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 
-/* ── contracts ────────────────────────────────────────────── */
+/* -- contracts ---------------------------------------------- */
 
 interface Sugg {
   stockLevelId: number; productId: number; name: string; emoji: string; sku: string;
@@ -110,7 +110,7 @@ const STATUS_CLS: Record<string, string> = {
 const fmtDate = (iso: string) =>
   new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
 
-/* ── component ────────────────────────────────────────────── */
+/* -- component ---------------------------------------------- */
 
 export function ProcurementDialog({
   open,
@@ -322,7 +322,7 @@ export function ProcurementDialog({
     }
   };
 
-  /* ── supplier price list editor ─────────────────────────────── */
+  /* -- supplier price list editor ------------------------------- */
 
   const openPriceList = async (s: Sup) => {
     setPriceSup(s);
@@ -384,7 +384,7 @@ export function ProcurementDialog({
     0
   );
 
-  /* ── PO basket: the exact grouping createPOs commits, rendered for review ── */
+  /* -- PO basket: the exact grouping createPOs commits, rendered for review -- */
   const [basketOpen, setBasketOpen] = useState(false);
   // Plain derivation (no manual useMemo): the React Compiler auto-memoizes it,
   // and hand-written memoization here could not be preserved.
@@ -407,7 +407,7 @@ export function ProcurementDialog({
   })();
   const basketPoCount = basketGroups.reduce((n, g) => n + g.stores.length, 0);
 
-  /* ── return-to-vendor ── */
+  /* -- return-to-vendor -- */
 
   /* load stock for the picked store when the RTV tab store changes */
   const loadRtvStock = useCallback(async (storeId: string) => {
@@ -480,7 +480,7 @@ export function ProcurementDialog({
     }
   };
 
-  /* ── supplier statement: load → render → print ───────── */
+  /* -- supplier statement: load → render → print --------- */
   const openStatement = async (s: Sup) => {
     setStmtSup(s);
     setStmtData(null);
@@ -504,7 +504,7 @@ export function ProcurementDialog({
     }, 60);
   };
 
-  /* ── supplier statement email: preview → send ───────── */
+  /* -- supplier statement email: preview → send --------- */
   const openStatementEmail = async () => {
     if (!stmtSup) return;
     setStmtEmailOpen(true);
@@ -570,7 +570,7 @@ export function ProcurementDialog({
             </TabsTrigger>
           </TabsList>
 
-          {/* ── SUGGESTIONS ── */}
+          {/* -- SUGGESTIONS -- */}
           <TabsContent value="suggestions" className="space-y-3">
             <div className="flex items-center gap-2">
               <Select value={storeFilter} onValueChange={setStoreFilter}>
@@ -678,7 +678,7 @@ export function ProcurementDialog({
             </div>
           </TabsContent>
 
-          {/* ── PURCHASE ORDERS ── */}
+          {/* -- PURCHASE ORDERS -- */}
           <TabsContent value="pos" className="space-y-2">
             <div className="df-scroll max-h-96 space-y-2 overflow-y-auto pr-1">
               {pos === null ? (
@@ -755,7 +755,7 @@ export function ProcurementDialog({
             </div>
           </TabsContent>
 
-          {/* ── SUPPLIERS ── */}
+          {/* -- SUPPLIERS -- */}
           <TabsContent value="suppliers" className="space-y-3">
             <div className="max-h-56 space-y-1.5 overflow-y-auto rounded-xl border border-[#DFE1E6] p-2">
               {(sups ?? []).map((s) => (
@@ -896,7 +896,7 @@ export function ProcurementDialog({
               </div>
             </div>
           </TabsContent>
-          {/* ── RETURN TO VENDOR ── */}
+          {/* -- RETURN TO VENDOR -- */}
           <TabsContent value="rtv" className="space-y-3">
             <div className="grid grid-cols-2 gap-2 @2xl:grid-cols-4">
               <Select value={rtvForm.supplierId} onValueChange={(v) => setRtvForm((f) => ({ ...f, supplierId: v }))}>

@@ -24,7 +24,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 
-/* ── contract (mirror of /api/day-close) ─────────────────── */
+/* -- contract (mirror of /api/day-close) ------------------- */
 
 interface DayCloseDTO {
   id: number;
@@ -89,7 +89,7 @@ function VarianceBadge({ v }: { v: number }) {
   );
 }
 
-/* ── screen ──────────────────────────────────────────────── */
+/* -- screen ------------------------------------------------ */
 
 export default function DayCloseScreen() {
   const [data, setData] = useState<DCPayload | null>(null);
@@ -127,7 +127,7 @@ export default function DayCloseScreen() {
     setNote(today?.note ?? "");
   }
 
-  /* ── derived variance math (counted vs system per tender) ──
+  /* -- derived variance math (counted vs system per tender) --
      Live: typed counts are compared as you type; when a field is left empty
      the saved drawer count (if any) is used instead. */
   const closed = today?.status === "Closed";
@@ -144,7 +144,7 @@ export default function DayCloseScreen() {
   const needsApproval = hasCounts && !withinTolerance && !today?.approvedBy;
   const canClose = countsSaved && (withinTolerance || !!today?.approvedBy) && !closed;
 
-  /* ── actions ─────────────────────────────────────────────── */
+  /* -- actions ----------------------------------------------- */
 
   const saveCounts = async () => {
     setBusy("count");
@@ -209,7 +209,7 @@ export default function DayCloseScreen() {
   const loading = data === null;
   const history = data?.history ?? [];
 
-  /* ── KPI values ──────────────────────────────────────────── */
+  /* -- KPI values -------------------------------------------- */
   const expectedCash = today ? today.openingCash + today.cashSystem : 0;
   const lastZ = history[0]?.zNo ?? "-";
 
@@ -273,7 +273,7 @@ export default function DayCloseScreen() {
         </Panel>
       ) : (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
-          {/* ── Start Day Close ── */}
+          {/* -- Start Day Close -- */}
           <Panel className="lg:col-span-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
@@ -433,7 +433,7 @@ export default function DayCloseScreen() {
             </div>
           </Panel>
 
-          {/* ── Z Report ── */}
+          {/* -- Z Report -- */}
           <Panel className="lg:col-span-2">
             <div className="flex items-center justify-between">
               <h3 className="font-display text-[15px] font-bold text-[#172B4D]">Z Report</h3>
@@ -517,7 +517,7 @@ export default function DayCloseScreen() {
         </div>
       )}
 
-      {/* ── Recent Z readings ── */}
+      {/* -- Recent Z readings -- */}
       <Panel padding={false}>
         <div className="flex items-center justify-between border-b border-[#DFE1E6] px-4 py-3 md:px-6">
           <div>
@@ -604,7 +604,7 @@ export default function DayCloseScreen() {
   );
 }
 
-/* ── small pieces (module level - never created during render) ── */
+/* -- small pieces (module level - never created during render) -- */
 
 function Line({ k, v, bold, mono }: { k: string; v: string; bold?: boolean; mono?: boolean }) {
   return (

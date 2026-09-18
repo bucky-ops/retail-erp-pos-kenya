@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
-/* ── contracts ─────────────────────────────────────────────── */
+/* -- contracts ----------------------------------------------- */
 
 interface ChatPayload {
   channels: ChatChannelDto[];
@@ -31,7 +31,7 @@ interface DocLink {
 
 const err = (e: unknown) => (e instanceof Error ? e.message : "Something went wrong");
 
-/* ── static config ─────────────────────────────────────────── */
+/* -- static config ------------------------------------------- */
 
 const AVATAR_COLORS = ["#0052CC", "#00C853", "#FF5630", "#FFAB00", "#78909C"];
 
@@ -83,7 +83,7 @@ function Content({ text }: { text: string }) {
   );
 }
 
-/* ── screen ────────────────────────────────────────────────── */
+/* -- screen -------------------------------------------------- */
 
 export default function ChatScreen() {
   const user = useApp((s) => s.user);

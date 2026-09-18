@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
       ? await db.customer.findUnique({ where: { id: payload.customerId } })
       : null;
 
-    // ── 1. Debt blocking ─────────────────────────────────
+    // -- 1. Debt blocking ---------------------------------
     if (customer && paymentMethod === "Credit Sale") {
       const plans = await db.debtPlan.findMany({ where: { customerId: customer.id } });
       const blocking = plans.find((p) => p.autoBlockPosOverdue && p.overdueDays > 7 && p.status === "Active");
@@ -92,7 +92,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ── 2. Pricing from DB ───────────────────────────────
+    // -- 2. Pricing from DB -------------------------------
     const dbProducts = await db.product.findMany({
       where: { id: { in: items.map((i) => i.productId) } },
     });
@@ -102,7 +102,7 @@ export async function POST(req: NextRequest) {
       return s + (p ? p.price * i.qty : 0);
     }, 0);
 
-    // ── 3. Discounts: tier → promo → happy hour → bill ────
+    // -- 3. Discounts: tier → promo → happy hour → bill ----
     let discount = 0;
     const appliedPromo = payload.promoCode?.trim().toUpperCase() || null;
 
@@ -133,7 +133,7 @@ export async function POST(req: NextRequest) {
 
     if (payload.billDiscount) discount += payload.billDiscount;
 
-    // ── 4. Loyalty points redemption ─────────────────────
+    // -- 4. Loyalty points redemption ---------------------
     const pointsRedeemed = Math.min(payload.pointsRedeemed ?? 0, customer?.loyaltyPoints ?? 0);
     const pointsValue = pointsRedeemed * settings.loyaltyPointValue;
     discount += pointsValue;
@@ -149,7 +149,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ── 5. Stock decrement (capture pre-sale qty for reorder crossing) ──
+    // -- 5. Stock decrement (capture pre-sale qty for reorder crossing) --
     const prevQty = new Map<number, number>();
     for (const item of items) {
       const stock = await db.stockLevel.findUnique({
@@ -171,14 +171,14 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // ── 6. Loyalty earned ────────────────────────────────
+    // -- 6. Loyalty earned --------------------------------
     const pointsEarned = Math.floor(total / settings.loyaltyEarnPerKes);
 
-    // ── 7. Receipt number ────────────────────────────────
+    // -- 7. Receipt number --------------------------------
     const count = await db.sale.count();
     const receiptNo = `INV-${2848 + count}`;
 
-    // ── 8. eTIMS ─────────────────────────────────────────
+    // -- 8. eTIMS -----------------------------------------
     let kraStatus: string = "Pending";
     let cuInvoiceNumber: string | null = null;
     let qrCodeBase64: string | null = null;
@@ -199,7 +199,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ── 9. Create sale ───────────────────────────────────
+    // -- 9. Create sale -----------------------------------
     const sale = await db.sale.create({
       data: {
         receiptNo, storeId, customerId: customer?.id ?? null,
@@ -226,7 +226,7 @@ export async function POST(req: NextRequest) {
       include: { items: true },
     });
 
-    // ── 10. Customer side effects ────────────────────────
+    // -- 10. Customer side effects ------------------------
     let loyaltyBalance = customer?.loyaltyPoints ?? 0;
     if (customer) {
       loyaltyBalance = customer.loyaltyPoints - pointsRedeemed + pointsEarned;
@@ -258,7 +258,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ── 11. Receipt SMS ──────────────────────────────
+    // -- 11. Receipt SMS ------------------------------
     if (customer && paymentMethod !== "Credit Sale") {
       await db.smsLog.create({
         data: {
@@ -269,7 +269,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // ── 11b. Auto e-invoice email on KRA verify ──────────
+    // -- 11b. Auto e-invoice email on KRA verify ----------
     // When eTIMS stamped the invoice and the customer has an email on file,
     // deliver the electronic tax invoice automatically (best-effort - a mail
     // hiccup must never fail a committed sale).
@@ -291,7 +291,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ── 12. Realtime broadcast + low-stock watchdog ─────
+    // -- 12. Realtime broadcast + low-stock watchdog -----
     // Push the committed sale to every open dashboard (socket.io via the
     // live-feed service). Best-effort - must never fail the sale.
     const store = await db.store.findUnique({ where: { id: storeId } });

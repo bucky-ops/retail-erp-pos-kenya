@@ -251,7 +251,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, today: serialize(updated) });
   }
 
-  // ── action === "close" ────────────────────────────────────────────────
+  // -- action === "close" ------------------------------------------------
   if (dc.cashCounted == null || dc.mpesaCounted == null)
     return NextResponse.json(
       { error: "Count the cash and M-Pesa drawers before closing the day." },
@@ -278,7 +278,7 @@ export async function POST(req: NextRequest) {
         data: { status: "Closed", closedAt: new Date(), closingCash, note },
       });
 
-      // ── Auto-post the daily sales journal (single balanced entry) ──
+      // -- Auto-post the daily sales journal (single balanced entry) --
       const vat = Math.round(closed.salesTotal * (16 / 116));
       const net = r2(closed.salesTotal - vat);
       const rev4100 = Math.round(net * 0.6);

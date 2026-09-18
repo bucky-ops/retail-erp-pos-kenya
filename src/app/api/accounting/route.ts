@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
-/* ── helpers ─────────────────────────────────────────────────────────────── */
+/* -- helpers --------------------------------------------------------------- */
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 const sum = (arr: number[]) => r2(arr.reduce((t, n) => t + n, 0));
@@ -13,7 +13,7 @@ const sum = (arr: number[]) => r2(arr.reduce((t, n) => t + n, 0));
  *  Revenue a positive balance sits in the CREDIT column. */
 const DEBIT_TYPES = ["Asset", "COGS", "Expense"];
 
-/* ── DTOs (mirrored client-side in accounting-screen.tsx) ─────────────────── */
+/* -- DTOs (mirrored client-side in accounting-screen.tsx) ------------------- */
 
 interface AccountDTO {
   id: number;
@@ -80,7 +80,7 @@ export async function GET() {
     const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
     const today = now.toISOString().slice(0, 10);
 
-    /* ── journals DTO ─────────────────────────────────────────────────────── */
+    /* -- journals DTO ------------------------------------------------------- */
     const journalDTO: JournalDTO[] = journals.map((j) => ({
       id: j.id,
       jvNo: j.jvNo,
@@ -101,7 +101,7 @@ export async function GET() {
       })),
     }));
 
-    /* ── raw per-account sums (gross debit / credit) ──────────────────────── */
+    /* -- raw per-account sums (gross debit / credit) ------------------------ */
     const sumsByCode = new Map<string, { debit: number; credit: number }>();
     const accById = new Map(accounts.map((a) => [a.id, a]));
     for (const g of lineAgg) {
@@ -117,7 +117,7 @@ export async function GET() {
       return s ? r2(s.debit - s.credit) : 0;
     };
 
-    /* ── trial balance ────────────────────────────────────────────────────── */
+    /* -- trial balance ------------------------------------------------------ */
     const tbRows: TBRow[] = accounts
       .filter((a) => !a.isGroup)
       .map((a) => {
@@ -155,7 +155,7 @@ export async function GET() {
       tbAutoBalanced = true;
     }
 
-    /* ── profit & loss (from raw journal sums; Sep = real, Aug = estimate) ── */
+    /* -- profit & loss (from raw journal sums; Sep = real, Aug = estimate) -- */
     const pnlLines = (type: string, creditPositive: boolean): PnlLine[] =>
       accounts
         .filter((a) => a.type === type && !a.isGroup)
@@ -197,7 +197,7 @@ export async function GET() {
       },
     };
 
-    /* ── balance sheet (assets = liabilities + equity, auto-balanced) ─────── */
+    /* -- balance sheet (assets = liabilities + equity, auto-balanced) ------- */
     const tbByCode = new Map(tbRows.map((r) => [r.code, r]));
     const bsLine = (type: string, creditPositive: boolean): PnlLine[] =>
       accounts
@@ -227,7 +227,7 @@ export async function GET() {
 
     const balanceSheet = { assets, liabilities, equity, totalAssets, totalLiabilities, totalEquity, bsAutoBalanced };
 
-    /* ── stock valuation (FIFO-ish: qty × product cost) ──────────────────── */
+    /* -- stock valuation (FIFO-ish: qty × product cost) -------------------- */
     const byProduct = new Map<number, { name: string; sku: string; cost: number; qty: number }>();
     for (const sl of stockLevels) {
       if (!sl.product) continue;
@@ -254,7 +254,7 @@ export async function GET() {
       },
     };
 
-    /* ── bank reconciliation ──────────────────────────────────────────────── */
+    /* -- bank reconciliation ------------------------------------------------ */
     const matched = stmtLines.filter((s) => s.matched);
     const unmatched = stmtLines.filter((s) => !s.matched);
     const bankRecon = {
@@ -269,7 +269,7 @@ export async function GET() {
       },
     };
 
-    /* ── payload ──────────────────────────────────────────────────────────── */
+    /* -- payload ------------------------------------------------------------ */
     return NextResponse.json({
       month,
       today,

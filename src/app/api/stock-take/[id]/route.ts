@@ -50,7 +50,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     const session = await db.stockTake.findUnique({ where: { id: sessionId }, include: { store: true } });
     if (!session) return NextResponse.json({ ok: false, error: "Session not found" }, { status: 404 });
 
-    // ── Count a single line ──────────────────────────────────────
+    // -- Count a single line --------------------------------------
     if (body.action === "count") {
       if (session.status !== "Counting" && session.status !== "Review") {
         return NextResponse.json({ ok: false, error: "Session is closed" }, { status: 409 });
@@ -83,7 +83,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       });
     }
 
-    // ── Cancel (no stock touched) ────────────────────────────────
+    // -- Cancel (no stock touched) --------------------------------
     if (body.action === "cancel") {
       if (session.status === "Approved") {
         return NextResponse.json({ ok: false, error: "Approved sessions cannot be cancelled" }, { status: 409 });
@@ -92,7 +92,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       return NextResponse.json({ ok: true, status: "Cancelled" });
     }
 
-    // ── Approve: apply variances to live stock ───────────────────
+    // -- Approve: apply variances to live stock -------------------
     if (body.action === "approve") {
       if (session.status === "Approved") {
         return NextResponse.json({ ok: false, error: "Session already approved" }, { status: 409 });

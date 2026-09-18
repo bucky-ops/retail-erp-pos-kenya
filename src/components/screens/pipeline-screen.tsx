@@ -24,7 +24,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 
-/* ── stage config ─────────────────────────────────────────── */
+/* -- stage config ------------------------------------------- */
 
 const STAGES = [
   { id: "quotation", title: "Quotation", label: "Quotation Created", color: "#DFE1E6" },
@@ -45,7 +45,7 @@ const ASSIGNEE_COLORS: Record<string, string> = {
   O: "#172B4D", // Owner
 };
 
-/* ── date helpers ─────────────────────────────────────────── */
+/* -- date helpers ------------------------------------------- */
 
 function ago(iso: string): string {
   const m = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
@@ -66,7 +66,7 @@ function fmtStamp(iso: string): string {
 
 const err = (e: unknown) => (e instanceof Error ? e.message : "Something went wrong");
 
-/* ── screen ───────────────────────────────────────────────── */
+/* -- screen ------------------------------------------------- */
 
 export default function PipelineScreen() {
   const [deals, setDeals] = useState<DealDto[] | null>(null);
@@ -123,7 +123,7 @@ export default function PipelineScreen() {
     return Math.round(((counts.paid ?? 0) / total) * 100);
   }, [deals, counts]);
 
-  /* ── mutations ── */
+  /* -- mutations -- */
 
   const patchStage = useCallback(
     async (id: string, stage: string, by?: { drag: boolean }) => {
@@ -202,7 +202,7 @@ export default function PipelineScreen() {
 
   const nextStage = selected ? STAGES[STAGES.findIndex((s) => s.id === selected.stage) + 1] : undefined;
 
-  /* ── render ── */
+  /* -- render -- */
 
   return (
     <div className="space-y-4">
@@ -338,7 +338,7 @@ export default function PipelineScreen() {
         <DealTable deals={deals} onOpen={setSelectedId} />
       )}
 
-      {/* ── deal detail drawer ── */}
+      {/* -- deal detail drawer -- */}
       <Sheet open={!!selected} onOpenChange={(open) => !open && setSelectedId(null)}>
         <SheetContent className="w-full gap-0 overflow-y-auto p-0 sm:max-w-[420px] df-scroll" side="right">
           {selected && (
@@ -463,7 +463,7 @@ export default function PipelineScreen() {
         </SheetContent>
       </Sheet>
 
-      {/* ── new deal dialog ── */}
+      {/* -- new deal dialog -- */}
       <Dialog open={creating} onOpenChange={setCreating}>
         <DialogContent className="rounded-2xl sm:max-w-[440px]">
           <DialogHeader>
@@ -576,7 +576,7 @@ export default function PipelineScreen() {
   );
 }
 
-/* ── pieces ───────────────────────────────────────────────── */
+/* -- pieces ------------------------------------------------- */
 
 function DealCard({
   deal, dragging, moving, onDragStart, onDragEnd, onOpen,

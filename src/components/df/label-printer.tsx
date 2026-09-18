@@ -168,7 +168,7 @@ export function LabelPrinter({
         </div>
 
         <div className="grid max-h-[70vh] grid-cols-1 overflow-hidden @4xl:grid-cols-12">
-          {/* ── LEFT: picker ── */}
+          {/* -- LEFT: picker -- */}
           <div className="flex min-h-0 flex-col border-[#DFE1E6] @4xl:col-span-7 @4xl:border-r">
             <div className="flex flex-wrap items-center gap-2 border-b border-[#DFE1E6] bg-white p-3">
               <Input
@@ -286,7 +286,7 @@ export function LabelPrinter({
             </div>
           </div>
 
-          {/* ── RIGHT: preview + print ── */}
+          {/* -- RIGHT: preview + print -- */}
           <div className="flex min-h-0 flex-col bg-[#F4F5F7] @4xl:col-span-5">
             <div className="flex items-center justify-between border-b border-[#DFE1E6] bg-white px-3 py-2">
               <div className="flex items-center gap-1">
@@ -396,14 +396,14 @@ export function LabelPrinter({
   );
 }
 
-/* ────────────────────────────────────────────────────────────────────────────
+/* ----------------------------------------------------------------------------
  * Label Studio - enhanced inline presentation for the Inventory Pro
  * "Barcode & Labels" tab. Two thermal presets (80×40mm, 50×25mm), checkbox
  * multi-select with search, a live 3×8 label-sheet preview (3 columns of
  * 50mm = 150mm and 2 columns of 80mm = 160mm both fit a 210mm A4 row; rows
  * cap at 8) and the same `.df-print-area-a4` print isolation as the classic
  * dialog above, so window.print() only ever prints the sheet.
- * ────────────────────────────────────────────────────────────────────────── */
+ * -------------------------------------------------------------------------- */
 
 /** Deterministic decorative 1D bars derived from SKU character codes. */
 export function skuBars(code: string): { w: number; on: boolean }[] {

@@ -1,13 +1,13 @@
 /**
- * DukaFlow Live Feed — real-time event bus
+ * DukaFlow Live Feed - real-time event bus
  *   • socket.io server on port 3003 (browsers connect via Caddy: io("/?XTransformPort=3003"))
  *   • plain HTTP bridge on port 3004 (Next.js backend pushes events, localhost only)
  *
  * Events broadcast:
- *   sale:new   — a POS receipt / invoice was committed (incl. offline replays)
- *   stock:low  — stock crossed its reorder point (sale, adjustment, transfer)
- *   chat:new   — a Raven message was posted (system bot or user)
- *   till:z     — a till shift was closed (Z report posted)
+ *   sale:new   - a POS receipt / invoice was committed (incl. offline replays)
+ *   stock:low  - stock crossed its reorder point (sale, adjustment, transfer)
+ *   chat:new   - a Raven message was posted (system bot or user)
+ *   till:z     - a till shift was closed (Z report posted)
  *
  * Bridge endpoints (server-to-server, port 3004):
  *   POST /emit   { event, payload }        → broadcast to all clients
@@ -18,10 +18,10 @@
 import { createServer } from "http";
 import { Server } from "socket.io";
 
-const WS_PORT = 3003; // socket.io — browser-facing via Caddy gateway
-const BRIDGE_PORT = 3004; // plain HTTP — Next.js backend only (not exposed)
+const WS_PORT = 3003; // socket.io - browser-facing via Caddy gateway
+const BRIDGE_PORT = 3004; // plain HTTP - Next.js backend only (not exposed)
 
-// Ring buffer of the last 25 events — newly connected dashboards replay it so
+// Ring buffer of the last 25 events - newly connected dashboards replay it so
 // the "Live Sales Feed" is never empty after a refresh.
 const recent: { event: string; payload: unknown; at: string }[] = [];
 let broadcastCount = 0;
@@ -34,9 +34,9 @@ function broadcast(event: string, payload: unknown) {
   console.log(`📡 ${event} → ${io.engine.clientsCount} client(s)`);
 }
 
-// ── socket.io (browser side) ───────────────────────────────────────
+// -- socket.io (browser side) ---------------------------------------
 const io = new Server(WS_PORT, {
-  // DO NOT change the path — Caddy forwards /?XTransformPort=3003 traffic here
+  // DO NOT change the path - Caddy forwards /?XTransformPort=3003 traffic here
   path: "/",
   cors: { origin: "*", methods: ["GET", "POST"] },
   pingTimeout: 60000,
@@ -52,7 +52,7 @@ io.on("connection", (socket) => {
   });
 });
 
-// ── HTTP bridge (Next.js backend side) ─────────────────────────────
+// -- HTTP bridge (Next.js backend side) -----------------------------
 const bridge = createServer((req, res) => {
   if (req.method === "GET" && req.url?.startsWith("/health")) {
     res.writeHead(200, { "content-type": "application/json" });

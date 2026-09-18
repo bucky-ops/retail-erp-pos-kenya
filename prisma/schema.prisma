@@ -10,7 +10,7 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ─── Org structure ────────────────────────────────────────────────────────────
+// --- Org structure ------------------------------------------------------------
 
 model Store {
   id              Int              @id @default(autoincrement())
@@ -42,7 +42,7 @@ model Staff {
   store   Store?  @relation(fields: [storeId], references: [id])
 }
 
-// ─── Customers / loyalty / credit ────────────────────────────────────────────
+// --- Customers / loyalty / credit --------------------------------------------
 
 model Customer {
   id              Int           @id @default(autoincrement())
@@ -68,7 +68,7 @@ model Customer {
   salesReturns    SalesReturn[]
 }
 
-// ─── Catalog & multi-store stock ─────────────────────────────────────────────
+// --- Catalog & multi-store stock ---------------------------------------------
 
 model Product {
   id                  Int                  @id @default(autoincrement())
@@ -115,7 +115,7 @@ model StockTransfer {
   createdAt   DateTime @default(now())
 }
 
-// ─── Till sessions (X/Z reports - cash-drawer shift reconciliation) ─────────
+// --- Till sessions (X/Z reports - cash-drawer shift reconciliation) ---------
 
 model TillSession {
   id           Int       @id @default(autoincrement())
@@ -132,7 +132,7 @@ model TillSession {
   closedAt     DateTime?
 }
 
-// ─── Sales (POS receipts + invoices) ─────────────────────────────────────────
+// --- Sales (POS receipts + invoices) -----------------------------------------
 
 model Sale {
   id              Int           @id @default(autoincrement())
@@ -179,7 +179,7 @@ model SaleItem {
   product   Product? @relation(fields: [productId], references: [id])
 }
 
-// ─── Sales returns & refunds (credit notes, restock, till impact) ────────────
+// --- Sales returns & refunds (credit notes, restock, till impact) ------------
 
 // A return references the original receipt; qty per line is validated against
 // what has ALREADY been returned so the same item can never be refunded twice.
@@ -218,7 +218,7 @@ model SaleReturnItem {
   product    Product?    @relation(fields: [productId], references: [id])
 }
 
-// ─── Procurement: suppliers & purchase orders (reorder → receive) ────────────
+// --- Procurement: suppliers & purchase orders (reorder → receive) ------------
 
 model Supplier {
   id              Int              @id @default(autoincrement())
@@ -275,7 +275,7 @@ model PurchaseOrderItem {
   received  Float         @default(0)
 }
 
-// ─── Operating expenses (petty cash / bills) ──────────────────────────────────
+// --- Operating expenses (petty cash / bills) ----------------------------------
 
 model Expense {
   id        Int      @id @default(autoincrement())
@@ -305,7 +305,7 @@ model PipelineDeal {
   updatedAt     DateTime @updatedAt
 }
 
-// ─── Gift cards & debt plans ─────────────────────────────────────────────────
+// --- Gift cards & debt plans -------------------------------------------------
 
 model GiftCard {
   id             Int       @id @default(autoincrement())
@@ -351,7 +351,7 @@ model DebtPayment {
   createdAt  DateTime @default(now())
 }
 
-// ─── HR & Kenya payroll ──────────────────────────────────────────────────────
+// --- HR & Kenya payroll ------------------------------------------------------
 
 model Payslip {
   id             Int      @id @default(autoincrement())
@@ -375,7 +375,7 @@ model Payslip {
   @@unique([employeeId, period])
 }
 
-// ─── Raven chat ──────────────────────────────────────────────────────────────
+// --- Raven chat --------------------------------------------------------------
 
 model ChatChannel {
   id          Int           @id @default(autoincrement())
@@ -397,7 +397,7 @@ model ChatMessage {
   channel   ChatChannel @relation(fields: [channelId], references: [id])
 }
 
-// ─── Messaging (Africa's Talking / WhatsApp Cloud API) ───────────────────────
+// --- Messaging (Africa's Talking / WhatsApp Cloud API) -----------------------
 
 model SmsLog {
   id         Int       @id @default(autoincrement())
@@ -422,7 +422,7 @@ model PromoCode {
   expiresAt DateTime?
 }
 
-// ─── Singleton settings ──────────────────────────────────────────────────────
+// --- Singleton settings ------------------------------------------------------
 
 model Settings {
   id                       Int       @id @default(1)
@@ -463,7 +463,7 @@ model Settings {
   updatedAt                DateTime  @updatedAt
 }
 
-// ─── Stock take / cycle count ─────────────────────────────────────────────────
+// --- Stock take / cycle count -------------------------------------------------
 // A count session snapshots every stock line in a store, the team enters what
 // is physically on the shelf, and approving applies the variances as real
 // adjustments (with a full audit trail + chat notification).
@@ -496,7 +496,7 @@ model StockTakeItem {
   countedBy   String    @default("")
 }
 
-// ─── Return to vendor (RTV) / debit notes ─────────────────────────────────────
+// --- Return to vendor (RTV) / debit notes -------------------------------------
 // Send damaged / wrong / excess goods back to a supplier with a numbered debit
 // note; stock leaves the store and every line is audited in #stock-alerts.
 
@@ -527,7 +527,7 @@ model SupplierReturnItem {
   total            Float
 }
 
-// ─── HRMS: employee master, attendance & leave ────────────────────────────────
+// --- HRMS: employee master, attendance & leave --------------------------------
 // Full employee records for the Kenya HRMS screen: statutory numbers (KRA PIN,
 // NSSF, SHIF, Housing Levy), salary channel (bank / M-Pesa), emergency contact,
 // leave balances and a daily attendance register with check-in times.
@@ -593,7 +593,7 @@ model StaffAdvance {
   clearedAt   DateTime?
 }
 
-// ─── Day closing workflow (Z reports) ─────────────────────────────────────────
+// --- Day closing workflow (Z reports) -----------------------------------------
 // Owner closes the till day: count cash + M-Pesa, check variance vs system,
 // get manager approval for big variances, then freeze a Z report. Closing a
 // day also auto-posts the sales journal into the accounting module.
@@ -622,7 +622,7 @@ model DayClose {
   closedAt     DateTime?
 }
 
-// ─── Accounting: chart of accounts, journals, bank recon ──────────────────────
+// --- Accounting: chart of accounts, journals, bank recon ----------------------
 // Simple but complete double-entry ledger. Accounts form a tree (1000 Assets →
 // 1010 Cash Thika...). Every day close auto-posts a sales journal. Trial
 // balance, P&L and Balance Sheet are computed from JournalLine sums.

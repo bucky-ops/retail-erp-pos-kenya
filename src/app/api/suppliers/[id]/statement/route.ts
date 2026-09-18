@@ -27,7 +27,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
   });
   if (!supplier) return NextResponse.json({ ok: false, error: "Supplier not found" }, { status: 404 });
 
-  // ── purchase orders (oldest first, statement reading order) ──
+  // -- purchase orders (oldest first, statement reading order) --
   const pos = await db.purchaseOrder.findMany({
     where: { supplierId },
     orderBy: { orderedAt: "asc" },
@@ -38,7 +38,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
     },
   });
 
-  // ── RTV debit notes ──
+  // -- RTV debit notes --
   const rtvs = await db.supplierReturn.findMany({
     where: { supplierId },
     orderBy: { createdAt: "asc" },
@@ -49,7 +49,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
     },
   });
 
-  // ── negotiated price list vs catalog ──
+  // -- negotiated price list vs catalog --
   const prices = await db.supplierPrice.findMany({
     where: { supplierId },
     include: { product: { select: { name: true, sku: true, unit: true, emoji: true, cost: true } } },
@@ -57,7 +57,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
     take: 200,
   });
 
-  // ── reconciliation math ──
+  // -- reconciliation math --
   // "purchased" = value actually received into stock (GRN-verified).
   const purchasedValue = pos.reduce(
     (a, po) => a + po.items.reduce((s, it) => s + it.received * it.unitCost, 0),

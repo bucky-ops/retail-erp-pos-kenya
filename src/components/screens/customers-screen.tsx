@@ -32,7 +32,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 
-/* ── types ────────────────────────────────────────────────── */
+/* -- types -------------------------------------------------- */
 
 interface CustomerSale {
   id: number;
@@ -101,7 +101,7 @@ const DEFAULT_TIER_RULES: TierRule[] = [
 
 const err = (e: unknown) => (e instanceof Error ? e.message : "Something went wrong");
 
-/* ── helpers ──────────────────────────────────────────────── */
+/* -- helpers ------------------------------------------------ */
 
 const initials = (name: string) =>
   name.split(" ").filter(Boolean).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
@@ -117,7 +117,7 @@ const fmtExpiry = (iso: string | null) => {
 
 const isExpired = (iso: string | null) => !!iso && new Date(iso).getTime() < Date.now();
 
-/* ── screen ───────────────────────────────────────────────── */
+/* -- screen ------------------------------------------------- */
 
 export default function CustomersScreen() {
   const [all, setAll] = useState<CustomerDto[] | null>(null);
@@ -245,7 +245,7 @@ export default function CustomersScreen() {
               ))}
             </TabsList>
 
-            {/* ── Customers tab ── */}
+            {/* -- Customers tab -- */}
             <TabsContent value="customers" className="mt-0 space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex gap-1.5">
@@ -333,17 +333,17 @@ export default function CustomersScreen() {
               </div>
             </TabsContent>
 
-            {/* ── Loyalty Program tab ── */}
+            {/* -- Loyalty Program tab -- */}
             <TabsContent value="loyalty" className="mt-0">
               <LoyaltyProgram />
             </TabsContent>
 
-            {/* ── Gift Cards tab ── */}
+            {/* -- Gift Cards tab -- */}
             <TabsContent value="giftcards" className="mt-0">
               <GiftCardsTab customers={all ?? []} />
             </TabsContent>
 
-            {/* ── Price Groups tab ── */}
+            {/* -- Price Groups tab -- */}
             <TabsContent value="price" className="mt-0">
               <EmptyState
                 icon={<Tags size={22} />}
@@ -364,7 +364,7 @@ export default function CustomersScreen() {
         </>
       )}
 
-      {/* ── new customer dialog ── */}
+      {/* -- new customer dialog -- */}
       <Dialog open={adding} onOpenChange={setAdding}>
         <DialogContent className="rounded-2xl sm:max-w-[420px]">
           <DialogHeader>
@@ -401,7 +401,7 @@ export default function CustomersScreen() {
   );
 }
 
-/* ── customer detail view ─────────────────────────────────── */
+/* -- customer detail view ----------------------------------- */
 
 function CustomerDetail({
   customerId,
@@ -656,7 +656,7 @@ function CustomerDetail({
   );
 }
 
-/* ── loyalty program tab ──────────────────────────────────── */
+/* -- loyalty program tab ------------------------------------ */
 
 function LoyaltyProgram() {
   const [loaded, setLoaded] = useState(false);
@@ -866,7 +866,7 @@ function LoyaltyProgram() {
   );
 }
 
-/* ── gift cards tab ───────────────────────────────────────── */
+/* -- gift cards tab ----------------------------------------- */
 
 function GiftCardsTab({ customers }: { customers: CustomerDto[] }) {
   const [cards, setCards] = useState<GiftCardWithQr[] | null>(null);

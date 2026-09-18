@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 
-/* ── tokens ────────────────────────────────────────────────── */
+/* -- tokens -------------------------------------------------- */
 
 const COLORS: { name: string; hex: string }[] = [
   { name: "Primary - Trust Blue", hex: "#0052CC" },
@@ -78,7 +78,7 @@ const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" wi
   <circle cx="16.5" cy="22.2" r="1.8" fill="white" opacity="0.95"/>
 </svg>`;
 
-/* ── screen ────────────────────────────────────────────────── */
+/* -- screen -------------------------------------------------- */
 
 export default function DesignScreen() {
   const downloadLogo = () => {

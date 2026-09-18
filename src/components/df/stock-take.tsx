@@ -33,7 +33,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 
-/* ── contracts ────────────────────────────────────────────── */
+/* -- contracts ---------------------------------------------- */
 
 interface SessionStat {
   id: number; stNo: string; status: string; category: string; startedBy: string; note: string;
@@ -69,7 +69,7 @@ const STATUS_CLS: Record<string, string> = {
 const fmtDate = (iso: string) =>
   new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
 
-/* ── component ────────────────────────────────────────────── */
+/* -- component ---------------------------------------------- */
 
 export function StockTakeDialog({
   open,
@@ -303,7 +303,7 @@ export function StockTakeDialog({
             </TabsTrigger>
           </TabsList>
 
-          {/* ── COUNT (active session) ── */}
+          {/* -- COUNT (active session) -- */}
           <TabsContent value="count" className="space-y-3">
             {!session ? (
               <div className="rounded-xl border border-dashed border-[#DFE1E6] py-10 text-center">
@@ -458,7 +458,7 @@ export function StockTakeDialog({
             )}
           </TabsContent>
 
-          {/* ── SESSIONS ── */}
+          {/* -- SESSIONS -- */}
           <TabsContent value="sessions" className="space-y-2">
             <div className="df-scroll max-h-96 space-y-2 overflow-y-auto pr-1">
               {sessions === null ? (
@@ -507,7 +507,7 @@ export function StockTakeDialog({
             </div>
           </TabsContent>
 
-          {/* ── NEW COUNT ── */}
+          {/* -- NEW COUNT -- */}
           <TabsContent value="new" className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">

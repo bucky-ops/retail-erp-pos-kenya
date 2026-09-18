@@ -20,7 +20,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
 
-/* ── contracts & constants ────────────────────────────────── */
+/* -- contracts & constants ---------------------------------- */
 
 type TemplateId = "thermal" | "a4" | "giftcard" | "quotation";
 
@@ -114,7 +114,7 @@ const TIER_STYLE: Record<string, { bg: string; fg: string; border: string }> = {
   Bronze: { bg: "#EFEBE9", fg: "#8D6E63", border: "#BCAAA4" },
 };
 
-/* ── helpers ──────────────────────────────────────────────── */
+/* -- helpers ------------------------------------------------ */
 
 const err = (e: unknown) => (e instanceof Error ? e.message : "Something went wrong");
 
@@ -172,7 +172,7 @@ const TEAR_CLIP = (() => {
   return `polygon(${pts.join(", ")})`;
 })();
 
-/* ── small building blocks ────────────────────────────────── */
+/* -- small building blocks ---------------------------------- */
 
 /** Dashed perforation rule used inside the thermal paper. */
 function TearRule() {
@@ -278,7 +278,7 @@ function QrBlock({ sale, size, brand }: { sale: SaleDto; size: number; brand: Br
   );
 }
 
-/* ── 80mm thermal preview ─────────────────────────────────── */
+/* -- 80mm thermal preview ----------------------------------- */
 
 function ThermalPreview({ sale, brand }: { sale: SaleDto; brand: BrandConfig }) {
   const t = brand.toggles;
@@ -457,7 +457,7 @@ function ThermalPreview({ sale, brand }: { sale: SaleDto; brand: BrandConfig }) 
   );
 }
 
-/* ── A4 invoice / quotation sheet ─────────────────────────── */
+/* -- A4 invoice / quotation sheet --------------------------- */
 
 function A4Sheet({ sale, brand, mode }: { sale: SaleDto; brand: BrandConfig; mode: "invoice" | "quotation" }) {
   const t = brand.toggles;
@@ -651,7 +651,7 @@ function A4Sheet({ sale, brand, mode }: { sale: SaleDto; brand: BrandConfig; mod
   );
 }
 
-/* ── gift card + label sheet preview ──────────────────────── */
+/* -- gift card + label sheet preview ------------------------ */
 
 function GiftCardPreview({ brand }: { brand: BrandConfig }) {
   const bars = barcodeBars("GC-4821-DUKAFLOW", 30);
@@ -744,7 +744,7 @@ function GiftCardPreview({ brand }: { brand: BrandConfig }) {
   );
 }
 
-/* ── shared canvas router ─────────────────────────────────── */
+/* -- shared canvas router ----------------------------------- */
 
 function PreviewCanvas({ template, sale, brand }: { template: TemplateId; sale: SaleDto; brand: BrandConfig }) {
   if (template === "thermal") return <ThermalPreview sale={sale} brand={brand} />;
@@ -763,7 +763,7 @@ function PreviewCanvas({ template, sale, brand }: { template: TemplateId; sale: 
   return <GiftCardPreview brand={brand} />;
 }
 
-/* ── screen ───────────────────────────────────────────────── */
+/* -- screen ------------------------------------------------- */
 
 export default function ReceiptsScreen() {
   /* studio state */
@@ -904,7 +904,7 @@ export default function ReceiptsScreen() {
 
       {/* split view: editor (40%) + previews (60%) */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-5 lg:gap-6">
-        {/* ── editor controls ── */}
+        {/* -- editor controls -- */}
         <div className="df-scroll lg:sticky lg:top-2 lg:col-span-2 lg:max-h-[calc(100vh-2.5rem)] lg:space-y-4 lg:overflow-y-auto lg:pr-1">
           {/* template selector */}
           <Panel className="p-4">
@@ -1050,7 +1050,7 @@ export default function ReceiptsScreen() {
           </Panel>
         </div>
 
-        {/* ── live previews ── */}
+        {/* -- live previews -- */}
         <div className="lg:col-span-3">
           <Panel className="p-4 md:p-5">
             <Tabs value={template} onValueChange={(v) => setTemplate(v as TemplateId)} className="flex min-h-0 flex-col">

@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# ─────────────────────────────────────────────────────────────
-# DukaFlow — retail-erp-pos-kenya one-shot installer
+# -------------------------------------------------------------
+# DukaFlow - retail-erp-pos-kenya one-shot installer
 # Bootstraps DB, installs deps, seeds Kenyan demo data, starts dev.
 # Usage: bash install.sh
-# ─────────────────────────────────────────────────────────────
+# -------------------------------------------------------------
 set -euo pipefail
 
-echo "🏪 DukaFlow — Kenya Retail ERP + POS installer"
+echo "🏪 DukaFlow - Kenya Retail ERP + POS installer"
 
 # 1. runtime check (bun preferred, npm/node fallback)
 if command -v bun >/dev/null 2>&1; then

@@ -34,7 +34,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       return NextResponse.json({ ok: false, error: "Purchase order not found" }, { status: 404 });
     }
 
-    // ── send / cancel ─────────────────────────────────────────────────────────
+    // -- send / cancel ---------------------------------------------------------
     if (body.action === "send") {
       if (po.status !== "Draft") {
         return NextResponse.json({ ok: false, error: `Only Draft orders can be sent (current: ${po.status})` }, { status: 400 });
@@ -51,7 +51,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       return NextResponse.json({ ok: true, po: updated });
     }
 
-    // ── receive (Goods Received Note) ─────────────────────────────────────────
+    // -- receive (Goods Received Note) -----------------------------------------
     if (body.action === "receive") {
       if (po.status === "Received" || po.status === "Cancelled") {
         return NextResponse.json({ ok: false, error: `Order already ${po.status.toLowerCase()}` }, { status: 400 });

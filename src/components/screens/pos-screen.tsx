@@ -87,7 +87,7 @@ import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 
-/* ── helpers ─────────────────────────────────────────────────── */
+/* -- helpers --------------------------------------------------- */
 
 const initials = (name: string) =>
   name
@@ -205,7 +205,7 @@ interface SuccessState {
   offline: boolean;
 }
 
-/* ── component ───────────────────────────────────────────────── */
+/* -- component ------------------------------------------------- */
 
 export default function PosScreen() {
   const activeStoreId = useApp((s) => s.activeStoreId);
@@ -271,7 +271,7 @@ export default function PosScreen() {
   const vatRate = settings?.vatRate ?? 0.16;
   const pointValue = settings?.loyaltyPointValue ?? 1;
 
-  /* ── sync on mount + whenever connectivity returns ─────────── */
+  /* -- sync on mount + whenever connectivity returns ----------- */
   useEffect(() => {
     let alive = true;
     void (async () => {
@@ -300,7 +300,7 @@ export default function PosScreen() {
     };
   }, [online, setUnsynced]);
 
-  /* ── debounced search ──────────────────────────────────────── */
+  /* -- debounced search ---------------------------------------- */
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQ(search), 250);
     return () => clearTimeout(t);
@@ -321,7 +321,7 @@ export default function PosScreen() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  /* ── cart mutations ────────────────────────────────────────── */
+  /* -- cart mutations ------------------------------------------ */
   const addToCart = useCallback(
     (p: ProductDto) => {
       const available = stockQty(p, activeStoreId);
@@ -347,7 +347,7 @@ export default function PosScreen() {
 
   const removeLine = (productId: number) => setCart((prev) => prev.filter((l) => l.productId !== productId));
 
-  /* ── catalog fetch (debounced, barcode-aware) ──────────────── */
+  /* -- catalog fetch (debounced, barcode-aware) ---------------- */
   useEffect(() => {
     let alive = true;
     void (async () => {
@@ -380,7 +380,7 @@ export default function PosScreen() {
     };
   }, [debouncedQ, category, activeStoreId, catalogNonce, addToCart]);
 
-  /* ── customer picker fetch ─────────────────────────────────── */
+  /* -- customer picker fetch ----------------------------------- */
   useEffect(() => {
     if (!pickerOpen) return;
     let alive = true;
@@ -441,8 +441,8 @@ export default function PosScreen() {
     });
   };
 
-  /* ── totals ────────────────────────────────────────────────── */
-  /* ── happy hour auto-pricing (ticks every 30s so banners stay honest) ── */
+  /* -- totals -------------------------------------------------- */
+  /* -- happy hour auto-pricing (ticks every 30s so banners stay honest) -- */
   const [nowTick, setNowTick] = useState<Date>(() => new Date());
   useEffect(() => {
     const t = setInterval(() => setNowTick(new Date()), 30_000);
@@ -483,7 +483,7 @@ export default function PosScreen() {
     vatRate,
   });
 
-  /* ── PAY flow ──────────────────────────────────────────────── */
+  /* -- PAY flow ------------------------------------------------ */
   const markQueue = async (clientId: string, status: "synced" | "failed", error?: string) => {
     const item = (await offlineQueue.all()).find((q) => q.clientId === clientId);
     if (item) {
@@ -538,7 +538,7 @@ export default function PosScreen() {
     setPaymentMethod("Cash");
   };
 
-  /* ── email the e-invoice straight from the success modal ───── */
+  /* -- email the e-invoice straight from the success modal ----- */
   const openSuccessEmail = async () => {
     if (!success || success.offline) return;
     setEmailOpen(true);
@@ -729,7 +729,7 @@ export default function PosScreen() {
     }
   };
 
-  /* ── render ────────────────────────────────────────────────── */
+  /* -- render -------------------------------------------------- */
 
   const billNum = Number(billDiscount) || 0;
 
@@ -791,7 +791,7 @@ export default function PosScreen() {
 
       {/* body */}
       <div className="grid min-h-0 flex-1 grid-cols-1 @4xl:grid-cols-12">
-        {/* ── LEFT: catalog ─────────────────────────────────── */}
+        {/* -- LEFT: catalog ----------------------------------- */}
         <div className="flex min-h-0 flex-col bg-[#F4F5F7] @4xl:col-span-7">
           {/* search */}
           <div className="flex items-center gap-3 p-4 pb-2">
@@ -953,7 +953,7 @@ export default function PosScreen() {
           </div>
         </div>
 
-        {/* ── RIGHT: cart ───────────────────────────────────── */}
+        {/* -- RIGHT: cart ------------------------------------- */}
         <div className="flex min-h-0 flex-col border-t border-[#DFE1E6] bg-white @4xl:col-span-5 @4xl:border-l @4xl:border-t-0">
           {/* customer card */}
           {customer ? (
@@ -1327,7 +1327,7 @@ export default function PosScreen() {
         </div>
       </div>
 
-      {/* ── customer picker dialog ────────────────────────────── */}
+      {/* -- customer picker dialog ------------------------------ */}
       <Dialog
         open={pickerOpen}
         onOpenChange={(o) => {
@@ -1417,7 +1417,7 @@ export default function PosScreen() {
         </DialogContent>
       </Dialog>
 
-      {/* ── M-Pesa STK dialog ─────────────────────────────────── */}
+      {/* -- M-Pesa STK dialog ----------------------------------- */}
       <Dialog open={stk.open} onOpenChange={(o) => !o && setStk((s) => ({ ...s, open: false }))}>
         <DialogContent className="max-w-[420px] rounded-2xl" showCloseButton={false}>
           <DialogTitle className="sr-only">M-Pesa STK Push</DialogTitle>
@@ -1448,7 +1448,7 @@ export default function PosScreen() {
         </DialogContent>
       </Dialog>
 
-      {/* ── success / offline-queued modal ────────────────────── */}
+      {/* -- success / offline-queued modal ---------------------- */}
       <Dialog open={!!success} onOpenChange={(o) => !o && resetTransaction()}>
         <DialogContent className="max-w-[560px] overflow-hidden rounded-[24px] p-0">
           <DialogTitle className="sr-only">Sale receipt</DialogTitle>
@@ -1572,7 +1572,7 @@ export default function PosScreen() {
         </DialogContent>
       </Dialog>
 
-      {/* ── POS e-invoice email dialog ─────────────────────── */}
+      {/* -- POS e-invoice email dialog ----------------------- */}
       <Dialog open={emailOpen} onOpenChange={setEmailOpen}>
         <DialogContent className="rounded-2xl sm:max-w-[520px]">
           <DialogHeader>
@@ -1641,7 +1641,7 @@ export default function PosScreen() {
         </DialogContent>
       </Dialog>
 
-      {/* ── credit-sale blocked alert ─────────────────────────── */}
+      {/* -- credit-sale blocked alert --------------------------- */}
       <AlertDialog open={!!blocked} onOpenChange={(o) => !o && setBlocked(null)}>
         <AlertDialogContent className="max-w-[460px] rounded-2xl border-[#FFCDD2]">
           <AlertDialogHeader>
@@ -1664,7 +1664,7 @@ export default function PosScreen() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* ── cash drawer / X & Z reports ───────────────────────── */}
+      {/* -- cash drawer / X & Z reports ------------------------- */}
       <TillDialog
         open={tillOpen}
         onOpenChange={setTillOpen}
@@ -1673,7 +1673,7 @@ export default function PosScreen() {
         userName={user?.name ?? "Counter 1"}
       />
 
-      {/* ── quick return at the till (F4) ─────────────────────── */}
+      {/* -- quick return at the till (F4) ----------------------- */}
       <PosQuickReturn open={quickReturnOpen} onOpenChange={setQuickReturnOpen} />
     </div>
   );
@@ -1849,7 +1849,7 @@ function TillDialog({
             <Skeleton className="h-24 w-full rounded-xl" />
           </div>
         ) : zResult ? (
-          /* ── Z-Report result ── */
+          /* -- Z-Report result -- */
           <div className="space-y-3">
             <div
               className={cn(
@@ -1883,7 +1883,7 @@ function TillDialog({
             </Button>
           </div>
         ) : !session ? (
-          /* ── open till flow ── */
+          /* -- open till flow -- */
           <div className="space-y-4">
             <div className="rounded-2xl border border-[#DFE1E6] bg-[#FAFBFC] p-4">
               <Label className="text-[12px] font-semibold text-[#172B4D]">Opening float (cash in drawer)</Label>
@@ -1908,7 +1908,7 @@ function TillDialog({
             </Button>
           </div>
         ) : (
-          /* ── live shift ── */
+          /* -- live shift -- */
           <div className="space-y-3">
             {/* expected drawer hero */}
             <div className="rounded-2xl bg-gradient-to-br from-[#172B4D] to-[#0E1B33] p-4 text-white">

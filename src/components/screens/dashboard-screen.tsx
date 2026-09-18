@@ -44,7 +44,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 
-/* ── API shapes (local to this screen) ───────────────────────── */
+/* -- API shapes (local to this screen) ------------------------- */
 
 interface FeedRow {
   receipt: string;
@@ -149,7 +149,7 @@ export default function DashboardScreen() {
     return () => clearTimeout(t);
   }, [load]);
 
-  // ── Realtime event bus ────────────────────────────────────────────
+  // -- Realtime event bus --------------------------------------------
   const liveStatus = useLive((event, payload) => {
     if (event === "sale:new") {
       const s = payload as LiveSale;
@@ -237,7 +237,7 @@ export default function DashboardScreen() {
         }
       />
 
-      {/* ── Row 1: KPI cards ─────────────────────────────── */}
+      {/* -- Row 1: KPI cards ------------------------------- */}
       <div className="grid grid-cols-1 gap-4 @2xl:grid-cols-2 @6xl:grid-cols-4">
         <KpiCard
           icon={<TrendingUp size={16} />}
@@ -340,7 +340,7 @@ export default function DashboardScreen() {
         />
       </div>
 
-      {/* ── Row 2: trend + sales by store ────────────────── */}
+      {/* -- Row 2: trend + sales by store ------------------ */}
       <div className="grid grid-cols-12 gap-5">
         <Panel className="col-span-12 @6xl:col-span-8">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -439,7 +439,7 @@ export default function DashboardScreen() {
         </Panel>
       </div>
 
-      {/* ── Row 3: live feed + right rail ────────────────── */}
+      {/* -- Row 3: live feed + right rail ------------------ */}
       <div className="grid grid-cols-12 gap-5">
         <Panel padding={false} className="col-span-12 overflow-hidden @6xl:col-span-8">
           <div className="flex items-center justify-between border-b border-[#DFE1E6] p-4 @md:p-5">
@@ -614,7 +614,7 @@ export default function DashboardScreen() {
         </div>
       </div>
 
-      {/* ── Row 4: low stock alerts ──────────────────────── */}
+      {/* -- Row 4: low stock alerts ------------------------ */}
       <Panel>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">

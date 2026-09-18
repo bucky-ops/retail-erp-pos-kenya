@@ -33,7 +33,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 
-/* ── types ────────────────────────────────────────────────── */
+/* -- types -------------------------------------------------- */
 
 interface InvRow {
   id: number;
@@ -85,7 +85,7 @@ interface InvResponse {
 type Tab = "All Items" | "Low Stock" | "Out of Stock" | "Transfers";
 const TABS: Tab[] = ["All Items", "Low Stock", "Out of Stock", "Transfers"];
 
-/* ── Inventory Pro contracts (mirrors of the API payloads) ── */
+/* -- Inventory Pro contracts (mirrors of the API payloads) -- */
 
 interface SupDTO {
   id: number;
@@ -176,7 +176,7 @@ const err = (e: unknown) => (e instanceof Error ? e.message : "Something went wr
 /** Guard against null/NaN numbers from the API (e.g. server-side summary edge cases). */
 const safeNum = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : Number(v) || 0);
 
-/* ── pills ────────────────────────────────────────────────── */
+/* -- pills -------------------------------------------------- */
 
 function MarginBadge({ m }: { m: number }) {
   const cls =
@@ -198,7 +198,7 @@ function StockPill({ qty, reorder }: { qty: number; reorder: number }) {
   return <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-bold", cls)}>{label}</span>;
 }
 
-/* ── screen ───────────────────────────────────────────────── */
+/* -- screen ------------------------------------------------- */
 
 export default function InventoryScreen() {
   const activeStoreId = useApp((s) => s.activeStoreId);
@@ -275,7 +275,7 @@ export default function InventoryScreen() {
     [stores]
   );
 
-  /* ── product drawer: fetch stock across all stores ── */
+  /* -- product drawer: fetch stock across all stores -- */
   const openProduct = useCallback(
     async (row: InvRow) => {
       setSelectedId(row.id);
@@ -292,7 +292,7 @@ export default function InventoryScreen() {
     []
   );
 
-  /* ── transfer dialog ── */
+  /* -- transfer dialog -- */
   const openTransfer = useCallback(async (prefill?: { productId: number; fromStoreId: number }) => {
     setTransferOpen(true);
     setTfProducts(null);
@@ -659,7 +659,7 @@ export default function InventoryScreen() {
         <TabsContent value="age"><StockAgeTab /></TabsContent>
       </Tabs>
 
-      {/* ── product drawer ── */}
+      {/* -- product drawer -- */}
       <Sheet open={!!selected} onOpenChange={(open) => !open && setSelectedId(null)}>
         <SheetContent className="w-full gap-0 overflow-y-auto p-0 sm:max-w-[400px] df-scroll" side="right">
           {selected && (
@@ -807,7 +807,7 @@ export default function InventoryScreen() {
         </SheetContent>
       </Sheet>
 
-      {/* ── transfer dialog ── */}
+      {/* -- transfer dialog -- */}
       <Dialog open={transferOpen} onOpenChange={setTransferOpen}>
         <DialogContent className="rounded-2xl sm:max-w-[460px]">
           <DialogHeader>

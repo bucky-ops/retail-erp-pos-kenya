@@ -136,7 +136,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // ── Apply phase (server re-validates against live stock) ────────────────
+    // -- Apply phase (server re-validates against live stock) ----------------
     if (valid.length === 0) {
       return NextResponse.json({ ok: false, error: "Nothing valid to apply" }, { status: 400 });
     }

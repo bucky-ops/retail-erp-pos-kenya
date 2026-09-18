@@ -964,7 +964,7 @@ export default function AccountingScreen() {
     return () => clearTimeout(t);
   }, [load]);
 
-  /* ── loading / error states ─────────────────────────────────────────────── */
+  /* -- loading / error states ----------------------------------------------- */
   if (error && !data) {
     return (
       <div className="mx-auto w-full max-w-6xl space-y-6">

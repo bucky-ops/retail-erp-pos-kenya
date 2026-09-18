@@ -29,7 +29,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 
-/* ── contracts ─────────────────────────────────────────────── */
+/* -- contracts ----------------------------------------------- */
 
 interface StockAgingBucket {
   bucket: string;
@@ -95,7 +95,7 @@ const compact = (n: number) => (Math.abs(n) >= 1000 ? `${(n / 1000).toFixed(n >=
 
 const kesTooltip = (v: number | string) => KES(Number(v));
 
-/* ── screen ────────────────────────────────────────────────── */
+/* -- screen -------------------------------------------------- */
 
 export default function ReportsScreen() {
   const [data, setData] = useState<ReportsPayload | null>(null);
@@ -132,7 +132,7 @@ export default function ReportsScreen() {
     return () => clearTimeout(t);
   }, [load, loadExp]);
 
-  /* derived datasets ─────────────────────────────────────── */
+  /* derived datasets --------------------------------------- */
 
   /* stock aging - REAL server data (StockLevel.receivedAt × qty × cost) */
   const stockAging = useMemo(() => {
@@ -188,7 +188,7 @@ export default function ReportsScreen() {
     }));
   }, [data]);
 
-  /* per-report table (drill-down + CSV) ──────────────────── */
+  /* per-report table (drill-down + CSV) -------------------- */
 
   const tableFor = useCallback(
     (id: ReportId): { cols: string[]; rows: (string | number)[][] } => {
@@ -264,7 +264,7 @@ export default function ReportsScreen() {
     toast({ title: "Report exported", description: `dukaflow-${id}-report.csv saved to downloads.` });
   };
 
-  /* mini chart renderer (h-24, no axes) ──────────────────── */
+  /* mini chart renderer (h-24, no axes) -------------------- */
 
   const miniChart = (id: ReportId) => {
     if (!data) return null;
@@ -378,7 +378,7 @@ export default function ReportsScreen() {
     }
   };
 
-  /* big chart for the drill-down dialog (with axes) ──────── */
+  /* big chart for the drill-down dialog (with axes) -------- */
 
   const bigChart = (id: ReportId) => {
     if (!data) return null;
@@ -779,7 +779,7 @@ export default function ReportsScreen() {
   );
 }
 
-/* ── Scheduled report email dialog ────────────────────────────
+/* -- Scheduled report email dialog ----------------------------
    Real persisted schedule (Settings.reportSchedule*) backed by
    /api/cron/report - the mock Frappe scheduler hook that emails
    the owner a full sales summary (logged to Messages as Email). */
@@ -941,7 +941,7 @@ function ScheduleDialog({
   );
 }
 
-/* ── Record expense (petty cash / bills) ──────────────────────
+/* -- Record expense (petty cash / bills) ----------------------
    Inline form inside the Expenses drill-down. Persists to the
    Expense ledger via POST /api/expenses and refreshes the chart. */
 function RecordExpenseForm({ onRecorded }: { onRecorded: () => void | Promise<void> }) {

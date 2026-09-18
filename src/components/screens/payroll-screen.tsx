@@ -30,7 +30,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
-/* ── contracts & helpers ──────────────────────────────────── */
+/* -- contracts & helpers ------------------------------------ */
 
 interface PayrollResponse {
   period: string;
@@ -155,7 +155,7 @@ function DayChip({ rec }: { rec: AttDay | null }) {
   );
 }
 
-/* ── Attendance tab (HRMS register) ──────────────────────── */
+/* -- Attendance tab (HRMS register) ------------------------ */
 
 function AttendanceTab() {
   const [data, setData] = useState<AttPayload | null>(null);
@@ -346,7 +346,7 @@ function AttendanceTab() {
   );
 }
 
-/* ── Advances tab (salary advances) ──────────────────────── */
+/* -- Advances tab (salary advances) ------------------------ */
 
 function AdvancesTab() {
   const [data, setData] = useState<AdvPayload | null>(null);
@@ -641,7 +641,7 @@ function AdvancesTab() {
   );
 }
 
-/* ── screen ───────────────────────────────────────────────── */
+/* -- screen ------------------------------------------------- */
 
 export default function PayrollScreen() {
   const periods = useMemo(() => recentPeriods(), []);
@@ -672,7 +672,7 @@ export default function PayrollScreen() {
   const t = visible?.totals;
   const committed = rows.length > 0 && rows.every((r) => r.id > 0);
 
-  /* ── actions ────────────────────────────────────────────── */
+  /* -- actions ---------------------------------------------- */
 
   const runPayroll = async () => {
     setBusy("run");

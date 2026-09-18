@@ -11,7 +11,7 @@ import { PrismaClient } from "@prisma/client";
 const db = new PrismaClient();
 
 async function main() {
-  // ── Suppliers ──────────────────────────────────────────────────────────────
+  // -- Suppliers --------------------------------------------------------------
   if ((await db.supplier.count()) === 0) {
     await db.supplier.createMany({
       data: [
@@ -25,7 +25,7 @@ async function main() {
     console.log("seeded 5 suppliers");
   }
 
-  // ── Purchase orders ────────────────────────────────────────────────────────
+  // -- Purchase orders --------------------------------------------------------
   if ((await db.purchaseOrder.count()) === 0) {
     const suppliers = await db.supplier.findMany();
     const stores = await db.store.findMany();
@@ -73,7 +73,7 @@ async function main() {
     }
   }
 
-  // ── Expenses ───────────────────────────────────────────────────────────────
+  // -- Expenses ---------------------------------------------------------------
   if ((await db.expense.count()) === 0) {
     const stores = await db.store.findMany();
     if (stores.length) {
@@ -112,7 +112,7 @@ async function main() {
     }
   }
 
-  // ── One historical sales return for the returns history UI ──────────────────
+  // -- One historical sales return for the returns history UI ------------------
   if ((await db.salesReturn.count()) === 0) {
     const sale = await db.sale.findFirst({
       where: { items: { some: {} }, paymentMethod: { not: "Credit Sale" } },

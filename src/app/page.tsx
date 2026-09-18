@@ -159,7 +159,7 @@ export default function App() {
               width in preview modes (tablet 1016px / mobile 382px) instead of the real viewport,
               and to the full window on desktop - fixes the mobile-frame clipping bug. */}
           <div className={cn("@container flex h-screen min-h-0", frameClass)}>
-            {/* ── Sidebar (hidden in mobile frame - mobile nav is in topbar) ── */}
+            {/* -- Sidebar (hidden in mobile frame - mobile nav is in topbar) -- */}
             <aside
               className={cn(
                 "flex-col bg-[#172B4D] transition-all duration-200",
@@ -248,7 +248,7 @@ export default function App() {
               </div>
             </aside>
 
-            {/* ── Main column ─────────────────────────── */}
+            {/* -- Main column --------------------------- */}
             <div className="flex min-w-0 flex-1 flex-col bg-[#F4F5F7]">
               {/* Topbar */}
               <header className="sticky top-0 z-20 flex h-[64px] items-center justify-between border-b border-[#DFE1E6] bg-white px-4 @4xl:px-8">

@@ -20,7 +20,7 @@ async function runDailyJobs() {
   todayStart.setHours(0, 0, 0, 0);
   const todayEnd = new Date(todayStart.getTime() + 864e5);
 
-  // ── 1. Recompute overdue days ────────────────────────────
+  // -- 1. Recompute overdue days ----------------------------
   const plans = await db.debtPlan.findMany({ where: { status: "Active" }, include: { customer: true } });
   let overdueUpdated = 0;
   for (const p of plans) {
@@ -31,7 +31,7 @@ async function runDailyJobs() {
     }
   }
 
-  // ── 2. Birthday SMS (dedupe per day) ─────────────────────
+  // -- 2. Birthday SMS (dedupe per day) ---------------------
   const birthdayCustomers = await db.customer.findMany({
     where: { birthday: { gte: todayStart, lt: todayEnd } },
   });
@@ -57,7 +57,7 @@ async function runDailyJobs() {
     birthdaySent++;
   }
 
-  // ── 3. Debt reminders - plans due tomorrow, opt-out respected ──
+  // -- 3. Debt reminders - plans due tomorrow, opt-out respected --
   const tomorrowStart = new Date(todayStart.getTime() + 864e5);
   const tomorrowEnd = new Date(todayStart.getTime() + 2 * 864e5);
   const dueTomorrow = plans.filter(
@@ -82,7 +82,7 @@ async function runDailyJobs() {
     debtRemindersSent++;
   }
 
-  // ── 4. Daily expenses digest - today's petty cash + bills ──
+  // -- 4. Daily expenses digest - today's petty cash + bills --
   // Owner's morning digest: what the business spent today, by category,
   // logged as an Email-type entry in SmsLog (mock mailer).
   const todayExpenses = await db.expense.findMany({
