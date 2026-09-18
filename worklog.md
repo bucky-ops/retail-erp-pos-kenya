@@ -169,3 +169,22 @@ Stage Summary:
 - Hosted backend LIVE + verified: Supabase Postgres with full schema + seed data; app passes 25/25 smoke tests against it.
 - Vercel project dukaflow-web ready to deploy with DB env wired; GitHub secret available to CI.
 - Tokens redacted everywhere; stored only in /tmp/tokens (chmod 600). Recommend user ROTATE all four tokens since they were pasted in chat.
+
+---
+Task ID: 12 - connect Vercel frontend to Supabase backend, fix live 500
+Agent: Z.ai Code (main)
+Task: Full pipeline: live site https://retail-erp-pos-kenya.vercel.app/ returned Request failed (500) on every API route; diagnose and fix.
+
+Work Log:
+- Reproduced: GET / 200 but ALL /api/* routes -> empty 500 (bootstrap, login).
+- Step 1 (frontend/API review): all client fetches hit relative /api/* Next.js route handlers - correct by design; the 500 came from the server side of those handlers.
+- Step 2 (backend config): Vercel project retail-erp-pos-kenya (prj_j10DJ39pzg6XmxpmuGOlAryGr0Qn) IS git-linked to bucky-ops/retail-erp-pos-kenya (auto deploys on push) and HAD DATABASE_URL set (Supabase marketplace integration) - so env existed but the app still 500ed.
+- Step 3 (network/deployments): deployments READY; pulled build logs via /v2/deployments/{id}/events. ROOT CAUSE: Vercel npm allow-scripts guard SKIPPED @prisma/client postinstall -> prisma generate NEVER ran in cloud builds -> shipped stub Prisma client -> every query threw -> empty 500.
+- Step 4 (fix): added scripts/prisma-generate.sh (env-aware: postgres DATABASE_URL -> prisma/schema.postgres.prisma, else sqlite schema) + package.json postinstall hook. Replaced project env DATABASE_URL with Supabase TRANSACTION pooler (6543, pgbouncer=true, connection_limit=1, serverless-safe) + DIRECT_URL (session pooler 5432). Commit 5ebbb4b pushed -> auto deploy.
+- Verified new build log: "[prisma-generate] postgres DATABASE_URL detected -> Generated Prisma Client".
+- Step 5 (post-fix verification): GET / 200; /api/bootstrap 200 with 2 stores; POST /api/auth/login PIN 1234 -> 200 {ok, Mary Wanjiku}; day-close/accounting/payroll-attendance/sales/inventory all 200 with Supabase data; agent-browser live QA: staff PIN login -> store select -> dashboard live products (Angle Valve 54 in stock KES 420, Bamburi Cement 45) -> Day Close renders Z-20260918-THIKA live; console clean. Sandbox SQLite boot 200 (postinstall env-aware, no impact).
+
+Stage Summary:
+- FULL PIPELINE LIVE: Vercel (Next.js UI + API) -> Supabase Postgres (session/transaction poolers) -> seeded data -> verified in browser and via API.
+- Note for future sessions: any new dependency with install scripts may be silently skipped on Vercel (allow-scripts); keep critical generate steps in the project postinstall.
+- Sandbox default remains SQLite; hosted switch documented in scripts/db-hosted.sh.
