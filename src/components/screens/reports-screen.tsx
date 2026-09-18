@@ -55,7 +55,7 @@ interface ReportsPayload {
   generatedAt: string;
 }
 
-/* Operating expenses (petty cash, bills) — served by /api/expenses */
+/* Operating expenses (petty cash, bills) - served by /api/expenses */
 interface ExpRow {
   id: number; storeId: number; storeName: string; category: string; note: string;
   amount: number; paidVia: string; refNo: string | null; staffName: string; spentAt: string;
@@ -84,7 +84,7 @@ const REPORTS: { id: ReportId; title: string; desc: string; icon: typeof ChartCo
 
 const rel = (iso: string) => {
   const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-  if (!Number.isFinite(s)) return "—";
+  if (!Number.isFinite(s)) return "-";
   if (s < 60) return "just now";
   if (s < 3600) return `${Math.floor(s / 60)}m ago`;
   if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
@@ -124,19 +124,23 @@ export default function ReportsScreen() {
   }, []);
 
   useEffect(() => {
-    void load();
-    void loadExp();
+    // async boundary: the loaders touch state, so never call them synchronously here
+    const t = setTimeout(() => {
+      void load();
+      void loadExp();
+    }, 0);
+    return () => clearTimeout(t);
   }, [load, loadExp]);
 
   /* derived datasets ─────────────────────────────────────── */
 
-  /* stock aging — REAL server data (StockLevel.receivedAt × qty × cost) */
+  /* stock aging - REAL server data (StockLevel.receivedAt × qty × cost) */
   const stockAging = useMemo(() => {
     const b = data?.stockAging.buckets;
     return [
-      { bucket: "0–30 days", value: b?.[0]?.value ?? 0, color: "#00C853", qty: b?.[0]?.qty ?? 0, items: b?.[0]?.items ?? 0 },
-      { bucket: "31–60 days", value: b?.[1]?.value ?? 0, color: "#FFAB00", qty: b?.[1]?.qty ?? 0, items: b?.[1]?.items ?? 0 },
-      { bucket: "61–90 days", value: b?.[2]?.value ?? 0, color: "#FF5630", qty: b?.[2]?.qty ?? 0, items: b?.[2]?.items ?? 0 },
+      { bucket: "0-30 days", value: b?.[0]?.value ?? 0, color: "#00C853", qty: b?.[0]?.qty ?? 0, items: b?.[0]?.items ?? 0 },
+      { bucket: "31-60 days", value: b?.[1]?.value ?? 0, color: "#FFAB00", qty: b?.[1]?.qty ?? 0, items: b?.[1]?.items ?? 0 },
+      { bucket: "61-90 days", value: b?.[2]?.value ?? 0, color: "#FF5630", qty: b?.[2]?.qty ?? 0, items: b?.[2]?.items ?? 0 },
       { bucket: "90+ days", value: b?.[3]?.value ?? 0, color: "#B71C1C", qty: b?.[3]?.qty ?? 0, items: b?.[3]?.items ?? 0 },
     ];
   }, [data]);
@@ -147,8 +151,8 @@ export default function ReportsScreen() {
     const a = data?.debtorAging;
     return [
       { bucket: "Current", value: a?.current ?? 0, color: "#00C853" },
-      { bucket: "1–30 days", value: a?.d0_30 ?? 0, color: "#FFAB00" },
-      { bucket: "31–60 days", value: a?.d31_60 ?? 0, color: "#FF5630" },
+      { bucket: "1-30 days", value: a?.d0_30 ?? 0, color: "#FFAB00" },
+      { bucket: "31-60 days", value: a?.d31_60 ?? 0, color: "#FF5630" },
       { bucket: "60+ days", value: a?.d60plus ?? 0, color: "#B71C1C" },
     ];
   }, [data]);
@@ -201,7 +205,7 @@ export default function ReportsScreen() {
             cols: ["Day", "Revenue (KES)", "Profit (KES)", "Margin"],
             rows: d.daily.map((r) => [
               r.day, r.revenue, r.profit,
-              r.revenue > 0 ? `${Math.round((r.profit / r.revenue) * 100)}%` : "—",
+              r.revenue > 0 ? `${Math.round((r.profit / r.revenue) * 100)}%` : "-",
             ]),
           };
         case "stock":
@@ -239,7 +243,7 @@ export default function ReportsScreen() {
             cols: ["Category", "Spend (KES)", "Share of 30-day total"],
             rows: (exp?.summary.byCategory ?? []).map((c) => [
               c.category, c.amount,
-              exp?.summary.total ? `${Math.round((c.amount / exp.summary.total) * 100)}%` : "—",
+              exp?.summary.total ? `${Math.round((c.amount / exp.summary.total) * 100)}%` : "-",
             ]),
           };
       }
@@ -553,7 +557,7 @@ export default function ReportsScreen() {
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#F4F5F7] text-[#0052CC]">
                   <Icon size={16} />
                 </div>
-                <span className="text-[11px] text-[#6B778C]">{data ? rel(data.generatedAt) : "—"}</span>
+                <span className="text-[11px] text-[#6B778C]">{data ? rel(data.generatedAt) : "-"}</span>
               </div>
               <h3 className="font-display mt-4 text-[14px] font-bold text-[#172B4D]">{title}</h3>
               <p className="text-[12px] text-[#6B778C]">{desc}</p>
@@ -596,7 +600,7 @@ export default function ReportsScreen() {
                 ))}
               </div>
 
-              {/* net P&L strip — revenue vs expenses tells the owner the real story */}
+              {/* net P&L strip - revenue vs expenses tells the owner the real story */}
               {data && (() => {
                 const revenue7 = data.daily.reduce((s, d) => s + d.revenue, 0);
                 const profit7 = data.daily.reduce((s, d) => s + d.profit, 0);
@@ -682,7 +686,7 @@ export default function ReportsScreen() {
             </div>
           )}
 
-          {/* stock aging: real inventory-batch breakdown — heaviest items per bucket */}
+          {/* stock aging: real inventory-batch breakdown - heaviest items per bucket */}
           {drill === "stock" && stockAgingItems.length > 0 && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
@@ -769,7 +773,7 @@ export default function ReportsScreen() {
         </DialogContent>
       </Dialog>
 
-      {/* scheduled-report email dialog — persists to Settings, sends via /api/cron/report */}
+      {/* scheduled-report email dialog - persists to Settings, sends via /api/cron/report */}
       <ScheduleDialog open={scheduleOpen} onOpenChange={setScheduleOpen} currentReport={drillMeta?.title} />
     </div>
   );
@@ -777,7 +781,7 @@ export default function ReportsScreen() {
 
 /* ── Scheduled report email dialog ────────────────────────────
    Real persisted schedule (Settings.reportSchedule*) backed by
-   /api/cron/report — the mock Frappe scheduler hook that emails
+   /api/cron/report - the mock Frappe scheduler hook that emails
    the owner a full sales summary (logged to Messages as Email). */
 const FREQ_LABEL: Record<string, string> = {
   Daily: "Every day, 08:00 EAT",
@@ -847,7 +851,7 @@ function ScheduleDialog({
       );
       toast({
         title: d.ok ? "Test report sent ✓" : "Not sent",
-        description: d.ok ? `Emailed to ${d.email} — check Messages for the copy.` : d.message,
+        description: d.ok ? `Emailed to ${d.email} - check Messages for the copy.` : d.message,
       });
       if (d.ok) onOpenChange(false);
     } catch (e) {
@@ -887,9 +891,9 @@ function ScheduleDialog({
             <Select value={freq} onValueChange={setFreq} disabled={!enabled}>
               <SelectTrigger className="w-full rounded-xl text-[13px]"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="Daily">Daily — every day 08:00 EAT</SelectItem>
-                <SelectItem value="Weekly">Weekly — Mondays 08:00 EAT</SelectItem>
-                <SelectItem value="Monthly">Monthly — 1st 08:00 EAT</SelectItem>
+                <SelectItem value="Daily">Daily - every day 08:00 EAT</SelectItem>
+                <SelectItem value="Weekly">Weekly - Mondays 08:00 EAT</SelectItem>
+                <SelectItem value="Monthly">Monthly - 1st 08:00 EAT</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -910,7 +914,7 @@ function ScheduleDialog({
           {/* status */}
           <div className="rounded-xl bg-[#E9F2FF] p-3 text-[11px] leading-relaxed text-[#0052CC]">
             {enabled
-              ? `Active — ${FREQ_LABEL[freq]} → ${email}. Last sent: ${last ? last.toLocaleString("en-KE", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "never"}`
+              ? `Active - ${FREQ_LABEL[freq]} → ${email}. Last sent: ${last ? last.toLocaleString("en-KE", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "never"}`
               : "Schedule is off. Turn it on to receive automatic reports."}
           </div>
 
@@ -967,7 +971,7 @@ function RecordExpenseForm({ onRecorded }: { onRecorded: () => void | Promise<vo
       });
       toast({
         title: "Expense recorded ✓",
-        description: `${form.category} — ${KES(amount)} at ${d.expense.storeName} (${form.paidVia}).`,
+        description: `${form.category} - ${KES(amount)} at ${d.expense.storeName} (${form.paidVia}).`,
       });
       setForm({ storeId: "", category: "Rent", amount: "", paidVia: "Cash", note: "", refNo: "" });
       setOpen(false);
@@ -1047,7 +1051,7 @@ function RecordExpenseForm({ onRecorded }: { onRecorded: () => void | Promise<vo
               <Input
                 value={form.note}
                 onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))}
-                placeholder="e.g. KPLC tokens — September"
+                placeholder="e.g. KPLC tokens - September"
                 className="h-8 rounded-lg text-[12px]"
               />
             </div>

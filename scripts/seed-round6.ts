@@ -1,7 +1,7 @@
 /**
  * One-off: seed Round-6 procurement + expense + returns demo data.
  *  • 5 Kenyan suppliers across categories
- *  • 2 purchase orders (one Received with stock already applied? no — historical
+ *  • 2 purchase orders (one Received with stock already applied? no - historical
  *    one is marked Received without touching stock, one live Draft/Sent for the UI)
  *  • ~12 expenses across stores/categories for the P&L view
  * Safe to re-run: skips when its data already exists.
@@ -39,7 +39,7 @@ async function main() {
       const cementSup = suppliers.find((s) => s.category === "Cement")!;
       const paintSup = suppliers.find((s) => s.category === "Paint")!;
 
-      // A fully received historical PO (stock effect intentionally NOT applied —
+      // A fully received historical PO (stock effect intentionally NOT applied -
       // it predates the feature; live stock already includes it narratively).
       const d1 = new Date();
       d1.setDate(d1.getDate() - 9);
@@ -78,16 +78,16 @@ async function main() {
     const stores = await db.store.findMany();
     if (stores.length) {
       const rows: { storeId: number; category: string; note: string; amount: number; paidVia: string; daysAgo: number; refNo?: string }[] = [
-        { storeId: stores[0].id, category: "Rent", note: "Monthly shop rent — Thika Road plaza", amount: 85000, paidVia: "Bank", daysAgo: 12, refNo: "RENT-SEP" },
+        { storeId: stores[0].id, category: "Rent", note: "Monthly shop rent - Thika Road plaza", amount: 85000, paidVia: "Bank", daysAgo: 12, refNo: "RENT-SEP" },
         { storeId: stores[0].id, category: "Electricity", note: "KPLC token purchase", amount: 12400, paidVia: "M-Pesa", daysAgo: 6, refNo: "KPLC-88213" },
-        { storeId: stores[0].id, category: "Transport", note: "Delivery boda runs — last week", amount: 3200, paidVia: "Cash", daysAgo: 4 },
+        { storeId: stores[0].id, category: "Transport", note: "Delivery boda runs - last week", amount: 3200, paidVia: "Cash", daysAgo: 4 },
         { storeId: stores[0].id, category: "Supplies", note: "Receipt rolls + shopping bags", amount: 4600, paidVia: "Cash", daysAgo: 3 },
-        { storeId: stores[0].id, category: "Marketing", note: "Radio spot — Rastra 100.3FM", amount: 15000, paidVia: "M-Pesa", daysAgo: 8 },
+        { storeId: stores[0].id, category: "Marketing", note: "Radio spot - Rastra 100.3FM", amount: 15000, paidVia: "M-Pesa", daysAgo: 8 },
         { storeId: stores[0].id, category: "Repairs", note: "POS drawer + shutter servicing", amount: 5500, paidVia: "Cash", daysAgo: 2 },
       ];
       if (stores[1]) {
         rows.push(
-          { storeId: stores[1].id, category: "Rent", note: "Monthly shop rent — Kiambu stand", amount: 48000, paidVia: "Bank", daysAgo: 12, refNo: "RENT-KB-SEP" },
+          { storeId: stores[1].id, category: "Rent", note: "Monthly shop rent - Kiambu stand", amount: 48000, paidVia: "Bank", daysAgo: 12, refNo: "RENT-KB-SEP" },
           { storeId: stores[1].id, category: "Electricity", note: "KPLC token purchase", amount: 7800, paidVia: "M-Pesa", daysAgo: 7, refNo: "KPLC-88410" },
           { storeId: stores[1].id, category: "Salaries", note: "Casual loader wages (week)", amount: 9000, paidVia: "M-Pesa", daysAgo: 5 },
           { storeId: stores[1].id, category: "Transport", note: "Stock pickup from Thika HQ", amount: 4500, paidVia: "Cash", daysAgo: 3 },

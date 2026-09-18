@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 export const dynamic = "force-dynamic";
 
 /**
- * GET /api/suppliers/[id]/statement — everything the procurement reconciliation
+ * GET /api/suppliers/[id]/statement - everything the procurement reconciliation
  * statement needs for one supplier:
  *   • purchase orders (every status) with per-PO received/outstanding value,
  *   • return-to-vendor debit notes (credited vs pending),
@@ -77,7 +77,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
   const pendingCreditValue = returnedValue - creditedValue;
 
   // Net traded = goods bought (received) − goods sent back, whether the credit
-  // has landed or not — the debit note already reduced our stock value.
+  // has landed or not - the debit note already reduced our stock value.
   const netTraded = purchasedValue - returnedValue;
 
   const priceListSavings = prices.reduce((a, p) => a + Math.max(0, p.product.cost - p.cost), 0);

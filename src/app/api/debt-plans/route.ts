@@ -9,7 +9,7 @@ function computeOverdue(p: { nextDueDate: Date; status: string }): number {
   return Math.max(0, days);
 }
 
-/** GET /api/debt-plans — debtors with plans + aging. */
+/** GET /api/debt-plans - debtors with plans + aging. */
 export async function GET() {
   const plans = await db.debtPlan.findMany({
     include: { customer: true },
@@ -49,7 +49,7 @@ export async function GET() {
   });
 }
 
-/** POST /api/debt-plans — create a payment plan for a customer. */
+/** POST /api/debt-plans - create a payment plan for a customer. */
 export async function POST(req: NextRequest) {
   const body = await req.json();
   if (!body.customerId || !body.totalDebt) {

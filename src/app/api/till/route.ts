@@ -5,9 +5,9 @@ import { emitLive } from "@/lib/live-emit";
 export const dynamic = "force-dynamic";
 
 /**
- * GET  /api/till?storeId=N — current open till session + live totals (X-report data)
+ * GET  /api/till?storeId=N - current open till session + live totals (X-report data)
  *                          + the last 5 closed shifts for the Z-report history list.
- * POST /api/till — { action, storeId, ... }
+ * POST /api/till - { action, storeId, ... }
  *   action: "open"      { openingFloat }            → opens a shift for the store
  *   action: "x-report"  {}                          → live totals snapshot (drawer stays open)
  *   action: "close"     { countedCash, note? }      → Z-report: closes shift, computes variance
@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
   if (!storeId) return NextResponse.json({ error: "storeId required" }, { status: 400 });
 
   if (action === "open") {
-    // One open shift per store — refuse a second one.
+    // One open shift per store - refuse a second one.
     const existing = await db.tillSession.findFirst({ where: { storeId, status: "Open" } });
     if (existing) return NextResponse.json({ error: "Till is already open for this store." }, { status: 409 });
 

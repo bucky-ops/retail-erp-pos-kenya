@@ -11,7 +11,7 @@ async function main() {
     const existing = await db.debtPayment.count({ where: { debtPlanId: plan.id } });
     if (existing > 0) continue;
     const methods = ["M-Pesa", "Cash", "Bank"];
-    // 1–2 historical installments, spaced a week apart.
+    // 1-2 historical installments, spaced a week apart.
     const n = plan.totalDebt > 20000 ? 2 : 1;
     for (let i = 0; i < n; i++) {
       const amount = Math.min(plan.installmentAmount, plan.totalDebt);
@@ -23,7 +23,7 @@ async function main() {
           customerId: plan.customerId,
           amount,
           method: methods[i % methods.length],
-          note: i === 0 ? "Installment received — thank you" : "Installment received",
+          note: i === 0 ? "Installment received - thank you" : "Installment received",
           createdAt: at,
         },
       });

@@ -138,17 +138,16 @@ function SaveButton({ onSave, label = "Save changes" }: { onSave: () => Promise<
 }
 
 /**
- * Device & Offline panel — PWA install, service-worker status and the
+ * Device & Offline panel - PWA install, service-worker status and the
  * offline sale queue with a manual replay button.
  */
 function DevicePanel() {
   const { canInstall, installed, standalone, swActive, promptInstall } = usePwaInstall();
   const [queue, setQueue] = useState<{ total: number; unsynced: number }>({ total: 0, unsynced: 0 });
-  const [online, setOnline] = useState(true);
+  const [online, setOnline] = useState(() => (typeof navigator !== "undefined" ? navigator.onLine : true));
   const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
-    setOnline(navigator.onLine);
     const up = () => setOnline(true);
     const down = () => setOnline(false);
     window.addEventListener("online", up);
@@ -188,8 +187,8 @@ function DevicePanel() {
   );
 
   const rows: { label: string; ok: boolean; note: string; warn?: boolean }[] = [
-    { label: "Connection", ok: online, note: online ? "Online — selling live" : "Offline — sales queue locally", warn: true },
-    { label: "Offline shell (service worker)", ok: swActive, note: swActive ? "Active — app caches for zero-network boots" : "Registering… (or served without HTTPS)", warn: true },
+    { label: "Connection", ok: online, note: online ? "Online - selling live" : "Offline - sales queue locally", warn: true },
+    { label: "Offline shell (service worker)", ok: swActive, note: swActive ? "Active - app caches for zero-network boots" : "Registering… (or served without HTTPS)", warn: true },
     {
       label: "App install",
       ok: standalone || installed,
@@ -238,7 +237,7 @@ function DevicePanel() {
 
       <div className="mt-6 max-w-[560px] rounded-xl border border-[#C8E6C9] bg-[#F0FFF4] p-4">
         <p className="text-[12px] leading-relaxed text-[#1B7A2E]">
-          <strong>Offline-first by design.</strong> Sales are written to this device&apos;s IndexedDB first, then synced —
+          <strong>Offline-first by design.</strong> Sales are written to this device&apos;s IndexedDB first, then synced -
           so load-shedding or dead zones never stop the till. Stock, loyalty and KRA receipt numbering resolve when the
           connection returns.
         </p>
@@ -541,7 +540,7 @@ export default function SettingsScreen() {
                   </Table>
                 </div>
                 <p className="mt-3 text-[11px] text-[#6B778C]">
-                  Role permissions are enforced server-side — e.g. credit sales above limit need Manager override at POS.
+                  Role permissions are enforced server-side - e.g. credit sales above limit need Manager override at POS.
                 </p>
               </Panel>
             )}
@@ -582,7 +581,7 @@ export default function SettingsScreen() {
             {/* ── PRINT FORMATS ── */}
             {section === "print" && (
               <Panel>
-                <PanelHead title="Print Formats" sub="Receipt branding — live previews update as you edit" icon={ReceiptText} />
+                <PanelHead title="Print Formats" sub="Receipt branding - live previews update as you edit" icon={ReceiptText} />
                 <div className="mt-6 grid grid-cols-12 gap-6">
                   <div className="col-span-12 @2xl:col-span-5">
                     {/* 80mm mini receipt */}
@@ -623,7 +622,7 @@ export default function SettingsScreen() {
                       </div>
                       <div className="mt-2 h-1.5 rounded-full" style={{ background: draft.receiptPrimaryColor }} />
                       <div className="mt-3 space-y-1.5">
-                        {["INV-2847 • John Kamau", "Bamburi Cement 50kg — 4 × 1,250", "Dulux Vinyl Matt 4L — 1 × 3,850"].map((r) => (
+                        {["INV-2847 • John Kamau", "Bamburi Cement 50kg - 4 × 1,250", "Dulux Vinyl Matt 4L - 1 × 3,850"].map((r) => (
                           <div key={r} className="flex justify-between border-b border-dashed border-[#DFE1E6] pb-1 text-[7px] text-[#172B4D]">
                             <span>{r.split(" • ")[0]}</span>
                             <span>{r.split(" • ")[1] ?? ""}</span>
@@ -725,14 +724,14 @@ export default function SettingsScreen() {
                       </TableRow>
                       <TableRow>
                         <TableCell className="text-[12px] font-semibold text-[#172B4D]">Exempt</TableCell>
-                        <TableCell className="font-mono text-[12px] font-bold text-[#6B778C]">—</TableCell>
+                        <TableCell className="font-mono text-[12px] font-bold text-[#6B778C]">-</TableCell>
                         <TableCell className="text-[12px] text-[#6B778C]">Financial services, land</TableCell>
                       </TableRow>
                     </TableBody>
                   </Table>
                 </div>
                 <p className="mt-4 rounded-xl bg-[#F4F5F7] p-3 text-[12px] text-[#6B778C]">
-                  VAT rate is managed under <span className="font-semibold text-[#0052CC]">Company</span> — currently{" "}
+                  VAT rate is managed under <span className="font-semibold text-[#0052CC]">Company</span> - currently{" "}
                   {draft.vatRate}% on (subtotal − discounts). eTIMS invoices always transmit the computed VAT per line.
                 </p>
               </Panel>
@@ -828,7 +827,7 @@ export default function SettingsScreen() {
                         set("mpesaEnvironment", v as SettingsDto["mpesaEnvironment"]);
                         if (v === "Production") {
                           toast({
-                            title: "Production selected — double-check keys",
+                            title: "Production selected - double-check keys",
                             description: "STK pushes will hit the live Daraja gateway. Save to persist.",
                           });
                         }
@@ -936,7 +935,7 @@ export default function SettingsScreen() {
                     variant="outline"
                     onClick={() =>
                       toast({
-                        title: "Test SMS sent to 0712345678 — Delivered",
+                        title: "Test SMS sent to 0712345678 - Delivered",
                         description: `Sender ${draft.smsSenderName} • 1 segment • KES 1`,
                       })
                     }
@@ -983,7 +982,7 @@ export default function SettingsScreen() {
                   </Field>
                 </div>
                 <div className="mt-4 max-w-[560px] rounded-xl border border-[#0052CC]/25 bg-[#E9F2FF] p-4">
-                  <p className="text-[12px] font-bold text-[#0052CC]">Live preview — Gold member basket</p>
+                  <p className="text-[12px] font-bold text-[#0052CC]">Live preview - Gold member basket</p>
                   <p className="mt-1 text-[13px] text-[#172B4D]">
                     Spend KES 1,000 → earn{" "}
                     <span className="font-display font-bold">{loyaltyPreview.pts} pts</span> = KES {loyaltyPreview.kes} value
@@ -1019,7 +1018,7 @@ export default function SettingsScreen() {
                       Happy Hour auto-pricing
                     </p>
                     <p className="mt-1 max-w-md text-[11px] leading-relaxed text-[#6B778C]">
-                      Automatic time-boxed discount — e.g. 10% off Cement between 14:00 and 16:00 to move slow stock.
+                      Automatic time-boxed discount - e.g. 10% off Cement between 14:00 and 16:00 to move slow stock.
                       Applied at every till (and to offline sales replayed later, using the time they were rung up).
                     </p>
                   </div>
@@ -1077,7 +1076,7 @@ export default function SettingsScreen() {
                 <div className="mt-4 flex max-w-[560px] items-center justify-between rounded-xl border border-[#FFD54F] bg-[#FFF8E1] px-4 py-3">
                   <p className="text-[12px] text-[#8D6708]">
                     {draft.happyHourEnabled
-                      ? `Window ${draft.happyHourStart}–${draft.happyHourEnd} • ${Math.round(draft.happyHourPercent)}% off ${draft.happyHourCategory === "All" ? "all products" : draft.happyHourCategory}`
+                      ? `Window ${draft.happyHourStart}-${draft.happyHourEnd} • ${Math.round(draft.happyHourPercent)}% off ${draft.happyHourCategory === "All" ? "all products" : draft.happyHourCategory}`
                       : "Happy Hour is switched off"}
                   </p>
                   <span
@@ -1102,7 +1101,7 @@ export default function SettingsScreen() {
                         },
                         "Happy Hour saved",
                         draft.happyHourEnabled
-                          ? `${draft.happyHourStart}–${draft.happyHourEnd} • ${Math.round(draft.happyHourPercent)}% off ${draft.happyHourCategory === "All" ? "all products" : draft.happyHourCategory}`
+                          ? `${draft.happyHourStart}-${draft.happyHourEnd} • ${Math.round(draft.happyHourPercent)}% off ${draft.happyHourCategory === "All" ? "all products" : draft.happyHourCategory}`
                           : "Tills will not auto-discount"
                       )
                     }
@@ -1208,7 +1207,7 @@ export default function SettingsScreen() {
                         Scheduled report email
                       </p>
                       <p className="mt-1 max-w-md text-[11px] leading-relaxed text-[#6B778C]">
-                        Automatic owner summary — revenue, VAT, top products & payment split
+                        Automatic owner summary - revenue, VAT, top products & payment split
                         (wire <code className="rounded bg-white px-1 font-mono text-[10px]">GET /api/cron/report</code> to any scheduler).
                         Last sent: {draft?.reportScheduleLastSentAt ? rel(draft.reportScheduleLastSentAt) : "never"}.
                       </p>
@@ -1221,7 +1220,7 @@ export default function SettingsScreen() {
                           const r = await api.post<{ ok: boolean; message?: string; email?: string }>("/api/cron/report?force=1", {});
                           toast({
                             title: r.ok ? "Report emailed ✅" : "Not sent",
-                            description: r.ok ? `Delivered to ${r.email} — copy logged in Messages.` : r.message,
+                            description: r.ok ? `Delivered to ${r.email} - copy logged in Messages.` : r.message,
                           });
                           const s = await api.get<SettingsDto>("/api/settings");
                           setDraft(s);
@@ -1252,9 +1251,9 @@ export default function SettingsScreen() {
                     >
                       <SelectTrigger className="h-9 w-[220px] rounded-xl text-[12px]"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="Daily">Daily — every day 08:00</SelectItem>
-                        <SelectItem value="Weekly">Weekly — Mondays 08:00</SelectItem>
-                        <SelectItem value="Monthly">Monthly — 1st 08:00</SelectItem>
+                        <SelectItem value="Daily">Daily - every day 08:00</SelectItem>
+                        <SelectItem value="Weekly">Weekly - Mondays 08:00</SelectItem>
+                        <SelectItem value="Monthly">Monthly - 1st 08:00</SelectItem>
                       </SelectContent>
                     </Select>
                     <Input
@@ -1286,16 +1285,16 @@ export default function SettingsScreen() {
             {section === "shortcuts" && (
               <Panel>
                 <h3 className="font-display text-[15px] font-bold text-[#172B4D]">Keyboard shortcuts</h3>
-                <p className="mt-0.5 text-[12px] text-[#6B778C]">Every speed key in DukaFlow — learn these and the till flies.</p>
+                <p className="mt-0.5 text-[12px] text-[#6B778C]">Every speed key in DukaFlow - learn these and the till flies.</p>
                 <div className="mt-4 grid gap-2 @2xl:grid-cols-2">
                   {[
-                    { keys: ["F2"], where: "POS", what: "Focus the scan / search field — scan or type, then Enter adds the first match" },
-                    { keys: ["F4"], where: "POS", what: "Open Quick Return — scan a receipt number and refund what came back" },
+                    { keys: ["F2"], where: "POS", what: "Focus the scan / search field - scan or type, then Enter adds the first match" },
+                    { keys: ["F4"], where: "POS", what: "Open Quick Return - scan a receipt number and refund what came back" },
                     { keys: ["Enter"], where: "POS scan", what: "Add the first search match to the cart (barcode guns press Enter automatically)" },
                     { keys: ["Enter"], where: "Stock take", what: "Scan mode: each barcode Enter bumps that line's counted quantity" },
                     { keys: ["Esc"], where: "Anywhere", what: "Close the top dialog without saving" },
                     { keys: ["Ctrl", "P"], where: "Anywhere", what: "Print the open statement / receipt / label sheet (uses the print-ready area)" },
-                    { keys: ["0–9"], where: "Login", what: "Type the 4-digit staff PIN — the pad also clicks" },
+                    { keys: ["0-9"], where: "Login", what: "Type the 4-digit staff PIN - the pad also clicks" },
                   ].map((r, i) => (
                     <div
                       key={i}
@@ -1321,7 +1320,7 @@ export default function SettingsScreen() {
                   ))}
                 </div>
                 <p className="mt-4 rounded-xl border border-dashed border-[#DFE1E6] bg-[#FAFBFC] px-4 py-3 text-[11.5px] leading-relaxed text-[#6B778C]">
-                  <b className="text-[#172B4D]">Tip for cashiers:</b> keep one hand on the barcode gun and one on the keyboard —
+                  <b className="text-[#172B4D]">Tip for cashiers:</b> keep one hand on the barcode gun and one on the keyboard -
                   F2 → scan → Enter → Cash → Enter closes a sale without touching the mouse. Print dialogs respect the
                   print-area isolation, so only the receipt / statement / sticker sheet lands on paper.
                 </p>

@@ -1,15 +1,15 @@
 "use client";
 
 /**
- * DukaFlow — Stock take / cycle-count workspace.
+ * DukaFlow - Stock take / cycle-count workspace.
  *
  * Opened from the Inventory screen "Stock Take" button. Three tabs:
- *   1. Count — the live counting grid for the open session: search lines,
+ *   1. Count - the live counting grid for the open session: search lines,
  *      enter shelf quantities (steppers / direct input / "Same" quick match),
  *      live variance coloring, approve applies variances to real stock.
- *   2. Sessions — every count session with progress, value variance and
+ *   2. Sessions - every count session with progress, value variance and
  *      status; resume counting or approve from here too.
- *   3. New count — open a session (snapshots system quantities so live sales
+ *   3. New count - open a session (snapshots system quantities so live sales
  *      during the count don't skew the math).
  *
  * Approve = one transaction applying every counted variance to StockLevel,
@@ -158,7 +158,7 @@ export function StockTakeDialog({
   }, [session]);
 
   /* scan-to-count: a scanned label (barcode gun fires Enter) bumps that line's
-   * counted qty by 1 — the counter just scans every physical unit on the
+   * counted qty by 1 - the counter just scans every physical unit on the
    * shelf. Matches barcode first, then SKU. Unknown codes toast amber. */
   const handleScan = useCallback(
     async (raw: string) => {
@@ -197,7 +197,7 @@ export function StockTakeDialog({
       }>(`/api/stock-take/${session.id}`, { action: "approve" });
       setResult({ ...d, stNo: session.stNo });
       toast({
-        title: `${session.stNo} approved — stock updated ✓`,
+        title: `${session.stNo} approved - stock updated ✓`,
         description: `${d.applied.length} variance lines • net ${KES(d.netValue)} • #stock-alerts notified.`,
       });
       await loadSessions();
@@ -238,7 +238,7 @@ export function StockTakeDialog({
       });
       toast({
         title: `${d.stNo} opened ✓`,
-        description: `${d.items} stock lines snapshotted — start counting!`,
+        description: `${d.items} stock lines snapshotted - start counting!`,
       });
       setForm({ storeId: "", category: "All", startedBy: "Owner", note: "" });
       await loadSessions();
@@ -283,10 +283,10 @@ export function StockTakeDialog({
       <DialogContent className="max-w-3xl rounded-2xl">
         <DialogHeader>
           <DialogTitle className="font-display flex items-center gap-2 text-[16px] text-[#172B4D]">
-            <ClipboardCheck size={16} className="text-[#0052CC]" /> Stock take — cycle counts with variance control
+            <ClipboardCheck size={16} className="text-[#0052CC]" /> Stock take - cycle counts with variance control
           </DialogTitle>
           <DialogDescription>
-            Snapshot stock, count the shelf, approve — variances land on real inventory with a full audit trail.
+            Snapshot stock, count the shelf, approve - variances land on real inventory with a full audit trail.
           </DialogDescription>
         </DialogHeader>
 
@@ -310,7 +310,7 @@ export function StockTakeDialog({
                 <ClipboardCheck className="mx-auto mb-2 h-8 w-8 text-[#DFE1E6]" />
                 <p className="text-[13px] font-semibold text-[#172B4D]">No count session open</p>
                 <p className="mx-auto mt-1 max-w-xs text-[11px] text-[#6B778C]">
-                  Open one under “New count” — it snapshots today’s system quantities so sales during the count won’t skew variances.
+                  Open one under “New count” - it snapshots today’s system quantities so sales during the count won’t skew variances.
                 </p>
                 {openSessions.length === 0 && (sessions?.length ?? 0) > 0 && (
                   <Button size="sm" onClick={() => setTab("sessions")} className="mt-3 h-8 rounded-lg bg-[#0052CC] text-[12px] font-bold text-white hover:bg-[#0041A8]">
@@ -343,7 +343,7 @@ export function StockTakeDialog({
                       value={scan}
                       onChange={(e) => setScan(e.target.value)}
                       onKeyDown={onScanKey}
-                      placeholder="Scan a shelf label (or type barcode + Enter) — each scan = +1 unit counted"
+                      placeholder="Scan a shelf label (or type barcode + Enter) - each scan = +1 unit counted"
                       className="h-8 rounded-lg border-[#B2DFDB] bg-white font-mono text-[12px]"
                       aria-label="Barcode scan to count"
                     />
@@ -399,7 +399,7 @@ export function StockTakeDialog({
                             value={c ?? ""}
                             onChange={(e) => setCounts((m) => ({ ...m, [it.id]: Math.max(0, Number(e.target.value) || 0) }))}
                             onBlur={(e) => { const v = Number(e.target.value); if (Number.isFinite(v) && e.target.value !== "") void saveCount(it, Math.max(0, v)); }}
-                            placeholder="—"
+                            placeholder="-"
                             className="h-7 w-14 rounded-lg border border-[#DFE1E6] text-center font-mono text-[12px] font-bold tabular-nums text-[#172B4D] outline-none focus:border-[#0052CC]"
                             aria-label={`Counted quantity for ${it.product.name}`}
                           />
@@ -432,7 +432,7 @@ export function StockTakeDialog({
                 {/* live tally + approve */}
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[#172B4D] px-4 py-3">
                   <div>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-white/60">Live variance — {countedItems} counted, {session.items.length - countedItems} to go</p>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-white/60">Live variance - {countedItems} counted, {session.items.length - countedItems} to go</p>
                     <p className="font-display text-[16px] font-bold text-white">
                       {KES(liveVariance.value)}
                       <span className="ml-2 text-[11px] font-semibold text-white/70">
@@ -464,7 +464,7 @@ export function StockTakeDialog({
               {sessions === null ? (
                 <p className="py-6 text-center text-[12px] text-[#6B778C]"><Loader2 className="mr-1 inline h-3.5 w-3.5 animate-spin" /> Loading…</p>
               ) : sessions.length === 0 ? (
-                <p className="py-6 text-center text-[12px] text-[#6B778C]">No stock takes yet — open your first count under “New count”.</p>
+                <p className="py-6 text-center text-[12px] text-[#6B778C]">No stock takes yet - open your first count under “New count”.</p>
               ) : (
                 sessions.map((s) => {
                   const pct = s.totalItems > 0 ? Math.round((s.countedItems / s.totalItems) * 100) : 0;
@@ -544,7 +544,7 @@ export function StockTakeDialog({
             </div>
             <div className="rounded-xl border border-[#00C853]/30 bg-[#E8F5E9]/50 px-4 py-3">
               <p className="text-[11px] font-semibold text-[#1B7A2E]">
-                How it works: the session snapshots every stock line in scope. Count the shelf at your pace — POS stays live. Approving applies each variance to real stock, values it at cost, and posts the digest to #stock-alerts.
+                How it works: the session snapshots every stock line in scope. Count the shelf at your pace - POS stays live. Approving applies each variance to real stock, values it at cost, and posts the digest to #stock-alerts.
               </p>
             </div>
             <div className="flex justify-end">

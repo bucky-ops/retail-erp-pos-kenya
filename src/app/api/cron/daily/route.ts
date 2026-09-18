@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 export const dynamic = "force-dynamic";
 
 /**
- * GET/POST /api/cron/daily — the store's daily automation jobs.
+ * GET/POST /api/cron/daily - the store's daily automation jobs.
  * Mirrors a Frappe scheduler hook:
  *   1. Recompute overdueDays for all Active debt plans
  *   2. Send Birthday SMS to customers whose birthday is today (deduped per day)
@@ -57,7 +57,7 @@ async function runDailyJobs() {
     birthdaySent++;
   }
 
-  // ── 3. Debt reminders — plans due tomorrow, opt-out respected ──
+  // ── 3. Debt reminders - plans due tomorrow, opt-out respected ──
   const tomorrowStart = new Date(todayStart.getTime() + 864e5);
   const tomorrowEnd = new Date(todayStart.getTime() + 2 * 864e5);
   const dueTomorrow = plans.filter(
@@ -82,7 +82,7 @@ async function runDailyJobs() {
     debtRemindersSent++;
   }
 
-  // ── 4. Daily expenses digest — today's petty cash + bills ──
+  // ── 4. Daily expenses digest - today's petty cash + bills ──
   // Owner's morning digest: what the business spent today, by category,
   // logged as an Email-type entry in SmsLog (mock mailer).
   const todayExpenses = await db.expense.findMany({

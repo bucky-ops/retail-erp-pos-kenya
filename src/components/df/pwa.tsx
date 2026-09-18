@@ -33,7 +33,7 @@ export function PWARegister() {
             if (nw.state === "installed" && navigator.serviceWorker.controller) {
               toast({
                 title: "DukaFlow updated 🎉",
-                description: "A new version is ready — reload to switch.",
+                description: "A new version is ready - reload to switch.",
                 duration: 8000,
               });
             }
@@ -41,7 +41,7 @@ export function PWARegister() {
         });
       })
       .catch(() => {
-        /* SW is a progressive enhancement — never block the app. */
+        /* SW is a progressive enhancement - never block the app. */
       });
 
     const onControllerChange = () => reg?.active?.postMessage("SKIP_WAITING");
@@ -66,7 +66,7 @@ export function usePwaInstall() {
     const onInstalled = () => {
       setInstalled(true);
       setDeferred(null);
-      toast({ title: "DukaFlow installed 📱", description: "Launch it from your home screen — works offline." });
+      toast({ title: "DukaFlow installed 📱", description: "Launch it from your home screen - works offline." });
     };
     window.addEventListener("beforeinstallprompt", onPrompt);
     window.addEventListener("appinstalled", onInstalled);

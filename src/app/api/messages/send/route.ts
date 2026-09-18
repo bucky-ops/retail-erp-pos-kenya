@@ -15,7 +15,7 @@ function renderTemplate(body: string, c: { name: string; loyaltyPoints: number; 
 }
 
 /**
- * POST /api/messages/send — blast SMS/WhatsApp to an audience.
+ * POST /api/messages/send - blast SMS/WhatsApp to an audience.
  * body: { audience: all|gold|hasDebt|birthdayToday|boughtLast7|customer, customerId?, channel: SMS|WhatsApp, body }
  */
 export async function POST(req: NextRequest) {

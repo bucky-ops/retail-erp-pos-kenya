@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * POS — the offline-first point of sale.
+ * POS - the offline-first point of sale.
  *
  * Flow: every sale is written to the IndexedDB queue FIRST (survives refresh,
  * crash and full offline), then M-Pesa STK runs when applicable, then the sale
@@ -138,7 +138,7 @@ function computeTotals(args: {
 }): Totals {
   const subtotal = args.lines.reduce((s, l) => s + l.unitPrice * l.qty, 0);
   const tierPct = args.tier === "Gold" ? 0.1 : args.tier === "Silver" ? 0.05 : 0;
-  // NOTE: components stay float to mirror /api/sales exactly — the server
+  // NOTE: components stay float to mirror /api/sales exactly - the server
   // rounds only VAT and the grand total, so the PAY button always matches
   // the receipt to the shilling.
   const tierDiscount = subtotal * tierPct;
@@ -237,7 +237,7 @@ export default function PosScreen() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("Cash");
   const [paying, setPaying] = useState(false);
   const [tillOpen, setTillOpen] = useState(false);
-  /* till shift liveness — drives the green pulse dot on the Till button */
+  /* till shift liveness - drives the green pulse dot on the Till button */
   const [tillSessionLive, setTillSessionLive] = useState(false);
   useEffect(() => {
     if (activeStoreId === "all") return;
@@ -292,7 +292,7 @@ export default function PosScreen() {
           if (alive) setUnsynced(c2.unsynced);
         }
       } catch {
-        /* IndexedDB unavailable — POS still works in-memory */
+        /* IndexedDB unavailable - POS still works in-memory */
       }
     })();
     return () => {
@@ -370,7 +370,7 @@ export default function PosScreen() {
           setSearch("");
         }
       } catch {
-        /* offline — keep last catalog so POS never stops selling */
+        /* offline - keep last catalog so POS never stops selling */
       } finally {
         if (alive) setProductsLoading(false);
       }
@@ -437,7 +437,7 @@ export default function PosScreen() {
     setPromoInput("");
     toast({
       title: `Promo ${code} applied`,
-      description: "Server validates on pay — flat KES 500 off when subtotal ≥ KES 5,000",
+      description: "Server validates on pay - flat KES 500 off when subtotal ≥ KES 5,000",
     });
   };
 
@@ -553,7 +553,7 @@ export default function PosScreen() {
       if (r.to) setEmailTo(r.to);
     } catch {
       setEmailSubject(`Tax Invoice ${success.sale.receiptNo}`);
-      setEmailBody("Could not preview the e-invoice — try again.");
+      setEmailBody("Could not preview the e-invoice - try again.");
     } finally {
       setEmailLoading(false);
     }
@@ -614,7 +614,7 @@ export default function PosScreen() {
       const c = await offlineQueue.count();
       setUnsynced(c.unsynced);
     } catch {
-      /* queue write failed (private mode?) — continue with direct post */
+      /* queue write failed (private mode?) - continue with direct post */
     }
 
     try {
@@ -622,7 +622,7 @@ export default function PosScreen() {
       if (paymentMethod === "M-Pesa") {
         const phone = customer?.phone ?? "0712345678";
         if (isOffline) {
-          toast({ title: "Queued — STK will fire on sync", description: "Sale stored on this device" });
+          toast({ title: "Queued - STK will fire on sync", description: "Sale stored on this device" });
         } else {
           setStk({ open: true, phase: "pending", phone, id: null, message: null });
           try {
@@ -640,7 +640,7 @@ export default function PosScreen() {
               status = st.status;
             }
             if (status !== "Success") {
-              toast({ title: "STK not confirmed in 10s", description: "Confirm the payment on the phone — sale continues." });
+              toast({ title: "STK not confirmed in 10s", description: "Confirm the payment on the phone - sale continues." });
             }
             setStk((s) => ({ ...s, phase: "success" }));
             await sleep(500);
@@ -668,7 +668,7 @@ export default function PosScreen() {
           redeemed: totals.pointsToUse,
         };
         setSuccess({ sale: offlineSale, loyalty, offline: true });
-        toast({ title: "Sale saved offline — will auto-sync", description: KES(totals.total) });
+        toast({ title: "Sale saved offline - will auto-sync", description: KES(totals.total) });
         setPaying(false);
         return;
       }
@@ -721,7 +721,7 @@ export default function PosScreen() {
       };
       setSuccess({ sale: offlineSale, loyalty, offline: true });
       toast({
-        title: "Sale saved offline — will auto-sync",
+        title: "Sale saved offline - will auto-sync",
         description: e instanceof Error ? e.message : KES(totals.total),
       });
     } finally {
@@ -760,11 +760,11 @@ export default function PosScreen() {
             <Landmark size={12} /> Till
             {tillSessionLive && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#00C853]" aria-hidden />}
           </button>
-          {/* Quick return — scan a receipt at the till (F4) */}
+          {/* Quick return - scan a receipt at the till (F4) */}
           <button
             onClick={() => setQuickReturnOpen(true)}
             className="inline-flex h-7 items-center gap-1.5 rounded-full border border-[#FFCDD2] bg-[#FFEBEE] px-3 text-[11px] font-bold text-[#C62828] transition hover:border-[#FF5630]/60 hover:bg-[#ffe3e0]"
-            aria-label="Process a quick return — scan or type a receipt number"
+            aria-label="Process a quick return - scan or type a receipt number"
           >
             <RotateCcw size={12} /> Quick Return
             <kbd className="rounded border border-[#F4B8B0] bg-white/70 px-1 font-sans text-[9px] font-bold text-[#C62828]">F4</kbd>
@@ -1060,7 +1060,7 @@ export default function PosScreen() {
                 <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#F4F5F7] text-[#6B778C]">
                   <ShoppingCart size={20} />
                 </div>
-                <p className="font-display text-[14px] font-semibold text-[#172B4D]">Cart empty — scan or tap a product</p>
+                <p className="font-display text-[14px] font-semibold text-[#172B4D]">Cart empty - scan or tap a product</p>
                 <p className="mt-1 text-[12px] text-[#6B778C]">Works fully offline; sales queue and auto-sync.</p>
               </div>
             ) : (
@@ -1321,7 +1321,7 @@ export default function PosScreen() {
               </button>
             </div>
             <p className="text-center text-[10px] text-[#6B778C]">
-              Prices include 0% rating for exempt items — VAT auto-calculated
+              Prices include 0% rating for exempt items - VAT auto-calculated
             </p>
           </div>
         </div>
@@ -1359,7 +1359,7 @@ export default function PosScreen() {
                 ))}
               </div>
             ) : custResults.length === 0 ? (
-              <p className="py-8 text-center text-[12px] text-[#6B778C]">No customers match — create one below.</p>
+              <p className="py-8 text-center text-[12px] text-[#6B778C]">No customers match - create one below.</p>
             ) : (
               custResults.map((c) => (
                 <button
@@ -1483,8 +1483,8 @@ export default function PosScreen() {
                       className="rounded-lg"
                     />
                     <p className="mt-2 text-[10px] font-medium text-[#6B778C]">
-                      KRA Verification QR — CU:{" "}
-                      <span className="font-mono">{success.sale.cuInvoiceNumber ?? "—"}</span>
+                      KRA Verification QR - CU:{" "}
+                      <span className="font-mono">{success.sale.cuInvoiceNumber ?? "-"}</span>
                     </p>
                   </div>
                 )}
@@ -1531,7 +1531,7 @@ export default function PosScreen() {
                 </div>
                 {success.offline && (
                   <p className="mt-3 text-[11px] text-[#6B778C]">
-                    Stored on this device — will sync automatically when back online.
+                    Stored on this device - will sync automatically when back online.
                   </p>
                 )}
               </div>
@@ -1554,7 +1554,7 @@ export default function PosScreen() {
                   <Button
                     variant="outline"
                     disabled
-                    title={success.offline ? "Sync the queued sale first — offline sales have no KRA invoice yet" : "Retry eTIMS on the Receipts screen once online"}
+                    title={success.offline ? "Sync the queued sale first - offline sales have no KRA invoice yet" : "Retry eTIMS on the Receipts screen once online"}
                     className="h-10 rounded-xl border-dashed border-[#DFE1E6] bg-white text-[13px] font-semibold text-[#6B778C]"
                   >
                     <Mail size={14} /> Email
@@ -1583,7 +1583,7 @@ export default function PosScreen() {
               Email KRA e-invoice
             </DialogTitle>
             <DialogDescription className="text-[12px]">
-              {success?.sale.receiptNo} — verified electronic tax invoice (mock mailer, audited in Messages).
+              {success?.sale.receiptNo} - verified electronic tax invoice (mock mailer, audited in Messages).
             </DialogDescription>
           </DialogHeader>
 
@@ -1607,8 +1607,8 @@ export default function PosScreen() {
                 />
                 <p className="text-[10px] text-[#6B778C]">
                   {customer?.email
-                    ? "Customer has an email on file — future verified invoices auto-send to it."
-                    : `No email on file for ${customer?.name ?? "this customer"} — the address you send to will be saved.`}
+                    ? "Customer has an email on file - future verified invoices auto-send to it."
+                    : `No email on file for ${customer?.name ?? "this customer"} - the address you send to will be saved.`}
                 </p>
               </div>
               <div className="space-y-1.5">
@@ -1653,7 +1653,7 @@ export default function PosScreen() {
               {blocked?.reason}
             </AlertDialogDescription>
             <p className="text-[12px] text-[#6B778C]">
-              Clear the block at Manager — record a debt payment on the Debts screen, then retry the sale.
+              Clear the block at Manager - record a debt payment on the Debts screen, then retry the sale.
             </p>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1680,12 +1680,12 @@ export default function PosScreen() {
 }
 
 /* ══════════════════════════════════════════════════════════════
-   TillDialog — cash-drawer shift management (X & Z reports).
+   TillDialog - cash-drawer shift management (X & Z reports).
 
    X-Report: mid-shift snapshot. Drawer stays in, shift continues.
    Z-Report: end-of-shift close. Counted cash is reconciled against
    the expected drawer (opening float + cash sales) and the shift is
-   locked with a variance figure — exactly like a real hardware till.
+   locked with a variance figure - exactly like a real hardware till.
    ══════════════════════════════════════════════════════════════ */
 
 interface TillSessionDto {
@@ -1763,16 +1763,20 @@ function TillDialog({
 
   useEffect(() => {
     if (!open) return;
-    setZResult(null);
-    setClosing(false);
-    void load();
+    // async boundary: the loader and the resets touch state, so run them off-tick
+    const t = setTimeout(() => {
+      setZResult(null);
+      setClosing(false);
+      void load();
+    }, 0);
+    return () => clearTimeout(t);
   }, [open, load]);
 
   const openTill = async () => {
     setBusy(true);
     try {
       await api.post("/api/till", { action: "open", storeId, openedBy: userName, openingFloat: Number(float) || 0 });
-      toast({ title: "Till opened ✓", description: `${KES(Number(float) || 0)} float recorded — drawer unlocked.` });
+      toast({ title: "Till opened ✓", description: `${KES(Number(float) || 0)} float recorded - drawer unlocked.` });
       await load();
     } catch (e) {
       toast({ title: "Could not open till", description: e instanceof Error ? e.message : "Try again" });
@@ -1785,7 +1789,7 @@ function TillDialog({
     setBusy(true);
     try {
       await api.post("/api/till", { action: "x-report", storeId });
-      toast({ title: "X-Report printed ✓", description: "Mid-shift snapshot — drawer stays open." });
+      toast({ title: "X-Report printed ✓", description: "Mid-shift snapshot - drawer stays open." });
     } catch (e) {
       toast({ title: "X-Report failed", description: e instanceof Error ? e.message : "Try again" });
     } finally {
@@ -1804,7 +1808,7 @@ function TillDialog({
       });
       setZResult({ session: d.session, report: d.report });
       toast({
-        title: "Z-Report — shift closed",
+        title: "Z-Report - shift closed",
         description:
           d.session.variance === 0
             ? "Drawer balanced to the shilling. Asante!"
@@ -1828,14 +1832,14 @@ function TillDialog({
       <DialogContent className="max-h-[90vh] overflow-y-auto rounded-2xl sm:max-w-[520px] df-scroll">
         <DialogHeader>
           <DialogTitle className="font-display flex items-center gap-2 text-[16px] text-[#172B4D]">
-            <Landmark size={16} className="text-[#0052CC]" /> Cash Drawer — {storeName}
+            <Landmark size={16} className="text-[#0052CC]" /> Cash Drawer - {storeName}
           </DialogTitle>
           <DialogDescription>
             {zResult
-              ? `Shift #${zResult.session.id} closed at ${zResult.session.closedAt ? new Date(zResult.session.closedAt).toLocaleTimeString("en-KE", { hour: "2-digit", minute: "2-digit" }) : ""} — drawer locked.`
+              ? `Shift #${zResult.session.id} closed at ${zResult.session.closedAt ? new Date(zResult.session.closedAt).toLocaleTimeString("en-KE", { hour: "2-digit", minute: "2-digit" }) : ""} - drawer locked.`
               : session
                 ? `Shift open since ${new Date(session.openedAt).toLocaleTimeString("en-KE", { hour: "2-digit", minute: "2-digit" })} by ${session.openedBy}`
-                : "No open shift — open the till to start selling on this drawer."}
+                : "No open shift - open the till to start selling on this drawer."}
           </DialogDescription>
         </DialogHeader>
 
@@ -1892,7 +1896,7 @@ function TillDialog({
                 aria-label="Opening float amount"
               />
               <p className="mt-2 text-[11px] text-[#6B778C]">
-                Typical float: KES 2,000–5,000 in KES 50/100/200 notes for change-making.
+                Typical float: KES 2,000-5,000 in KES 50/100/200 notes for change-making.
               </p>
             </div>
             <Button
@@ -1978,7 +1982,7 @@ function TillDialog({
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
                   className="rounded-xl text-[12px]"
-                  placeholder="Note (optional) — e.g. KES 200 given as change to neighbour shop"
+                  placeholder="Note (optional) - e.g. KES 200 given as change to neighbour shop"
                   aria-label="Shift note"
                 />
                 <div className="flex gap-2">

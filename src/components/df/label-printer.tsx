@@ -1,11 +1,11 @@
 "use client";
 
 /**
- * Barcode Label Printer — per-product shelf labels (Inventory screen).
+ * Barcode Label Printer - per-product shelf labels (Inventory screen).
  *
  * Prints sheets of 50×30mm (default) or 38×25mm thermal stickers, each with:
  *  • company strip + shelf price (the big scannable number)
- *  • a scannable QR encoding the product's barcode value — a scanner gun (or
+ *  • a scannable QR encoding the product's barcode value - a scanner gun (or
  *    phone) typing those digits straight into the POS scan field or the
  *    stock-take counter finds the product instantly
  *  • a decorative 1D barcode rendering (CSS bars derived from the digits)
@@ -16,7 +16,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Copy, Loader2, Minus, PackageOpen, Plus, Printer, ScanBarcode, X } from "lucide-react";
+import { Copy, Loader2, Minus, PackageOpen, Plus, Printer, ScanBarcode, Search, X } from "lucide-react";
 import { api } from "@/lib/api";
 import { KES } from "@/types";
 import { QrImage } from "@/components/df/qr";
@@ -96,7 +96,10 @@ export function LabelPrinter({
   }, [storeId]);
 
   useEffect(() => {
-    if (open) void load();
+    // async boundary: the loader touches state, so never call it synchronously here
+    if (!open) return;
+    const t = setTimeout(() => void load(), 0);
+    return () => clearTimeout(t);
   }, [open, load]);
 
   const categories = useMemo(() => ["All", ...Array.from(new Set((data?.products ?? []).map((p) => p.category)))], [data]);
@@ -159,7 +162,7 @@ export function LabelPrinter({
               Barcode Label Printer
             </DialogTitle>
             <DialogDescription className="text-[12px]">
-              Shelf stickers for {storeName} — QR scans straight into the POS scan field or stock-take counter.
+              Shelf stickers for {storeName} - QR scans straight into the POS scan field or stock-take counter.
             </DialogDescription>
           </DialogHeader>
         </div>
@@ -314,7 +317,7 @@ export function LabelPrinter({
                   <Copy size={24} className="mb-2 text-[#6B778C]" />
                   <p className="font-display text-[13px] font-semibold text-[#172B4D]">No labels yet</p>
                   <p className="mt-1 max-w-[220px] text-[11.5px] text-[#6B778C]">
-                    Pick products on the left — each copy prints one sticker with price + scan code.
+                    Pick products on the left - each copy prints one sticker with price + scan code.
                   </p>
                 </div>
               ) : (
@@ -394,7 +397,7 @@ export function LabelPrinter({
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
- * Label Studio — enhanced inline presentation for the Inventory Pro
+ * Label Studio - enhanced inline presentation for the Inventory Pro
  * "Barcode & Labels" tab. Two thermal presets (80×40mm, 50×25mm), checkbox
  * multi-select with search, a live 3×8 label-sheet preview (3 columns of
  * 50mm = 150mm and 2 columns of 80mm = 160mm both fit a 210mm A4 row; rows
@@ -491,7 +494,9 @@ export function LabelStudio({
   }, [storeId]);
 
   useEffect(() => {
-    void load();
+    // async boundary: the loader touches state, so never call it synchronously here
+    const t = setTimeout(() => void load(), 0);
+    return () => clearTimeout(t);
   }, [load]);
 
   const categories = useMemo(
@@ -547,7 +552,7 @@ export function LabelStudio({
           <div>
             <h3 className="font-display text-[14px] font-bold text-[#172B4D]">Barcode &amp; Label Studio</h3>
             <p className="text-[11.5px] text-[#6B778C]">
-              Shelf stickers for {storeName} — CSS-drawn scannable bars, print-isolated A4 sheet
+              Shelf stickers for {storeName} - CSS-drawn scannable bars, print-isolated A4 sheet
             </p>
           </div>
         </div>
@@ -695,7 +700,7 @@ export function LabelStudio({
         <div className="flex min-h-0 flex-col bg-[#F4F5F7] lg:col-span-7">
           <div className="flex items-center justify-between border-b border-[#DFE1E6] bg-white px-3 py-2">
             <p className="text-[11px] font-semibold text-[#6B778C]">
-              Live sheet preview — {cols}×{SHEET_ROWS} grid • {labelW}×{labelH}mm stickers
+              Live sheet preview - {cols}×{SHEET_ROWS} grid • {labelW}×{labelH}mm stickers
             </p>
             {totalLabels > preview.length && (
               <span className="rounded-full bg-[#FFF8E1] px-2 py-0.5 text-[10.5px] font-bold text-[#B8860B]">
@@ -709,7 +714,7 @@ export function LabelStudio({
                 <Copy size={24} className="mb-2 text-[#6B778C]" />
                 <p className="font-display text-[13px] font-semibold text-[#172B4D]">No labels yet</p>
                 <p className="mt-1 max-w-[240px] text-[11.5px] text-[#6B778C]">
-                  Tick products on the left — each selection renders a sticker with price + scan bars.
+                  Tick products on the left - each selection renders a sticker with price + scan bars.
                 </p>
               </div>
             ) : (

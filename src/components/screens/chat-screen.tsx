@@ -38,12 +38,12 @@ const AVATAR_COLORS = ["#0052CC", "#00C853", "#FF5630", "#FFAB00", "#78909C"];
 const ERP_DOCS: DocLink[] = [
   { title: "Sales Invoice INV-2847", sub: "KES 12,944 • John Kamau • Verified", kind: "invoice" },
   { title: "Stock Transfer STK-0012", sub: "20× Bamburi Cement • Kiambu → Thika", kind: "stock" },
-  { title: "Debt Plan — John Kamau", sub: "KES 2,000 • 4 weekly installments", kind: "debt" },
+  { title: "Debt Plan - John Kamau", sub: "KES 2,000 • 4 weekly installments", kind: "debt" },
 ];
 
 const THREAD_SEED: { author: string; initials: string; text: string; mine?: boolean }[] = [
   { author: "Mary Wanjiku", initials: "MW", text: "We need to update price for Bamburi? Buying 1100, selling 1250 margin low." },
-  { author: "James Otieno", initials: "JO", text: "Margin 13% — keep for Gold discount 10% still profit.", mine: true },
+  { author: "James Otieno", initials: "JO", text: "Margin 13% - keep for Gold discount 10% still profit.", mine: true },
 ];
 
 const colorFor = (s: string) => {
@@ -120,7 +120,9 @@ export default function ChatScreen() {
   }, []);
 
   useEffect(() => {
-    void load(selectedId);
+    // async boundary: the loader touches state, so never call it synchronously here
+    const t = setTimeout(() => void load(selectedId), 0);
+    return () => clearTimeout(t);
   }, [load]);
 
   /* auto-scroll to newest message */
@@ -134,7 +136,7 @@ export default function ChatScreen() {
     if (event !== "chat:new") return;
     const m = payload as LiveChatMessage;
     if (m.channelId === selectedId) {
-      // Own posts are already appended by send() — dedupe by real id.
+      // Own posts are already appended by send() - dedupe by real id.
       setMessages((ms) =>
         m.id > 0 && ms.some((x) => x.id === m.id)
           ? ms
@@ -210,7 +212,7 @@ export default function ChatScreen() {
 
   return (
     <div className="grid grid-cols-12 gap-0 overflow-hidden rounded-2xl border border-[#DFE1E6] bg-white shadow-sm">
-      {/* Pane 1 — channel rail */}
+      {/* Pane 1 - channel rail */}
       <div className="col-span-12 flex max-h-[660px] flex-col border-[#DFE1E6] @2xl:col-span-3 @2xl:border-r">
         <div className="border-b border-[#DFE1E6] p-3">
           <div className="flex items-center gap-2">
@@ -278,7 +280,7 @@ export default function ChatScreen() {
         </div>
       </div>
 
-      {/* Pane 2 — conversation */}
+      {/* Pane 2 - conversation */}
       <div className="col-span-12 flex max-h-[660px] flex-col @2xl:col-span-6">
         <div className="flex items-center justify-between border-b border-[#DFE1E6] px-4 py-3">
           <div className="min-w-0">
@@ -323,7 +325,7 @@ export default function ChatScreen() {
             <TableSkeleton rows={4} cols={2} />
           ) : messages.length === 0 ? (
             <div className="py-10 text-center text-[12px] text-[#6B778C]">
-              No messages yet — say karibu to kick things off.
+              No messages yet - say karibu to kick things off.
             </div>
           ) : (
             messages.map((m) => {
@@ -442,7 +444,7 @@ export default function ChatScreen() {
         </div>
       </div>
 
-      {/* Pane 3 — thread rail */}
+      {/* Pane 3 - thread rail */}
       <div className="col-span-12 hidden max-h-[660px] flex-col border-[#DFE1E6] @4xl:col-span-3 @4xl:flex @4xl:border-l">
         <div className="border-b border-[#DFE1E6] px-4 py-3">
           <p className="font-display text-[14px] font-bold text-[#172B4D]">Thread</p>

@@ -22,7 +22,7 @@ const STAGE_LABEL: Record<string, string> = {
   paid: "Paid",
 };
 
-/** PATCH /api/pipeline/[id] — move stage (one-click mature) or edit. */
+/** PATCH /api/pipeline/[id] - move stage (one-click mature) or edit. */
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const body = await req.json();

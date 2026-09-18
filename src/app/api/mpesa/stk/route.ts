@@ -16,7 +16,7 @@ interface StkSession {
 const sessions = new Map<string, StkSession>();
 const RESOLVE_MS = 3500; // simulate user entering M-Pesa PIN after 3.5s
 
-/** POST /api/mpesa/stk — initiate STK push (Daraja Simulator). */
+/** POST /api/mpesa/stk - initiate STK push (Daraja Simulator). */
 export async function POST(req: NextRequest) {
   const { phone, amount, receiptNo } = await req.json();
   if (!phone || !amount) {
@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
   });
 }
 
-/** GET /api/mpesa/stk?id= — poll STK status (C2B callback simulated). */
+/** GET /api/mpesa/stk?id= - poll STK status (C2B callback simulated). */
 export async function GET(req: NextRequest) {
   const id = new URL(req.url).searchParams.get("id");
   if (!id) return NextResponse.json({ ok: false, error: "id required" }, { status: 400 });

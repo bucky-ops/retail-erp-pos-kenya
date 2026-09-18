@@ -9,7 +9,7 @@ const currentPeriod = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 };
 
-/** GET /api/payroll?period= — employees + computed payslips. */
+/** GET /api/payroll?period= - employees + computed payslips. */
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const period = searchParams.get("period") ?? currentPeriod();
@@ -74,7 +74,7 @@ export async function GET(req: NextRequest) {
   });
 }
 
-/** POST /api/payroll/run — commit payroll for a period (upsert payslips). */
+/** POST /api/payroll/run - commit payroll for a period (upsert payslips). */
 export async function POST(req: NextRequest) {
   const body = await req.json();
   const period = body.period ?? currentPeriod();
@@ -102,7 +102,7 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ ok: true, period, count: employees.length });
 }
 
-/** PATCH /api/payroll — mark period paid (auto journal simulated). */
+/** PATCH /api/payroll - mark period paid (auto journal simulated). */
 export async function PATCH(req: NextRequest) {
   const body = await req.json();
   const period = body.period ?? currentPeriod();

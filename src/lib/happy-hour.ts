@@ -1,5 +1,5 @@
 /**
- * Happy Hour auto-pricing — shared window logic (client + server).
+ * Happy Hour auto-pricing - shared window logic (client + server).
  * The window supports overnight spans (e.g. 22:00 → 02:00) and is evaluated
  * in the till's local time (the server and tills run on the same clock in a
  * single-shop deployment; multi-timezone shops would send the offset along).
@@ -39,7 +39,7 @@ export function happyHourMatchesCategory(cfg: HappyHourConfig, category: string)
   return !c || c === "All" || c.toLowerCase() === (category ?? "").toLowerCase();
 }
 
-/** Human label like "14:00–16:00" for banners and receipts. */
+/** Human label like "14:00-16:00" for banners and receipts. */
 export function happyHourLabel(cfg: HappyHourConfig): string {
-  return `${cfg.happyHourStart}–${cfg.happyHourEnd}`;
+  return `${cfg.happyHourStart}-${cfg.happyHourEnd}`;
 }

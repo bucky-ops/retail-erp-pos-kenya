@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
  * 50×30mm thermal sticker needs: product identity, shelf price, the barcode
  * value (which the POS scan field and the stock-take counter both accept as
  * input) plus company branding from Settings. Prices are live (tier promos
- * etc. apply at the till) — labels show the store-facing shelf price.
+ * etc. apply at the till) - labels show the store-facing shelf price.
  *
  * Response: { company: { name, kraPin }, products: [{ id, name, sku, barcode,
  * emoji, price, category, qty, storeName }] }

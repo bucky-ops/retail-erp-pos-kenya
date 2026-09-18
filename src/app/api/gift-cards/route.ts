@@ -4,7 +4,7 @@ import { generateQr } from "@/lib/etims";
 
 export const dynamic = "force-dynamic";
 
-/** GET /api/gift-cards — all gift cards with QR data URLs. */
+/** GET /api/gift-cards - all gift cards with QR data URLs. */
 export async function GET() {
   const cards = await db.giftCard.findMany({
     include: { customer: true },
@@ -22,7 +22,7 @@ export async function GET() {
   return NextResponse.json(withQr);
 }
 
-/** POST /api/gift-cards — issue a new gift card. */
+/** POST /api/gift-cards - issue a new gift card. */
 export async function POST(req: NextRequest) {
   const body = await req.json();
   const initialBalance = Number(body.initialBalance);

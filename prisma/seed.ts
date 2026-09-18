@@ -1,5 +1,5 @@
 /**
- * DukaFlow seed — Kenyan-realistic data for a hardware store ERP+POS.
+ * DukaFlow seed - Kenyan-realistic data for a hardware store ERP+POS.
  * Run: bun prisma/seed.ts
  */
 import { PrismaClient } from "@prisma/client";
@@ -158,7 +158,7 @@ async function main() {
     return created;
   };
 
-  // Older sales (previous days) for trends — ~30 records
+  // Older sales (previous days) for trends - ~30 records
   let seq = 2800;
   const olderStores = [thika.id, kiambu.id];
   const payModes = ["M-Pesa", "Cash", "Till", "M-Pesa", "Gift Card", "Cash"];
@@ -181,7 +181,7 @@ async function main() {
   await mkSale("INV-2845", thika.id, otieno.id, "Mary Wanjiku", [{ sku: "PLB-033", qty: 4 }, { sku: "PLB-041", qty: 1 }], "Till", 2);
   await mkSale("INV-2844", thika.id, achieng.id, "Mary Wanjiku", [{ sku: "CMT-001", qty: 30 }], "M-Pesa", 3);
   await mkSale("INV-2843", kiambu.id, mutiso.id, "Grace Akinyi", [{ sku: "TLS-009", qty: 0 }], "Gift Card", 3.8);
-  // fix: hammer out-of-stock — replace with valve
+  // fix: hammer out-of-stock - replace with valve
   const gcardSale = await db.sale.findFirst({ where: { receiptNo: "INV-2843" } });
   if (gcardSale) {
     await db.saleItem.deleteMany({ where: { saleId: gcardSale.id } });
@@ -320,10 +320,10 @@ async function main() {
   // ─── Accounting: chart of accounts + journals + bank stmt ─
   const coa: { code: string; name: string; type: string; parent?: string; isGroup?: boolean }[] = [
     { code: "1000", name: "ASSETS", type: "Asset", isGroup: true },
-    { code: "1010", name: "Cash — Thika Road", type: "Asset", parent: "1000" },
-    { code: "1020", name: "Cash — Kiambu Road", type: "Asset", parent: "1000" },
+    { code: "1010", name: "Cash - Thika Road", type: "Asset", parent: "1000" },
+    { code: "1020", name: "Cash - Kiambu Road", type: "Asset", parent: "1000" },
     { code: "1030", name: "M-Pesa Till 123456", type: "Asset", parent: "1000" },
-    { code: "1100", name: "Bank — Equity Current", type: "Asset", parent: "1000" },
+    { code: "1100", name: "Bank - Equity Current", type: "Asset", parent: "1000" },
     { code: "1200", name: "Inventory", type: "Asset", parent: "1000" },
     { code: "1300", name: "Debtors (Receivables)", type: "Asset", parent: "1000" },
     { code: "1400", name: "VAT Input (Recoverable)", type: "Asset", parent: "1000" },
@@ -336,8 +336,8 @@ async function main() {
     { code: "3100", name: "Owner Capital", type: "Equity", parent: "3000" },
     { code: "3200", name: "Retained Earnings", type: "Equity", parent: "3000" },
     { code: "4000", name: "REVENUE", type: "Revenue", isGroup: true },
-    { code: "4100", name: "Sales — Hardware", type: "Revenue", parent: "4000" },
-    { code: "4200", name: "Sales — Cement & Building", type: "Revenue", parent: "4000" },
+    { code: "4100", name: "Sales - Hardware", type: "Revenue", parent: "4000" },
+    { code: "4200", name: "Sales - Cement & Building", type: "Revenue", parent: "4000" },
     { code: "4300", name: "Other Income", type: "Revenue", parent: "4000" },
     { code: "5000", name: "COST OF GOODS SOLD", type: "COGS", isGroup: true },
     { code: "5100", name: "Purchases", type: "COGS", parent: "5000" },
@@ -364,27 +364,27 @@ async function main() {
   };
 
   // opening capital
-  await mkJournal("JV-0001", daysAgo(30).toISOString().slice(0, 10), "Opening balances — owner injection", "Manual", "", [
+  await mkJournal("JV-0001", daysAgo(30).toISOString().slice(0, 10), "Opening balances - owner injection", "Manual", "", [
     { code: "1010", debit: 850000 }, { code: "1030", debit: 320000 }, { code: "1100", debit: 1400000 },
     { code: "1200", debit: 2100000 }, { code: "3100", credit: 4670000 },
   ]);
   // two historical day-close journals (Sep 17 & 16)
-  await mkJournal("JV-0002", daysAgo(2).toISOString().slice(0, 10), "Daily sales — Z-2026-0917-THIKA", "DayClose", "Z-2026-0917-THIKA", [
+  await mkJournal("JV-0002", daysAgo(2).toISOString().slice(0, 10), "Daily sales - Z-2026-0917-THIKA", "DayClose", "Z-2026-0917-THIKA", [
     { code: "1010", debit: 47200, memo: "Cash sales" }, { code: "1030", debit: 52800, memo: "M-Pesa sales" },
     { code: "1100", debit: 4732, memo: "Card settlements" }, { code: "2200", credit: 16868, memo: "VAT 16%" },
     { code: "4100", credit: 62000 }, { code: "4200", credit: 33864 },
     { code: "5100", debit: 78900, memo: "COGS" }, { code: "1200", credit: 78900 },
   ]);
-  await mkJournal("JV-0003", daysAgo(1).toISOString().slice(0, 10), "Daily sales — Z-2026-0918-THIKA", "DayClose", "Z-2026-0918-THIKA", [
+  await mkJournal("JV-0003", daysAgo(1).toISOString().slice(0, 10), "Daily sales - Z-2026-0918-THIKA", "DayClose", "Z-2026-0918-THIKA", [
     { code: "1010", debit: 52400, memo: "Cash sales" }, { code: "1030", debit: 58700, memo: "M-Pesa sales" },
     { code: "2200", credit: 18210, memo: "VAT 16%" },
     { code: "4100", credit: 70000 }, { code: "4200", credit: 22890 },
     { code: "5100", debit: 87120, memo: "COGS" }, { code: "1200", credit: 87120 },
   ]);
-  await mkJournal("JV-0004", daysAgo(1).toISOString().slice(0, 10), "Electricity bill — Kenya Power", "Manual", "KPLC-8891", [
+  await mkJournal("JV-0004", daysAgo(1).toISOString().slice(0, 10), "Electricity bill - Kenya Power", "Manual", "KPLC-8891", [
     { code: "6300", debit: 18400 }, { code: "1010", credit: 18400 },
   ]);
-  await mkJournal("JV-0005", daysAgo(5).toISOString().slice(0, 10), "Rent — Thika Road shop", "Manual", "RENT-SEP", [
+  await mkJournal("JV-0005", daysAgo(5).toISOString().slice(0, 10), "Rent - Thika Road shop", "Manual", "RENT-SEP", [
     { code: "6200", debit: 120000 }, { code: "1100", credit: 120000 },
   ]);
 
@@ -424,20 +424,20 @@ async function main() {
   }
   await db.chatMessage.createMany({
     data: [
-      { channelId: chan["thika-road"], author: "Mary Wanjiku", initials: "MW", content: "Morning team! Cement stock low in Thika — 3 bags left. Need transfer from Kiambu.", createdAt: daysAgo(0, 7) },
+      { channelId: chan["thika-road"], author: "Mary Wanjiku", initials: "MW", content: "Morning team! Cement stock low in Thika - 3 bags left. Need transfer from Kiambu.", createdAt: daysAgo(0, 7) },
       { channelId: chan["thika-road"], author: "James Otieno", initials: "JO", content: "On it. Transferring 20 bags now. ETA 45 mins.", createdAt: daysAgo(0, 6.7), docLink: JSON.stringify({ title: "Stock Transfer STK-0012", sub: "Cement ×20 • Kiambu → Thika • View", kind: "stock" }) },
       { channelId: chan["thika-road"], author: "Grace Akinyi", initials: "GA", content: "Customer John Kamau asking for credit extension. Debt KES 6k overdue 5 days. Block at POS?", createdAt: daysAgo(0, 6.4) },
     ],
   });
   await db.chatMessage.createMany({
     data: [
-      { channelId: chan["stock-alerts"], author: "System Bot", initials: "SB", content: "⚠️ LOW STOCK: Bamburi Cement 50kg — 3 left at Thika Road (reorder point 20).", createdAt: daysAgo(0, 8) },
+      { channelId: chan["stock-alerts"], author: "System Bot", initials: "SB", content: "⚠️ LOW STOCK: Bamburi Cement 50kg - 3 left at Thika Road (reorder point 20).", createdAt: daysAgo(0, 8) },
       { channelId: chan["stock-alerts"], author: "System Bot", initials: "SB", content: "⚠️ OUT OF STOCK: Hammer 16oz Stanley at Thika Road.", createdAt: daysAgo(0, 5) },
-      { channelId: chan["stock-alerts"], author: "System Bot", initials: "SB", content: "⚠️ LOW STOCK: Dulux Vinyl Matt 20L — 4 left at Kiambu Road.", createdAt: daysAgo(0, 2) },
+      { channelId: chan["stock-alerts"], author: "System Bot", initials: "SB", content: "⚠️ LOW STOCK: Dulux Vinyl Matt 20L - 4 left at Kiambu Road.", createdAt: daysAgo(0, 2) },
     ],
   });
   await db.chatMessage.create({
-    data: { channelId: chan["general"], author: "Owner", initials: "OK", content: "Welcome to Raven — our in-house chat. Share ERP docs with / command. Karibuni!", createdAt: daysAgo(30) },
+    data: { channelId: chan["general"], author: "Owner", initials: "OK", content: "Welcome to Raven - our in-house chat. Share ERP docs with / command. Karibuni!", createdAt: daysAgo(30) },
   });
 
   // ─── SMS logs ────────────────────────────────────────────

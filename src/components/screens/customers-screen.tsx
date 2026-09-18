@@ -141,7 +141,9 @@ export default function CustomersScreen() {
   }, []);
 
   useEffect(() => {
-    void loadCustomers();
+    // async boundary: the loader touches state, so never call it synchronously here
+    const t = setTimeout(() => void loadCustomers(), 0);
+    return () => clearTimeout(t);
   }, [loadCustomers]);
 
   const filtered = useMemo(() => {
@@ -206,11 +208,11 @@ export default function CustomersScreen() {
         <>
           {/* KPI row */}
           <div className="grid grid-cols-1 gap-3 @xl:grid-cols-3">
-            <KpiCard icon={<Users size={17} />} label="Total customers" value={all ? String(kpis.total) : "—"} loading={!all} />
+            <KpiCard icon={<Users size={17} />} label="Total customers" value={all ? String(kpis.total) : "-"} loading={!all} />
             <KpiCard
               icon={<Sparkles size={17} />}
               label="Gold tier"
-              value={all ? String(kpis.gold) : "—"}
+              value={all ? String(kpis.gold) : "-"}
               loading={!all}
               iconBg="#FFF8E1"
               iconColor="#B8860B"
@@ -218,7 +220,7 @@ export default function CustomersScreen() {
             <KpiCard
               icon={<HandCoins size={17} />}
               label="Customers with debt"
-              value={all ? String(kpis.debt) : "—"}
+              value={all ? String(kpis.debt) : "-"}
               loading={!all}
               iconBg="#FFEBEE"
               iconColor="#FF5630"
@@ -318,10 +320,10 @@ export default function CustomersScreen() {
                             </span>
                           </TableCell>
                           <TableCell className={cn("p-3 font-bold", c.debtBalance > 0 ? "text-[#FF5630]" : "text-[#6B778C]")}>
-                            {c.debtBalance > 0 ? KES(c.debtBalance) : "–"}
+                            {c.debtBalance > 0 ? KES(c.debtBalance) : "-"}
                           </TableCell>
-                          <TableCell className="p-3">{c.giftCardBalance > 0 ? KES(c.giftCardBalance) : "–"}</TableCell>
-                          <TableCell className="p-3 text-[#6B778C]">{c.lastVisit ?? "—"}</TableCell>
+                          <TableCell className="p-3">{c.giftCardBalance > 0 ? KES(c.giftCardBalance) : "-"}</TableCell>
+                          <TableCell className="p-3 text-[#6B778C]">{c.lastVisit ?? "-"}</TableCell>
                           <TableCell className="p-3 text-right"><ChevronRight size={15} className="inline text-[#6B778C]" /></TableCell>
                         </TableRow>
                       ))}
@@ -345,7 +347,7 @@ export default function CustomersScreen() {
             <TabsContent value="price" className="mt-0">
               <EmptyState
                 icon={<Tags size={22} />}
-                title="Price groups — wholesale/retail tiers"
+                title="Price groups - wholesale/retail tiers"
                 sub="Assign group pricing per customer group. Coming in v2.5"
                 action={
                   <Button
@@ -368,7 +370,7 @@ export default function CustomersScreen() {
           <DialogHeader>
             <DialogTitle className="font-display text-[16px] font-bold text-[#172B4D]">New Customer</DialogTitle>
             <DialogDescription className="text-[12px] text-[#6B778C]">
-              Walk-in sign-up — starts at <b>Bronze</b> with 0 points.
+              Walk-in sign-up - starts at <b>Bronze</b> with 0 points.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -484,7 +486,7 @@ function CustomerDetail({
               <TierBadge tier={c.tier} />
             </div>
             <p className="mt-1 text-[13px] text-[#6B778C]">
-              {c.phone} • Credit limit {KES(c.creditLimit)} • Last visit {c.lastVisit ?? "—"}
+              {c.phone} • Credit limit {KES(c.creditLimit)} • Last visit {c.lastVisit ?? "-"}
             </p>
           </div>
           <div className="w-full max-w-sm">
@@ -582,7 +584,7 @@ function CustomerDetail({
             <h4 className="font-display text-[14px] font-bold text-[#172B4D]">Debt Plans</h4>
             <div className="mt-3 space-y-2">
               {detail.debtPlans.length === 0 ? (
-                <p className="rounded-xl border border-dashed border-[#DFE1E6] p-4 text-center text-[12px] text-[#6B778C]">No credit plans — clean slate 🎉</p>
+                <p className="rounded-xl border border-dashed border-[#DFE1E6] p-4 text-center text-[12px] text-[#6B778C]">No credit plans - clean slate 🎉</p>
               ) : (
                 detail.debtPlans.map((p) => (
                   <div key={p.id} className="rounded-xl border border-[#DFE1E6] bg-[#FAFBFC] p-3">
@@ -745,7 +747,7 @@ function LoyaltyProgram() {
     <div className="grid grid-cols-1 gap-4 @6xl:grid-cols-12">
       {/* rules builder */}
       <Panel className="@6xl:col-span-7">
-        <h4 className="font-display text-[14px] font-bold text-[#172B4D]">Program Rules — visual rule builder</h4>
+        <h4 className="font-display text-[14px] font-bold text-[#172B4D]">Program Rules - visual rule builder</h4>
         {!loaded ? (
           <div className="mt-3 space-y-2">
             <div className="h-16 animate-pulse rounded-xl bg-[#F4F5F7]" />
@@ -844,7 +846,7 @@ function LoyaltyProgram() {
 
         {/* gold preview */}
         <div className="mt-4 rounded-xl border border-[#FFE082] bg-[#FFF8E1] p-3">
-          <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-[#8B6D00]">Preview — Gold member</p>
+          <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-[#8B6D00]">Preview - Gold member</p>
           <div className="flex items-center gap-3 rounded-xl border border-[#DFE1E6] bg-white p-3">
             <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#FFF8E1] text-[13px] font-bold text-[#B8860B]">JM</span>
             <div>
@@ -889,7 +891,9 @@ function GiftCardsTab({ customers }: { customers: CustomerDto[] }) {
   }, []);
 
   useEffect(() => {
-    void load();
+    // async boundary: the loader touches state, so never call it synchronously here
+    const t = setTimeout(() => void load(), 0);
+    return () => clearTimeout(t);
   }, [load]);
 
   const issueCard = useCallback(async () => {
@@ -967,7 +971,7 @@ function GiftCardsTab({ customers }: { customers: CustomerDto[] }) {
         <EmptyState
           icon={<Gift size={22} />}
           title="No gift cards yet"
-          sub="Issue a prepaid card — customers redeem it at POS like cash."
+          sub="Issue a prepaid card - customers redeem it at POS like cash."
           action={
             <Button onClick={() => setIssuing(true)} className="rounded-xl bg-[#0052CC] text-white hover:bg-[#0041A8]">
               <Plus size={15} /> Issue Gift Card
@@ -1070,7 +1074,7 @@ function GiftCardsTab({ customers }: { customers: CustomerDto[] }) {
                 <SelectContent className="max-h-64">
                   <SelectItem value="none">Unassigned (open card)</SelectItem>
                   {customers.map((c) => (
-                    <SelectItem key={c.id} value={String(c.id)}>{c.name} — {c.phone}</SelectItem>
+                    <SelectItem key={c.id} value={String(c.id)}>{c.name} - {c.phone}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

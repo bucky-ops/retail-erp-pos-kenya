@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * DukaFlow live feed client — a singleton socket.io connection to the
+ * DukaFlow live feed client - a singleton socket.io connection to the
  * live-feed mini-service (port 3003, reached through the Caddy gateway as
  * "/?XTransformPort=3003") shared by every screen that wants real-time
  * events: dashboard feed, Raven chat, low-stock toasts.
@@ -16,7 +16,7 @@ import { io, type Socket } from "socket.io-client";
 
 export type LiveEventName = "sale:new" | "stock:low" | "chat:new" | "till:z";
 
-/** Payload broadcast with sale:new — mirrors the committed Sale row. */
+/** Payload broadcast with sale:new - mirrors the committed Sale row. */
 export interface LiveSale {
   receiptNo: string;
   storeName: string;
@@ -30,7 +30,7 @@ export interface LiveSale {
   createdAt: string;
 }
 
-/** Payload broadcast with stock:low — a product crossed its reorder point. */
+/** Payload broadcast with stock:low - a product crossed its reorder point. */
 export interface LiveLowStock {
   productName: string;
   emoji: string;
@@ -39,7 +39,7 @@ export interface LiveLowStock {
   reorderPoint: number;
 }
 
-/** Payload broadcast with chat:new — a Raven message was posted. */
+/** Payload broadcast with chat:new - a Raven message was posted. */
 export interface LiveChatMessage {
   channelId: number;
   channelName: string;
@@ -81,7 +81,7 @@ function ensureSocket(): Socket {
     socket.on("chat:new", onChat);
     socket.on("till:z", onTill);
 
-    // Replay buffer from the service (after a reload) — delivered as one batch.
+    // Replay buffer from the service (after a reload) - delivered as one batch.
     socket.on("recent", (items: { event: string; payload: unknown }[]) => {
       if (!Array.isArray(items)) return;
       for (const item of items.slice().reverse()) {
@@ -112,7 +112,7 @@ export function useLive(onEvent?: Listener): LiveStatus {
     const onConnect = () => setStatus("live");
     const onDisconnect = () => setStatus("down");
     const onError = () => setStatus("down");
-    // Already connected (e.g. remount) — sync status off the render path.
+    // Already connected (e.g. remount) - sync status off the render path.
     if (s.connected) queueMicrotask(() => setStatus("live"));
     s.on("connect", onConnect);
     s.on("disconnect", onDisconnect);

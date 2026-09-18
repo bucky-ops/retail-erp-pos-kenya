@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
-/** GET /api/dashboard?storeId= — owner KPIs, live feed, staff, trend. */
+/** GET /api/dashboard?storeId= - owner KPIs, live feed, staff, trend. */
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const storeId = searchParams.get("storeId");

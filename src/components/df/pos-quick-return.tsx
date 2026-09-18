@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * POS Quick Return — cashier-facing returns at the till.
+ * POS Quick Return - cashier-facing returns at the till.
  *
  * Scan (barcode gun on an 80mm receipt) or type an INV number → the receipt's
  * lines appear with how many units are still refundable → pick qty per line,
@@ -161,7 +161,7 @@ export function PosQuickReturn({ open, onOpenChange }: { open: boolean; onOpenCh
     [lookupBusy]
   );
 
-  /* barcode guns fire Enter — also auto-lookup when the value looks complete */
+  /* barcode guns fire Enter - also auto-lookup when the value looks complete */
   const onQueryKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       e.preventDefault();
@@ -242,7 +242,7 @@ export function PosQuickReturn({ open, onOpenChange }: { open: boolean; onOpenCh
               Quick Return
             </DialogTitle>
             <DialogDescription className="text-[12px]">
-              Scan the receipt barcode or type the INV number — refund straight from the till.
+              Scan the receipt barcode or type the INV number - refund straight from the till.
             </DialogDescription>
           </DialogHeader>
         </div>
@@ -291,7 +291,7 @@ export function PosQuickReturn({ open, onOpenChange }: { open: boolean; onOpenCh
               <ul className="mt-1.5 space-y-1 text-[11.5px] leading-relaxed text-[#6B778C]">
                 <li className="flex gap-1.5"><Check size={12} className="mt-0.5 shrink-0 text-[#1B7A2E]" /> Cash refunds adjust the open till drawer automatically</li>
                 <li className="flex gap-1.5"><Check size={12} className="mt-0.5 shrink-0 text-[#1B7A2E]" /> Refunds never exceed what the customer actually paid</li>
-                <li className="flex gap-1.5"><Check size={12} className="mt-0.5 shrink-0 text-[#1B7A2E]" /> Partial returns supported — already-returned units are greyed out</li>
+                <li className="flex gap-1.5"><Check size={12} className="mt-0.5 shrink-0 text-[#1B7A2E]" /> Partial returns supported - already-returned units are greyed out</li>
               </ul>
             </div>
           </div>

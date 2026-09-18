@@ -22,13 +22,13 @@ const STAGE_LABEL: Record<string, string> = {
   paid: "Paid",
 };
 
-/** GET /api/pipeline — all deals for the kanban. */
+/** GET /api/pipeline - all deals for the kanban. */
 export async function GET() {
   const deals = await db.pipelineDeal.findMany({ orderBy: { createdAt: "desc" } });
   return NextResponse.json(deals.map(toDto));
 }
 
-/** POST /api/pipeline — new quotation. */
+/** POST /api/pipeline - new quotation. */
 export async function POST(req: NextRequest) {
   const body = await req.json();
   if (!body.customerName || !body.amount) {

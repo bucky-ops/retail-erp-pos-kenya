@@ -3,13 +3,13 @@ import { db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
-/** GET /api/settings — singleton settings. */
+/** GET /api/settings - singleton settings. */
 export async function GET() {
   const settings = await db.settings.findUnique({ where: { id: 1 } });
   return NextResponse.json(settings);
 }
 
-/** PUT /api/settings — update any subset. */
+/** PUT /api/settings - update any subset. */
 export async function PUT(req: NextRequest) {
   const body = await req.json();
   const allowed = [

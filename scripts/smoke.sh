@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# ─────────────────────────────────────────────────────────────────────────────
-# DukaFlow — pre-push API smoke test (bash + curl, no test framework needed).
+# -----------------------------------------------------------------------------
+# DukaFlow - pre-push API smoke test (bash + curl, no test framework needed).
 #
 # Usage:   bash scripts/smoke.sh [base_url]
 #          BASE=http://localhost:3000 bash scripts/smoke.sh
@@ -14,7 +14,7 @@
 #      quantity of the cheapest stocked item.
 #
 # Exit code 0 = all green. Any failure prints ❌ and exits 1.
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 set -u
 
 BASE="${1:-${BASE:-http://localhost:3000}}"
@@ -52,14 +52,14 @@ expect_field() { # label method path jq_expr
   fi
 }
 
-echo "── DukaFlow smoke @ $BASE ──"
+echo "-- DukaFlow smoke @ $BASE --"
 
 # 1. read groups -----------------------------------------------------------------
 for p in bootstrap dashboard products inventory customers debt-plans pipeline reports suppliers purchase-orders expenses returns till payroll messages chat gift-cards; do
   expect_200 "GET /api/$p" GET "/api/$p"
 done
 
-# 2. stock-take lifecycle: open → count → CANCEL (leaves stock untouched) ────────
+# 2. stock-take lifecycle: open → count → CANCEL (leaves stock untouched) --------
 ST=$(req POST /api/stock-take '{"storeId":1,"category":"All","startedBy":"smoke-test"}')
 ST_CODE="$(echo "$ST" | tail -1)"; ST_ID="$(echo "$ST" | sed '$d' | json "d['id']")"
 if [ "$ST_CODE" = "200" ] || [ "$ST_CODE" = "409" ]; then
@@ -80,16 +80,16 @@ if [ -n "$ST_ID" ] && [ "$ST_ID" != "None" ] && [ "$ST_ID" != "" ]; then
     "d['status']=='Cancelled'" '{"action":"cancel"}'
 fi
 
-# 3. RTV over-return guard must 400 (not 200/500) ────────────────────────────────
+# 3. RTV over-return guard must 400 (not 200/500) --------------------------------
 OUT=$(req POST /api/supplier-returns '{"supplierId":1,"storeId":1,"reason":"Damaged","lines":[{"productId":1,"qty":999999}]}')
 CODE="$(echo "$OUT" | tail -1)"
 if [ "$CODE" = "400" ]; then PASS=$((PASS+1)); echo "✅ RTV over-return guarded (400)";
 else FAIL=$((FAIL+1)); echo "❌ RTV over-return guard (HTTP $CODE)"; fi
 
-# 4. cron/daily answers and reports expense digest shape ────────────────────────
+# 4. cron/daily answers and reports expense digest shape ------------------------
 expect_field "cron/daily expenses digest" POST /api/cron/daily "d['expenses'] is not None"
 
-# 5. supplier statement (procurement reconciliation) ─────────────────────────────
+# 5. supplier statement (procurement reconciliation) -----------------------------
 SUP_ID=$(req GET /api/suppliers)
 SUP_ID="$(echo "$SUP_ID" | sed '$d' | json "d[0]['id']")"
 if [ -n "$SUP_ID" ] && [ "$SUP_ID" != "None" ]; then
@@ -99,7 +99,7 @@ else
   FAIL=$((FAIL+1)); echo "❌ supplier statement (no suppliers found)"
 fi
 
-# 6. debtor statement email preview (GET only — never sends) ────────────────────
+# 6. debtor statement email preview (GET only - never sends) --------------------
 PLAN_ID=$(req GET /api/debt-plans)
 PLAN_ID="$(echo "$PLAN_ID" | sed '$d' | json "d['plans'][0]['id']")"
 if [ -n "$PLAN_ID" ] && [ "$PLAN_ID" != "None" ]; then
@@ -109,7 +109,7 @@ else
   FAIL=$((FAIL+1)); echo "❌ statement email preview (no plans found)"
 fi
 
-# 7. supplier statement email preview (GET only — never sends) ──────────────────
+# 7. supplier statement email preview (GET only - never sends) ------------------
 if [ -n "$SUP_ID" ] && [ "$SUP_ID" != "None" ]; then
   expect_field "supplier statement email preview" GET "/api/suppliers/$SUP_ID/statement/email" \
     "'Supplier Statement' in str(d['subject']) and 'NET TRADED' in d['body']"
@@ -117,6 +117,6 @@ else
   FAIL=$((FAIL+1)); echo "❌ supplier statement email preview (no suppliers found)"
 fi
 
-echo "──────────────────────────────"
+echo "------------------------------"
 echo "Smoke result: $PASS passed, $FAIL failed"
 [ "$FAIL" = "0" ] || exit 1

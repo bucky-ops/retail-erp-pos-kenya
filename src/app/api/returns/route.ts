@@ -4,7 +4,7 @@ import { emitLive } from "@/lib/live-emit";
 
 export const dynamic = "force-dynamic";
 
-/* DukaFlow — Sales returns & refunds.
+/* DukaFlow - Sales returns & refunds.
  *
  * GET  /api/returns?saleId=&limit=   → return history (newest first)
  * POST /api/returns                  → process a return against an original receipt
@@ -24,7 +24,7 @@ export const dynamic = "force-dynamic";
  *     so the Stock Aging report stays truthful.
  */
 
-/** GET — return history with receipt context. */
+/** GET - return history with receipt context. */
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const saleId = searchParams.get("saleId");
@@ -100,7 +100,7 @@ export async function POST(req: NextRequest) {
     /* Proportional "what the customer actually paid" ratio for this receipt.
      * total/subtotal captures VAT (×1.16) minus bill-level discounts, promo and
      * loyalty-point redemption in one number, so each refunded line reflects the
-     * real money out of the drawer — not the pre-VAT shelf price. */
+     * real money out of the drawer - not the pre-VAT shelf price. */
     const paidRatio = sale.subtotal > 0 ? sale.total / sale.subtotal : 1;
 
     // ── Validate quantities against originals minus prior returns ────────────

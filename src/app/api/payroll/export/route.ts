@@ -4,7 +4,7 @@ import { mpesaB2cCsv, bankCsv } from "@/lib/kenya-payroll";
 
 export const dynamic = "force-dynamic";
 
-/** GET /api/payroll/export?period=&type=b2c|bank — CSV payout files. */
+/** GET /api/payroll/export?period=&type=b2c|bank - CSV payout files. */
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const period = searchParams.get("period") ?? "current";

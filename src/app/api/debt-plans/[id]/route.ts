@@ -37,7 +37,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       where: { id: plan.customerId },
       data: { debtBalance: { decrement: paid } },
     });
-    // payment ledger row — powers the printable debtor statement
+    // payment ledger row - powers the printable debtor statement
     await db.debtPayment.create({
       data: {
         debtPlanId: plan.id,

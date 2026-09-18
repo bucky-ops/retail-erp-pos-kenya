@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
-/** GET /api/inventory?storeId=&q=&tab= — multi-store stock view with margins. */
+/** GET /api/inventory?storeId=&q=&tab= - multi-store stock view with margins. */
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const storeId = searchParams.get("storeId");
@@ -17,6 +17,10 @@ export async function GET(req: NextRequest) {
     },
     include: { product: true, store: true },
   });
+
+  /** Age of the current batch in days (Stock Aging report) - from StockLevel.receivedAt. */
+  const ageDays = (receivedAt: Date) =>
+    Math.max(0, Math.floor((Date.now() - new Date(receivedAt).getTime()) / 864e5));
 
   // tab filters: All Items | Low Stock | Out of Stock | Transfers
   let rows = levels;
@@ -46,6 +50,7 @@ export async function GET(req: NextRequest) {
       reorderPoint: l.reorderPoint,
       storeId: l.storeId,
       store: l.store.name,
+      stockAgeDays: ageDays(l.receivedAt),
     })),
     transfers: transfers.map((t) => ({
       ...t,

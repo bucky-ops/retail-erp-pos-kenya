@@ -15,8 +15,8 @@ import { Label } from "@/components/ui/label";
 /* ── tokens ────────────────────────────────────────────────── */
 
 const COLORS: { name: string; hex: string }[] = [
-  { name: "Primary — Trust Blue", hex: "#0052CC" },
-  { name: "Success — M-Pesa", hex: "#00C853" },
+  { name: "Primary - Trust Blue", hex: "#0052CC" },
+  { name: "Success - M-Pesa", hex: "#00C853" },
   { name: "Alert / Danger", hex: "#FF5630" },
   { name: "Navy / Dark", hex: "#172B4D" },
   { name: "Warning", hex: "#FFAB00" },
@@ -34,10 +34,10 @@ const luminance = (hex: string) => {
 };
 
 const TYPE_USAGE = [
-  { token: "h1 — page title", spec: "Sora 24px / 700", sample: "text-[24px] font-bold" },
-  { token: "h2 — section", spec: "Sora 20px / 700", sample: "text-[20px] font-bold" },
-  { token: "body — tables & forms", spec: "Inter 14px / 400", sample: "text-[14px]" },
-  { token: "caption — labels, meta", spec: "Inter 12px / 500", sample: "text-[12px] font-medium" },
+  { token: "h1 - page title", spec: "Sora 24px / 700", sample: "text-[24px] font-bold" },
+  { token: "h2 - section", spec: "Sora 20px / 700", sample: "text-[20px] font-bold" },
+  { token: "body - tables & forms", spec: "Inter 14px / 400", sample: "text-[14px]" },
+  { token: "caption - labels, meta", spec: "Inter 12px / 500", sample: "text-[12px] font-medium" },
 ];
 
 const TIERS = [
@@ -67,7 +67,7 @@ const TIERS = [
   },
 ];
 
-/** DukaMark SVG source — used to produce a real downloadable logo file. */
+/** DukaMark SVG source - used to produce a real downloadable logo file. */
 const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="512" height="512" fill="none">
   <path d="M7 5.5C7 4.67157 7.67157 4 8.5 4H16.2C22.5 4 27 8.8 27 16C27 23.2 22.5 28 16.2 28H8.5C7.67157 28 7 27.3284 7 26.5V5.5Z" fill="#0052CC" stroke="#0052CC" stroke-width="1.2" stroke-linejoin="round"/>
   <rect x="12.5" y="9.5" width="1.8" height="13" rx="0.9" fill="white" opacity="0.9"/>
@@ -88,14 +88,14 @@ export default function DesignScreen() {
     a.download = "dukaflow-logo.svg";
     a.click();
     URL.revokeObjectURL(url);
-    toast({ title: "Logo pack downloaded — 4 variants", description: "dukaflow-logo.svg (512×512 master)." });
+    toast({ title: "Logo pack downloaded - 4 variants", description: "dukaflow-logo.svg (512×512 master)." });
   };
 
   return (
     <div className="space-y-8">
       <ScreenHeader
         title="Design System"
-        subtitle="DukaFlow brand v2.4 — components, tokens & logo rules"
+        subtitle="DukaFlow brand v2.4 - components, tokens & logo rules"
         actions={
           <Button
             onClick={downloadLogo}
@@ -106,7 +106,7 @@ export default function DesignScreen() {
         }
       />
 
-      {/* ROW 1 — logo suite + colors/typography */}
+      {/* ROW 1 - logo suite + colors/typography */}
       <div className="grid grid-cols-12 gap-6">
         <Panel className="col-span-12 @4xl:col-span-5">
           <h3 className="font-display text-[16px] font-bold text-[#172B4D]">Logo Suite</h3>
@@ -203,7 +203,7 @@ export default function DesignScreen() {
                 Aa
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-[12px] font-bold uppercase tracking-widest text-[#6B778C]">Sora — Display</p>
+                <p className="text-[12px] font-bold uppercase tracking-widest text-[#6B778C]">Sora - Display</p>
                 <div className="mt-1 space-y-0.5">
                   {[
                     { w: 800, cls: "font-extrabold" },
@@ -212,16 +212,16 @@ export default function DesignScreen() {
                     { w: 400, cls: "font-normal" },
                   ].map((r) => (
                     <p key={r.w} className={cn("font-display text-[15px] text-[#172B4D]", r.cls)}>
-                      Sora {r.w} — Sell Smart. Stock Smart.
+                      Sora {r.w} - Sell Smart. Stock Smart.
                     </p>
                   ))}
                 </div>
               </div>
             </div>
             <div className="mt-4">
-              <p className="text-[12px] font-bold uppercase tracking-widest text-[#6B778C]">Inter — Body</p>
+              <p className="text-[12px] font-bold uppercase tracking-widest text-[#6B778C]">Inter - Body</p>
               <p className="mt-1 text-[14px] text-[#172B4D]">
-                Inter Regular 14 — body text for tables, forms and receipts. KRA eTIMS compliant invoicing, M-Pesa
+                Inter Regular 14 - body text for tables, forms and receipts. KRA eTIMS compliant invoicing, M-Pesa
                 reconciliation and stock transfers all render in Inter.
               </p>
             </div>
@@ -249,7 +249,7 @@ export default function DesignScreen() {
         </div>
       </div>
 
-      {/* ROW 2 — components + tier ladder */}
+      {/* ROW 2 - components + tier ladder */}
       <div className="grid grid-cols-12 gap-6">
         <Panel className="col-span-12 @6xl:col-span-7">
           <h3 className="font-display text-[16px] font-bold text-[#172B4D]">Components</h3>
@@ -310,7 +310,7 @@ export default function DesignScreen() {
 
         <Panel className="col-span-12 @6xl:col-span-5">
           <h3 className="font-display text-[16px] font-bold text-[#172B4D]">Tier Ladder</h3>
-          <p className="mt-0.5 text-[12px] text-[#6B778C]">Loyalty tiers — auto-upgrade on lifetime points.</p>
+          <p className="mt-0.5 text-[12px] text-[#6B778C]">Loyalty tiers - auto-upgrade on lifetime points.</p>
           <div className="mt-4 space-y-3">
             {TIERS.map((t) => (
               <div key={t.tier} className="overflow-hidden rounded-2xl border border-[#DFE1E6] bg-white shadow-sm">
@@ -330,9 +330,9 @@ export default function DesignScreen() {
         </Panel>
       </div>
 
-      {/* ROW 3 — wrong usage + do tiles */}
+      {/* ROW 3 - wrong usage + do tiles */}
       <Panel>
-        <h3 className="font-display text-[16px] font-bold text-[#172B4D]">Logo Guidelines — Wrong Usage</h3>
+        <h3 className="font-display text-[16px] font-bold text-[#172B4D]">Logo Guidelines - Wrong Usage</h3>
         <p className="mt-0.5 text-[12px] text-[#6B778C]">Never stretch, recolor, rotate or low-contrast the mark.</p>
 
         <div className="mt-4 grid grid-cols-2 gap-4 @4xl:grid-cols-4">
@@ -380,7 +380,7 @@ export default function DesignScreen() {
                 <X size={12} strokeWidth={3} />
               </span>
               <p className="border-t border-[#DFE1E6] bg-[#FFF0F0] px-3 py-1.5 text-[11px] font-bold text-[#FF5630]">
-                Don&apos;t — {t.label}
+                Don&apos;t - {t.label}
               </p>
             </div>
           ))}
@@ -393,7 +393,7 @@ export default function DesignScreen() {
               <Logo variant="full" size={22} />
             </div>
             <p className="border-t border-[#DFE1E6] bg-[#E8F5E9] px-3 py-1.5 text-[11px] font-bold text-[#1B7A2E]">
-              Do — on white
+              Do - on white
             </p>
           </div>
           <div className="overflow-hidden rounded-xl border border-[#DFE1E6]">
@@ -401,7 +401,7 @@ export default function DesignScreen() {
               <Logo variant="white" size={22} />
             </div>
             <p className="border-t border-[#DFE1E6] bg-[#E8F5E9] px-3 py-1.5 text-[11px] font-bold text-[#1B7A2E]">
-              Do — on navy
+              Do - on navy
             </p>
           </div>
           <div className="overflow-hidden rounded-xl border border-[#DFE1E6]">
@@ -415,7 +415,7 @@ export default function DesignScreen() {
               <Logo variant="white" size={22} />
             </div>
             <p className="border-t border-[#DFE1E6] bg-[#E8F5E9] px-3 py-1.5 text-[11px] font-bold text-[#1B7A2E]">
-              Do — on photo (overlay ≥70%)
+              Do - on photo (overlay ≥70%)
             </p>
           </div>
         </div>

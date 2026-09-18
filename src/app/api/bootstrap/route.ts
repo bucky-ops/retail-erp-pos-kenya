@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
-/** GET /api/bootstrap — everything the app shell needs at startup. */
+/** GET /api/bootstrap - everything the app shell needs at startup. */
 export async function GET() {
   const [stores, staff, settings] = await Promise.all([
     db.store.findMany({ orderBy: { id: "asc" } }),

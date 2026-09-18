@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 export const dynamic = "force-dynamic";
 
 /**
- * Debtor statement email — mock mailer (audited in Messages → SmsLog
+ * Debtor statement email - mock mailer (audited in Messages → SmsLog
  * channel "Email", type "Statement"), mirroring the KRA e-invoice email flow.
  *
  * GET  /api/debt-plans/[id]/statement/email          → preview (no send)
@@ -38,7 +38,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     const b = (await req.json()) as { to?: string };
     to = (b.to ?? "").trim();
   } catch {
-    /* empty body is fine — fall back to the email on file */
+    /* empty body is fine - fall back to the email on file */
   }
 
   const built = await buildStatementEmail(planId);
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const recipient = to || built.customerEmail;
   if (!recipient) {
     return NextResponse.json(
-      { ok: false, error: "No email address — enter one, or save an email on the customer first." },
+      { ok: false, error: "No email address - enter one, or save an email on the customer first." },
       { status: 400 }
     );
   }
@@ -99,20 +99,20 @@ async function buildStatementEmail(planId: number) {
 
   const invoiceLines = invoices.length
     ? invoices
-        .map((s) => `  • ${s.receiptNo} — ${fmtDay(s.createdAt)} — ${fmtKES(s.total)}`)
+        .map((s) => `  • ${s.receiptNo} - ${fmtDay(s.createdAt)} - ${fmtKES(s.total)}`)
         .join("\n")
     : "  • (no credit invoices on record)";
   const paymentLines = plan.payments.length
     ? plan.payments
-        .map((p) => `  • ${fmtDay(p.createdAt)} — ${p.method}${p.note ? ` (${p.note})` : ""} — −${fmtKES(p.amount)}`)
+        .map((p) => `  • ${fmtDay(p.createdAt)} - ${p.method}${p.note ? ` (${p.note})` : ""} - −${fmtKES(p.amount)}`)
         .join("\n")
     : "  • (no payments recorded yet)";
 
-  const subject = `${companyName} — Account Statement ${plan.customer.name} (balance ${fmtKES(plan.totalDebt)})`;
+  const subject = `${companyName} - Account Statement ${plan.customer.name} (balance ${fmtKES(plan.totalDebt)})`;
   const body = [
     `Habari ${plan.customer.name},`,
     "",
-    `Here is your account statement from ${companyName}. Please review the balance below — paying on time keeps your credit line open and your loyalty tier growing.`,
+    `Here is your account statement from ${companyName}. Please review the balance below - paying on time keeps your credit line open and your loyalty tier growing.`,
     "",
     `Statement date:   ${fmtDay(new Date())}`,
     `Account:          ${plan.customer.name}${plan.customer.phone ? ` (${plan.customer.phone})` : ""}`,
@@ -136,7 +136,7 @@ async function buildStatementEmail(planId: number) {
       ? "⚠ Note: new credit sales are paused while the account is overdue."
       : "",
     "",
-    "Pay via M-Pesa Buy Goods or at any branch — karibu tena!",
+    "Pay via M-Pesa Buy Goods or at any branch - karibu tena!",
     `${companyName} • accounts@dukaflow.co.ke • +254 700 123 456`,
   ]
     .filter((l) => l !== "")

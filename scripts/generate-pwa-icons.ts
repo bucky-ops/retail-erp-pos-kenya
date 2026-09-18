@@ -1,5 +1,5 @@
 /**
- * One-off PWA icon generator — renders the DukaMark favicon.svg into every
+ * One-off PWA icon generator - renders the DukaMark favicon.svg into every
  * PNG size the manifest needs (incl. maskable + apple-touch-icon).
  * Run: bun run scripts/generate-pwa-icons.ts
  */

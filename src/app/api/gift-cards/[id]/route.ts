@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
-/** PATCH /api/gift-cards/[id] — topup or redeem (partial supported). */
+/** PATCH /api/gift-cards/[id] - topup or redeem (partial supported). */
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const body = await req.json();

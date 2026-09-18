@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
-/** GET /api/products?storeId=&q=&category= — catalog with per-store stock. */
+/** GET /api/products?storeId=&q=&category= - catalog with per-store stock. */
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const q = searchParams.get("q") ?? "";

@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 export const dynamic = "force-dynamic";
 
 /**
- * POST /api/sales/sync — batch upload of offline POS sales from IndexedDB.
+ * POST /api/sales/sync - batch upload of offline POS sales from IndexedDB.
  * Returns per-clientId results so the queue can be cleared selectively.
  */
 export async function POST(req: NextRequest) {

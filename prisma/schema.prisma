@@ -1,4 +1,4 @@
-// DukaFlow — Kenya Retail ERP + POS
+// DukaFlow - Kenya Retail ERP + POS
 // Prisma schema (SQLite). All money values are KES.
 
 generator client {
@@ -96,7 +96,7 @@ model StockLevel {
   storeId      Int
   qty          Float    @default(0)
   reorderPoint Float    @default(10)
-  // When the current batch landed — used by the Stock Aging report.
+  // When the current batch landed - used by the Stock Aging report.
   // Reset to now() whenever a positive adjustment / transfer marks fresh stock in.
   receivedAt   DateTime @default(now())
   product      Product  @relation(fields: [productId], references: [id])
@@ -115,7 +115,7 @@ model StockTransfer {
   createdAt   DateTime @default(now())
 }
 
-// ─── Till sessions (X/Z reports — cash-drawer shift reconciliation) ─────────
+// ─── Till sessions (X/Z reports - cash-drawer shift reconciliation) ─────────
 
 model TillSession {
   id           Int       @id @default(autoincrement())
@@ -337,7 +337,7 @@ model DebtPlan {
   createdAt           DateTime      @default(now())
 }
 
-// Payment ledger for debt plans — every installment recorded against a plan
+// Payment ledger for debt plans - every installment recorded against a plan
 // lands here so the debtor statement can list invoices vs receipts truthfully.
 model DebtPayment {
   id         Int      @id @default(autoincrement())
@@ -455,7 +455,7 @@ model Settings {
   companyName              String    @default("DukaFlow Ltd")
   tierRules                String    @default("{\"bronze\":{\"minPoints\":0,\"discount\":0},\"silver\":{\"minPoints\":500,\"discount\":5},\"gold\":{\"minPoints\":2000,\"discount\":10},\"expiryMonths\":12,\"expiryEnabled\":true}")
   lastDailyJobsAt          DateTime?
-  // Scheduled report email ("Schedule email" on Reports) — a mock mailer that logs to SmsLog with channel=Email
+  // Scheduled report email ("Schedule email" on Reports) - a mock mailer that logs to SmsLog with channel=Email
   reportScheduleEnabled    Boolean   @default(false)
   reportScheduleFrequency  String    @default("Weekly") // Daily | Weekly | Monthly (sent 08:00 EAT by /api/cron/report)
   reportScheduleEmail      String    @default("owner@dukaflow.co.ke")
@@ -490,7 +490,7 @@ model StockTakeItem {
   product     Product   @relation(fields: [productId], references: [id])
   systemQty   Float // snapshot of StockLevel.qty when the session opened
   countedQty  Float? // what the team actually found on the shelf
-  unitCost    Float     @default(0) // cost at snapshot time — values the variance
+  unitCost    Float     @default(0) // cost at snapshot time - values the variance
   counted     Boolean   @default(false)
   countedAt   DateTime?
   countedBy   String    @default("")
@@ -509,7 +509,7 @@ model SupplierReturn {
   storeId     Int
   store       Store                @relation(fields: [storeId], references: [id])
   reason      String               @default("Damaged") // Damaged | Wrong item | Warranty | Overstock
-  total       Float                @default(0) // valued at cost — what the supplier owes us
+  total       Float                @default(0) // valued at cost - what the supplier owes us
   status      String               @default("Sent") // Sent | Credited
   note        String               @default("")
   createdAt   DateTime             @default(now())
@@ -570,7 +570,7 @@ model Attendance {
   id          Int      @id @default(autoincrement())
   employeeId  Int
   employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  date        String // "2026-09-18" — day granularity
+  date        String // "2026-09-18" - day granularity
   status      String   @default("Present") // Present | Late | Absent | Leave | OFF
   checkIn     String? // "08:03"
   checkOut    String? // "17:12"
@@ -630,7 +630,7 @@ model DayClose {
 model Account {
   id      Int           @id @default(autoincrement())
   code    String        @unique // "1010"
-  name    String // "Cash — Thika Road"
+  name    String // "Cash - Thika Road"
   type    String // Asset | Liability | Equity | Revenue | COGS | Expense
   parent  String? // parent account code, null for roots
   isGroup Boolean       @default(false) // group headers cannot be posted to

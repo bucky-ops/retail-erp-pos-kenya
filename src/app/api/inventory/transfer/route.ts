@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
-/** POST /api/inventory/transfer — move stock between stores. */
+/** POST /api/inventory/transfer - move stock between stores. */
 export async function POST(req: NextRequest) {
   const body = await req.json();
   const { productId, fromStoreId, toStoreId, qty } = body;

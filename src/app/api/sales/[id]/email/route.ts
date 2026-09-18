@@ -5,10 +5,10 @@ import { buildInvoiceEmailForSale } from "@/lib/invoice-email";
 export const dynamic = "force-dynamic";
 
 /**
- * DukaFlow — KRA e-invoice email.
+ * DukaFlow - KRA e-invoice email.
  *
  * GET  /api/sales/[id]/email  → preview (subject + body + suggested recipient)
- *                               without sending — powers the Receipts dialog.
+ *                               without sending - powers the Receipts dialog.
  * POST /api/sales/[id]/email  { to?: string }
  *                             → sends (mock mailer → SmsLog channel "Email",
  *                               type "Invoice", auditable in Messages) and
@@ -16,7 +16,7 @@ export const dynamic = "force-dynamic";
  *                               caller didn't override it.
  *
  * Only KRA-Verified sales can be emailed: an "e-invoice" is only legally real
- * once eTIMS has stamped its CU number — pending receipts get a 400 telling
+ * once eTIMS has stamped its CU number - pending receipts get a 400 telling
  * the cashier to run Retry eTIMS first.
  */
 
@@ -44,7 +44,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
     if (data.sale.kraStatus !== "Verified") {
       return NextResponse.json(
-        { ok: false, error: "Invoice is not KRA-verified yet — run Retry eTIMS first" },
+        { ok: false, error: "Invoice is not KRA-verified yet - run Retry eTIMS first" },
         { status: 400 }
       );
     }
@@ -52,7 +52,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     const to = (payload.to ?? "").trim() || data.customerEmail;
     if (!to || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
       return NextResponse.json(
-        { ok: false, error: "No valid recipient email — the customer has no email on file, type one in" },
+        { ok: false, error: "No valid recipient email - the customer has no email on file, type one in" },
         { status: 400 }
       );
     }

@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
-/* DukaFlow — Operating expenses (petty cash, bills, rent...).
+/* DukaFlow - Operating expenses (petty cash, bills, rent...).
  *
  * GET  /api/expenses?storeId=&from=&to=
  *      → { expenses, summary: { total, today, month, byCategory } }

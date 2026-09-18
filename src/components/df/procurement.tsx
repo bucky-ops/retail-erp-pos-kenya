@@ -1,16 +1,16 @@
 "use client";
 
 /**
- * DukaFlow — Procurement workspace (Suppliers + reorder suggestions + POs + RTV).
+ * DukaFlow - Procurement workspace (Suppliers + reorder suggestions + POs + RTV).
  *
  * Opened from the Inventory screen "Procurement" button. Four tabs:
- *   1. Reorder suggestions — low-stock lines (qty ≤ reorderPoint) with a
+ *   1. Reorder suggestions - low-stock lines (qty ≤ reorderPoint) with a
  *      suggested cover qty and best-match supplier; create POs grouped per
  *      supplier in one click.
- *   2. Purchase orders — lifecycle Draft → Sent → Received/Partially Received
+ *   2. Purchase orders - lifecycle Draft → Sent → Received/Partially Received
  *      with a GRN-style receive flow (partial receipts supported).
- *   3. Suppliers — directory + quick add.
- *   4. Return to vendor — send damaged/wrong/warranty/overstock goods back
+ *   3. Suppliers - directory + quick add.
+ *   4. Return to vendor - send damaged/wrong/warranty/overstock goods back
  *      with a numbered debit note (RTV-xxxx / DN-xxxx); stock decrements and
  *      the supplier can be marked credited when the money lands.
  */
@@ -197,7 +197,10 @@ export function ProcurementDialog({
   }, []);
 
   useEffect(() => {
-    if (open) void loadAll();
+    // async boundary: the loader touches state, so never call it synchronously here
+    if (!open) return;
+    const t = setTimeout(() => void loadAll(), 0);
+    return () => clearTimeout(t);
   }, [open, loadAll]);
 
   const filteredSugg = useMemo(
@@ -206,7 +209,7 @@ export function ProcurementDialog({
   );
   const selectedLines = filteredSugg.filter((s) => (qtyOv[s.stockLevelId] ?? 0) > 0 && supOv[s.stockLevelId]);
 
-  /* checkbox include/exclude — unchecking zeroes the line's qty, checking
+  /* checkbox include/exclude - unchecking zeroes the line's qty, checking
    * restores the suggested qty, so the draft-PO logic stays untouched. */
   const toggleLine = (stockLevelId: number, included: boolean, suggestedQty: number) =>
     setQtyOv((m) => ({ ...m, [stockLevelId]: included ? suggestedQty : 0 }));
@@ -218,7 +221,7 @@ export function ProcurementDialog({
       return next;
     });
 
-  /* create POs grouped per supplier — mirrors how buyers actually send POs */
+  /* create POs grouped per supplier - mirrors how buyers actually send POs */
   const createPOs = async () => {
     if (!selectedLines.length || !sups?.length) return;
     setBusy(true);
@@ -246,7 +249,7 @@ export function ProcurementDialog({
       }
       toast({
         title: `${created} purchase order${created === 1 ? "" : "s"} drafted ✓`,
-        description: "Find them under the Purchase orders tab — Send, then Receive stock.",
+        description: "Find them under the Purchase orders tab - Send, then Receive stock.",
       });
       await loadAll();
       setTab("pos");
@@ -285,7 +288,7 @@ export function ProcurementDialog({
         lines,
       });
       toast({
-        title: `GRN posted — ${po.poNo} ${d.po.status.toLowerCase()} ✓`,
+        title: `GRN posted - ${po.poNo} ${d.po.status.toLowerCase()} ✓`,
         description: "Store stock updated and #stock-alerts notified.",
       });
       setRecvPo(null);
@@ -355,7 +358,7 @@ export function ProcurementDialog({
         { supplierId: priceSup.id, prices }
       );
       toast({
-        title: `Price list saved — ${d.supplierName}`,
+        title: `Price list saved - ${d.supplierName}`,
         description: `${d.saved} negotiated cost${d.saved === 1 ? "" : "s"} set • ${d.cleared} cleared`,
       });
       setPriceSup(null);
@@ -383,7 +386,9 @@ export function ProcurementDialog({
 
   /* ── PO basket: the exact grouping createPOs commits, rendered for review ── */
   const [basketOpen, setBasketOpen] = useState(false);
-  const basketGroups = useMemo(() => {
+  // Plain derivation (no manual useMemo): the React Compiler auto-memoizes it,
+  // and hand-written memoization here could not be preserved.
+  const basketGroups = (() => {
     const bySupplier = new Map<number, { supplierName: string; leadDays: number; stores: { storeId: number; storeName: string; lines: { s: Sugg; qty: number }[]; subtotal: number }[]; subtotal: number }>();
     for (const s of selectedLines) {
       const sid = supOv[s.stockLevelId] ?? s.supplierId;
@@ -399,7 +404,7 @@ export function ProcurementDialog({
       bySupplier.set(sid, g);
     }
     return [...bySupplier.entries()].map(([supplierId, g]) => ({ supplierId, ...g }));
-  }, [selectedLines, supOv, qtyOv, sups]);
+  })();
   const basketPoCount = basketGroups.reduce((n, g) => n + g.stores.length, 0);
 
   /* ── return-to-vendor ── */
@@ -416,7 +421,10 @@ export function ProcurementDialog({
   }, []);
 
   useEffect(() => {
-    if (open) void loadRtvStock(rtvForm.storeId);
+    // async boundary: the loader touches state, so never call it synchronously here
+    if (!open) return;
+    const t = setTimeout(() => void loadRtvStock(rtvForm.storeId), 0);
+    return () => clearTimeout(t);
   }, [open, rtvForm.storeId, loadRtvStock]);
 
   const rtvStockOptions = useMemo(
@@ -445,7 +453,7 @@ export function ProcurementDialog({
         lines: rtvLines.map((l) => ({ productId: l.productId, qty: l.qty })),
       });
       toast({
-        title: `${d.rtnNo} created — ${d.debitNoteNo} for ${KES(d.total)} ✓`,
+        title: `${d.rtnNo} created - ${d.debitNoteNo} for ${KES(d.total)} ✓`,
         description: "Stock decremented and #stock-alerts notified.",
       });
       setRtvLines([]);
@@ -510,8 +518,8 @@ export function ProcurementDialog({
       setStmtEmailBody(r.body);
       if (r.to) setStmtEmailTo(r.to);
     } catch {
-      setStmtEmailSubject(`Supplier Statement — ${stmtSup.name}`);
-      setStmtEmailBody("Could not preview the statement — try again.");
+      setStmtEmailSubject(`Supplier Statement - ${stmtSup.name}`);
+      setStmtEmailBody("Could not preview the statement - try again.");
     } finally {
       setStmtEmailLoading(false);
     }
@@ -539,7 +547,7 @@ export function ProcurementDialog({
       <DialogContent className="max-w-3xl rounded-2xl">
         <DialogHeader>
           <DialogTitle className="font-display flex items-center gap-2 text-[16px] text-[#172B4D]">
-            <ShoppingCart size={16} className="text-[#0052CC]" /> Procurement — suppliers, reorder & receive
+            <ShoppingCart size={16} className="text-[#0052CC]" /> Procurement - suppliers, reorder & receive
           </DialogTitle>
           <DialogDescription>
             Auto-draft POs from low stock, send them to suppliers and receive goods into stores.
@@ -595,7 +603,7 @@ export function ProcurementDialog({
               {sugg === null ? (
                 <p className="py-6 text-center text-[12px] text-[#6B778C]"><Loader2 className="mr-1 inline h-3.5 w-3.5 animate-spin" /> Loading suggestions…</p>
               ) : filteredSugg.length === 0 ? (
-                <p className="py-6 text-center text-[12px] text-[#6B778C]">All stock is healthy — nothing to reorder. 🎉</p>
+                <p className="py-6 text-center text-[12px] text-[#6B778C]">All stock is healthy - nothing to reorder. 🎉</p>
               ) : (
                 filteredSugg.map((s) => (
                   <div key={s.stockLevelId} className={cn(
@@ -646,7 +654,7 @@ export function ProcurementDialog({
             <div className="flex items-center justify-between rounded-xl bg-[#172B4D] px-4 py-3">
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-widest text-white/60">
-                  Draft POs — {selectedLines.length} lines (grouped per supplier)
+                  Draft POs - {selectedLines.length} lines (grouped per supplier)
                 </p>
                 <p className="font-display text-[16px] font-bold text-white">{KES(suggTotal)}</p>
               </div>
@@ -676,7 +684,7 @@ export function ProcurementDialog({
               {pos === null ? (
                 <p className="py-6 text-center text-[12px] text-[#6B778C]"><Loader2 className="mr-1 inline h-3.5 w-3.5 animate-spin" /> Loading…</p>
               ) : pos.length === 0 ? (
-                <p className="py-6 text-center text-[12px] text-[#6B778C]">No purchase orders yet — draft them from reorder suggestions.</p>
+                <p className="py-6 text-center text-[12px] text-[#6B778C]">No purchase orders yet - draft them from reorder suggestions.</p>
               ) : (
                 pos.map((po) => (
                   <div key={po.id} className="rounded-xl border border-[#DFE1E6] bg-[#FAFBFC]">
@@ -707,7 +715,7 @@ export function ProcurementDialog({
                       )}
                     </div>
 
-                    {/* lines — always visible for context; editable in receive mode */}
+                    {/* lines - always visible for context; editable in receive mode */}
                     <div className="space-y-1 border-t border-[#DFE1E6] px-3 py-2">
                       {po.items.map((it) => (
                         <div key={it.id} className="flex flex-wrap items-center gap-2 text-[11px]">
@@ -734,7 +742,7 @@ export function ProcurementDialog({
                       ))}
                       {recvPo === po.id && (
                         <div className="flex items-center justify-between pt-1.5">
-                          <p className="text-[10px] text-[#6B778C]">Partial receipts are fine — receive what physically arrived.</p>
+                          <p className="text-[10px] text-[#6B778C]">Partial receipts are fine - receive what physically arrived.</p>
                           <Button size="sm" disabled={busy || Object.values(recvQty).every((q) => !q)} onClick={() => void confirmReceive(po)} className="h-7 rounded-lg bg-[#00C853] px-3 text-[11px] font-bold text-[#052E14] hover:bg-[#00B34A] disabled:opacity-40">
                             <Truck className="h-3 w-3" /> Confirm receipt
                           </Button>
@@ -757,7 +765,7 @@ export function ProcurementDialog({
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[12px] font-semibold text-[#172B4D]">{s.name}</p>
-                    <p className="text-[10px] text-[#6B778C]">{s.phone || "—"} • {s.kraPin || "no PIN"}</p>
+                    <p className="text-[10px] text-[#6B778C]">{s.phone || "-"} • {s.kraPin || "no PIN"}</p>
                   </div>
                   <Badge variant="outline" className="rounded-full border-[#DFE1E6] text-[10px] font-semibold text-[#6B778C]">{s.category}</Badge>
                   <span className="text-[10px] text-[#6B778C]">{s.leadDays}d lead • {s.poCount} POs</span>
@@ -789,7 +797,7 @@ export function ProcurementDialog({
                     <Tag size={13} />
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-[12.5px] font-bold text-[#172B4D]">Price list — {priceSup.name}</p>
+                    <p className="truncate text-[12.5px] font-bold text-[#172B4D]">Price list - {priceSup.name}</p>
                     <p className="text-[10px] text-[#6B778C]">
                       Negotiated costs override the catalog on reorder suggestions &amp; new POs. Blank = fall back to catalog.
                     </p>
@@ -838,7 +846,7 @@ export function ProcurementDialog({
                               value={edit}
                               onChange={(e) => setPriceEdits((m) => ({ ...m, [p.id]: e.target.value.replace(/[^\d.]/g, "") }))}
                               inputMode="decimal"
-                              placeholder="—"
+                              placeholder="-"
                               aria-label={`Negotiated cost for ${p.name} from ${priceSup.name}`}
                               className={cn(
                                 "h-7 w-full rounded-lg border pl-9 pr-1 text-center font-mono text-[11.5px] font-bold tabular-nums outline-none",
@@ -931,7 +939,7 @@ export function ProcurementDialog({
                     ) : (
                       rtvStockOptions.map((r) => (
                         <SelectItem key={r.productId} value={String(r.productId)}>
-                          {r.emoji} {r.name} — {Math.floor(r.qty)} in stock
+                          {r.emoji} {r.name} - {Math.floor(r.qty)} in stock
                         </SelectItem>
                       ))
                     )}
@@ -1038,7 +1046,7 @@ export function ProcurementDialog({
         ) : (
           <>
             <div className="df-scroll max-h-[60vh] overflow-y-auto pr-1">
-              {/* the sheet — printable A4 area */}
+              {/* the sheet - printable A4 area */}
               <div className="df-print-area df-print-area-a4 df-statement overflow-hidden rounded-xl border border-[#DFE1E6] shadow-sm">
                 {/* navy gradient header band */}
                 <div className="flex items-center justify-between bg-gradient-to-r from-[#172B4D] to-[#0E1B33] px-6 py-4 text-white">
@@ -1063,7 +1071,7 @@ export function ProcurementDialog({
                       <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#E9F2FF] text-[#0052CC]"><Building2 size={13} /></span>
                       {stmtData.supplier.name}
                     </p>
-                    <p className="font-mono text-[12px] text-[#6B778C]">{stmtData.supplier.phone || "—"}</p>
+                    <p className="font-mono text-[12px] text-[#6B778C]">{stmtData.supplier.phone || "-"}</p>
                     <div className="mt-1 flex items-center gap-2">
                       <span className="rounded-full bg-[#F4F5F7] px-2 py-0.5 text-[10px] font-bold text-[#6B778C]">{stmtData.supplier.category}</span>
                       <span className="rounded-full bg-[#E9F2FF] px-2 py-0.5 text-[10px] font-bold text-[#0052CC]">{stmtData.supplier.leadDays}d lead</span>
@@ -1246,7 +1254,7 @@ export function ProcurementDialog({
               Email supplier statement
             </DialogTitle>
             <DialogDescription className="text-[12px]">
-              Sends the reconciliation (net traded, open orders, debit-note credits) to the supplier — mock mailer, audited in Messages.
+              Sends the reconciliation (net traded, open orders, debit-note credits) to the supplier - mock mailer, audited in Messages.
             </DialogDescription>
           </DialogHeader>
 
@@ -1270,8 +1278,8 @@ export function ProcurementDialog({
                 />
                 <p className="text-[10px] text-[#6B778C]">
                   {stmtData?.supplier.email
-                    ? "Supplier has an email on file — the address you send to will be kept for future statements."
-                    : `No email on file for ${stmtData?.supplier.name ?? "this supplier"} — the address you send to will be saved.`}
+                    ? "Supplier has an email on file - the address you send to will be kept for future statements."
+                    : `No email on file for ${stmtData?.supplier.name ?? "this supplier"} - the address you send to will be saved.`}
                 </p>
               </div>
               <div className="space-y-1.5">
@@ -1305,7 +1313,7 @@ export function ProcurementDialog({
       </Dialog>
     </Dialog>
 
-    {/* ══════════ PO basket drawer — grouped draft preview before commit ══════════ */}
+    {/* ══════════ PO basket drawer - grouped draft preview before commit ══════════ */}
     <Dialog open={basketOpen} onOpenChange={setBasketOpen}>
       <DialogContent className="rounded-[20px] sm:max-w-[620px]">
         <DialogHeader>
@@ -1313,15 +1321,15 @@ export function ProcurementDialog({
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#E9F2FF] text-[#0052CC]">
               <ClipboardList size={15} />
             </span>
-            PO basket — {basketPoCount} order{basketPoCount === 1 ? "" : "s"}, {basketGroups.length} supplier{basketGroups.length === 1 ? "" : "s"}
+            PO basket - {basketPoCount} order{basketPoCount === 1 ? "" : "s"}, {basketGroups.length} supplier{basketGroups.length === 1 ? "" : "s"}
           </DialogTitle>
           <DialogDescription className="text-[12px]">
-            Exactly what “Create purchase orders” will commit — one PO per supplier per store. Adjust quantities or suppliers on the left, then confirm here.
+            Exactly what “Create purchase orders” will commit - one PO per supplier per store. Adjust quantities or suppliers on the left, then confirm here.
           </DialogDescription>
         </DialogHeader>
 
         {basketGroups.length === 0 ? (
-          <p className="py-8 text-center text-[12px] text-[#6B778C]">The basket is empty — include some reorder lines first.</p>
+          <p className="py-8 text-center text-[12px] text-[#6B778C]">The basket is empty - include some reorder lines first.</p>
         ) : (
           <div className="df-scroll max-h-[52vh] space-y-3 overflow-y-auto pr-1">
             {basketGroups.map((g) => (
@@ -1371,7 +1379,7 @@ export function ProcurementDialog({
             {/* grand total */}
             <div className="flex items-center justify-between rounded-xl border border-[#C8E6C9] bg-[#E8F5E9] px-4 py-3">
               <p className="text-[11px] font-bold uppercase tracking-widest text-[#1B7A2E]">
-                Basket total — {basketPoCount} PO{basketPoCount === 1 ? "" : "s"} • {selectedLines.length} lines
+                Basket total - {basketPoCount} PO{basketPoCount === 1 ? "" : "s"} • {selectedLines.length} lines
               </p>
               <p className="font-display text-[16px] font-extrabold tabular-nums text-[#1B7A2E]">{KES(suggTotal)}</p>
             </div>

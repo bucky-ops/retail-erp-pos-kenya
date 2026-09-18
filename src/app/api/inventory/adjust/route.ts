@@ -5,7 +5,7 @@ import { emitLive } from "@/lib/live-emit";
 export const dynamic = "force-dynamic";
 
 /**
- * POST /api/inventory/adjust — stock adjustment (recount / damages / receipts / loss).
+ * POST /api/inventory/adjust - stock adjustment (recount / damages / receipts / loss).
  * body: { productId, storeId, delta (±), reason }
  * Updates the stock level and notifies #stock-alerts in Raven chat.
  */
@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
     where: { productId_storeId: { productId: Number(productId), storeId: Number(storeId) } },
     data: {
       qty: newQty,
-      // Inbound stock resets the batch age — the Stock Aging report values the
+      // Inbound stock resets the batch age - the Stock Aging report values the
       // current batch from receivedAt, so fresh goods must land as fresh.
       ...(delta > 0 ? { receivedAt: new Date() } : {}),
     },

@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 export const dynamic = "force-dynamic";
 
 /**
- * Supplier statement email — mock mailer (audited in Messages → SmsLog
+ * Supplier statement email - mock mailer (audited in Messages → SmsLog
  * channel "Email", type "Supplier Statement"), mirroring the debtor
  * statement email flow. Closes the procurement reconciliation loop: the
  * buyer sends the supplier the net position (goods received − RTV −
@@ -41,7 +41,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     const b = (await req.json()) as { to?: string };
     to = (b.to ?? "").trim();
   } catch {
-    /* empty body is fine — fall back to the email on file */
+    /* empty body is fine - fall back to the email on file */
   }
 
   const built = await buildSupplierStatementEmail(supplierId);
@@ -50,7 +50,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const recipient = to || built.supplierEmail;
   if (!recipient) {
     return NextResponse.json(
-      { ok: false, error: "No email address — enter one, or save an email on the supplier first." },
+      { ok: false, error: "No email address - enter one, or save an email on the supplier first." },
       { status: 400 }
     );
   }
@@ -119,7 +119,7 @@ async function buildSupplierStatementEmail(supplierId: number) {
         .map((po) => {
           const received = po.items.reduce((s, it) => s + it.received * it.unitCost, 0);
           const outstanding = Math.max(0, po.total - received);
-          return `  • ${po.poNo} — ${fmtDay(po.orderedAt)} — ${po.status} — ordered ${fmtKES(po.total)}${
+          return `  • ${po.poNo} - ${fmtDay(po.orderedAt)} - ${po.status} - ordered ${fmtKES(po.total)}${
             po.status === "Cancelled" ? "" : `, received ${fmtKES(received)}${outstanding > 0 ? `, outstanding ${fmtKES(outstanding)}` : ""}`
           }`;
         })
@@ -129,14 +129,14 @@ async function buildSupplierStatementEmail(supplierId: number) {
     ? rtvs
         .map(
           (r) =>
-            `  • ${r.debitNoteNo} — ${fmtDay(r.createdAt)} — ${fmtKES(r.total)} — ${r.status}${
+            `  • ${r.debitNoteNo} - ${fmtDay(r.createdAt)} - ${fmtKES(r.total)} - ${r.status}${
               r.status !== "Credited" ? " ⚠ awaiting supplier credit" : ""
             }`
         )
         .join("\n")
-    : "  • (none — thank you!)";
+    : "  • (none - thank you!)";
 
-  const subject = `${companyName} — Supplier Statement ${supplier.name} (net traded ${fmtKES(netTraded)})`;
+  const subject = `${companyName} - Supplier Statement ${supplier.name} (net traded ${fmtKES(netTraded)})`;
   const body = [
     `Habari ${supplier.name},`,
     "",
@@ -144,7 +144,7 @@ async function buildSupplierStatementEmail(supplierId: number) {
     "",
     `Statement date:   ${fmtDay(new Date())}`,
     `Supplier:         ${supplier.name}${supplier.phone ? ` (${supplier.phone})` : ""}`,
-    `KRA PIN:          ${supplier.kraPin || "—"}   •   Lead time: ${supplier.leadDays} days`,
+    `KRA PIN:          ${supplier.kraPin || "-"}   •   Lead time: ${supplier.leadDays} days`,
     "",
     "Reconciliation summary",
     `  Goods received (GRN-verified):   ${fmtKES(purchasedValue)}`,
@@ -160,12 +160,12 @@ async function buildSupplierStatementEmail(supplierId: number) {
     dnLines,
     "",
     prices.length
-      ? `Negotiated price list: ${prices.length} item${prices.length === 1 ? "" : "s"} on file — saving ${fmtKES(priceListSavings)} per reorder cycle vs catalog.`
-      : "Negotiated price list: none on file yet — happy to set one up.",
+      ? `Negotiated price list: ${prices.length} item${prices.length === 1 ? "" : "s"} on file - saving ${fmtKES(priceListSavings)} per reorder cycle vs catalog.`
+      : "Negotiated price list: none on file yet - happy to set one up.",
     "",
     netTraded >= 0
       ? "Kindly issue/confirm any pending credit notes with your next delivery."
-      : "A credit balance is due to us — kindly process the refund or offset it on the next order.",
+      : "A credit balance is due to us - kindly process the refund or offset it on the next order.",
     "Asante sana for the continued partnership!",
     `${companyName} • procurement@dukaflow.co.ke • +254 700 123 456`,
   ].join("\n");

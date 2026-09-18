@@ -98,13 +98,17 @@ export default function PipelineScreen() {
   }, []);
 
   useEffect(() => {
-    void load();
+    // async boundary: the loader touches state, so never call it synchronously here
+    const t = setTimeout(() => void load(), 0);
+    return () => clearTimeout(t);
   }, [load]);
 
-  /* keep notes draft in sync with the open deal */
-  useEffect(() => {
+  /* keep notes draft in sync with the open deal - render-time resync pattern */
+  const [notesForId, setNotesForId] = useState<string | null | undefined>(undefined);
+  if (notesForId !== selected?.id) {
+    setNotesForId(selected?.id);
     setNotesDraft(selected?.notes ?? "");
-  }, [selected?.id, selected?.notes]);
+  }
 
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
@@ -157,7 +161,7 @@ export default function PipelineScreen() {
     async (id: string) => {
       const deal = deals?.find((d) => d.id === id);
       if (!deal) return;
-      if (!window.confirm(`Delete deal "${deal.customerName} — ${deal.title}"? This cannot be undone.`)) return;
+      if (!window.confirm(`Delete deal "${deal.customerName} - ${deal.title}"? This cannot be undone.`)) return;
       try {
         await api.del(`/api/pipeline/${id}`);
         setDeals((prev) => (prev ? prev.filter((d) => d.id !== id) : prev));
@@ -204,7 +208,7 @@ export default function PipelineScreen() {
     <div className="space-y-4">
       <ScreenHeader
         title="Sales Pipeline"
-        subtitle="Quotation → Proforma → Order → Invoice → Payment — one click to mature"
+        subtitle="Quotation → Proforma → Order → Invoice → Payment - one click to mature"
         actions={
           <>
             <span className="inline-flex items-center gap-1.5 rounded-full bg-[#E3F2FD] px-3 py-1.5 text-[12px] font-bold text-[#0052CC]">
@@ -230,7 +234,7 @@ export default function PipelineScreen() {
             >
               <span className="h-2 w-2 rounded-full ring-1 ring-black/10" style={{ background: s.color }} />
               {s.title}
-              <b className="text-[#172B4D]">{deals ? counts[s.id] : "–"}</b>
+              <b className="text-[#172B4D]">{deals ? counts[s.id] : "-"}</b>
             </span>
           ))}
         </div>
@@ -419,7 +423,7 @@ export default function PipelineScreen() {
                     </Button>
                   ) : (
                     <div className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#E8F5E9] text-[13px] font-semibold text-[#1B7A2E]">
-                      <Check size={15} /> Fully paid — deal closed
+                      <Check size={15} /> Fully paid - deal closed
                     </div>
                   )}
                   <div>
@@ -465,7 +469,7 @@ export default function PipelineScreen() {
           <DialogHeader>
             <DialogTitle className="font-display text-[16px] font-bold text-[#172B4D]">New Deal</DialogTitle>
             <DialogDescription className="text-[12px] text-[#6B778C]">
-              Starts in <b>Quotation</b> — drag it across the board as it matures.
+              Starts in <b>Quotation</b> - drag it across the board as it matures.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -607,7 +611,7 @@ function DealCard({
         <p className="text-[13px] font-semibold text-[#172B4D]">{deal.customerName}</p>
         <span className="shrink-0 text-[10px] text-[#6B778C]">{ago(deal.createdAt)}</span>
       </div>
-      <p className="mt-0.5 truncate text-[11px] text-[#6B778C]">{deal.title || "—"}</p>
+      <p className="mt-0.5 truncate text-[11px] text-[#6B778C]">{deal.title || "-"}</p>
       <p className="font-display mt-1.5 text-[14px] font-bold text-[#172B4D]">{KES(deal.amount)}</p>
       <div className="mt-2 flex items-center gap-2 text-[11px] text-[#6B778C]">
         <span className="flex items-center gap-1">
@@ -673,7 +677,7 @@ function DealTable({ deals, onOpen }: { deals: DealDto[]; onOpen: (id: string) =
               className="cursor-pointer border-t border-[#F4F5F7] hover:bg-[#FAFBFC]"
             >
               <TableCell className="p-3 font-semibold text-[#172B4D]">{d.customerName}</TableCell>
-              <TableCell className="p-3 text-[#6B778C]">{d.title || "—"}</TableCell>
+              <TableCell className="p-3 text-[#6B778C]">{d.title || "-"}</TableCell>
               <TableCell className="p-3">
                 <StageBadge stage={d.stage} />
               </TableCell>

@@ -21,17 +21,17 @@ async function main() {
 
   for (const lv of levels) {
     const r = unit(lv.productId * 7 + lv.storeId * 13);
-    // Distribution: 55% fresh (0–30d), 22% (31–60d), 12% (61–90d), 11% stale (90–180d).
+    // Distribution: 55% fresh (0-30d), 22% (31-60d), 12% (61-90d), 11% stale (90-180d).
     const days =
       r < 0.55
-        ? Math.floor(r * 55) // 0–30
+        ? Math.floor(r * 55) // 0-30
         : r < 0.77
-          ? 31 + Math.floor((r - 0.55) * 130) // 31–60
+          ? 31 + Math.floor((r - 0.55) * 130) // 31-60
           : r < 0.89
-            ? 61 + Math.floor((r - 0.77) * 240) // 61–90
-            : 91 + Math.floor((r - 0.89) * 800); // 91–180
+            ? 61 + Math.floor((r - 0.77) * 240) // 61-90
+            : 91 + Math.floor((r - 0.89) * 800); // 91-180
 
-    // Zero-qty rows were "sold out" — treat as freshly restocked candidates.
+    // Zero-qty rows were "sold out" - treat as freshly restocked candidates.
     const finalDays = lv.qty <= 0 ? Math.floor(unit(lv.id) * 20) : days;
     const receivedAt = new Date(Date.now() - finalDays * 864e5);
     await db.stockLevel.update({ where: { id: lv.id }, data: { receivedAt } });

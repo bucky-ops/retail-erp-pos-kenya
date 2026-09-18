@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
-/** GET /api/reports — datasets for the 8 report cards. */
+/** GET /api/reports - datasets for the 8 report cards. */
 export async function GET() {
   const weekAgo = new Date(Date.now() - 7 * 864e5);
 
@@ -50,16 +50,16 @@ export async function GET() {
     d60plus: debtorAging.filter((d) => d.overdueDays > 60).reduce((a, d) => a + d.totalDebt, 0),
   };
 
-  /* stock aging — REAL: bucket every StockLevel row by the age of its current
+  /* stock aging - REAL: bucket every StockLevel row by the age of its current
      batch (receivedAt), valued at qty × product cost, with the heaviest items
      per bucket for the drill-down table. */
   const stockLevels = await db.stockLevel.findMany({
     include: { product: { select: { name: true, emoji: true, cost: true } }, store: { select: { name: true } } },
   });
   const bucketDefs: { bucket: string; from: number; to: number | null; color: string }[] = [
-    { bucket: "0–30 days", from: 0, to: 30, color: "#00C853" },
-    { bucket: "31–60 days", from: 31, to: 60, color: "#FFAB00" },
-    { bucket: "61–90 days", from: 61, to: 90, color: "#FF5630" },
+    { bucket: "0-30 days", from: 0, to: 30, color: "#00C853" },
+    { bucket: "31-60 days", from: 31, to: 60, color: "#FFAB00" },
+    { bucket: "61-90 days", from: 61, to: 90, color: "#FF5630" },
     { bucket: "90+ days", from: 91, to: null, color: "#B71C1C" },
   ];
   const nowMs = Date.now();

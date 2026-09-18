@@ -4,7 +4,7 @@ import { emitLive } from "@/lib/live-emit";
 
 export const dynamic = "force-dynamic";
 
-/** GET /api/chat?channelId= — channels list + messages of one channel. */
+/** GET /api/chat?channelId= - channels list + messages of one channel. */
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const channelId = searchParams.get("channelId");
@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
   });
 }
 
-/** POST /api/chat — post a message (optionally sharing an ERP doc card). */
+/** POST /api/chat - post a message (optionally sharing an ERP doc card). */
 export async function POST(req: NextRequest) {
   const body = await req.json();
   if (!body.channelId || !body.content?.trim()) {
@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ ok: true, message: { ...msg, createdAt: msg.createdAt.toISOString() } });
 }
 
-/** PATCH /api/chat — mark channel read. */
+/** PATCH /api/chat - mark channel read. */
 export async function PATCH(req: NextRequest) {
   const { channelId } = await req.json();
   await db.chatChannel.update({ where: { id: Number(channelId) }, data: { unread: 0 } });

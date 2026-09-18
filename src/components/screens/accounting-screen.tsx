@@ -173,7 +173,7 @@ function TypeChip({ type }: { type: string }) {
   return <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide", s.chip)}>{type}</span>;
 }
 
-/** Journal source badge — DayClose blue, Manual gray, Payroll purple, Inventory amber. */
+/** Journal source badge - DayClose blue, Manual gray, Payroll purple, Inventory amber. */
 function SourceBadge({ source }: { source: string }) {
   const map: Record<string, string> = {
     DayClose: "bg-[#E9F2FF] text-[#0052CC]",
@@ -204,7 +204,7 @@ function DrCr({ balance }: { balance: number }) {
 /** Right-aligned money cell; zero renders as an em dash. */
 function Money({ v, className }: { v: number; className?: string }) {
   return (
-    <span className={cn("tabular-nums", v === 0 && "text-[#C1C7D0]", className)}>{v === 0 ? "—" : KES(v)}</span>
+    <span className={cn("tabular-nums", v === 0 && "text-[#C1C7D0]", className)}>{v === 0 ? "-" : KES(v)}</span>
   );
 }
 
@@ -228,7 +228,7 @@ function CoaTab({ coa }: { coa: AccountDTO[] }) {
       <div className={cn("p-4 md:p-6", SCROLL)}>
         <div className="mb-3 flex items-center gap-2 text-[12px] text-[#6B778C]">
           <ListTree className="h-4 w-4" />
-          {coa.filter((a) => !a.isGroup).length} posting accounts in {groups.length} groups — tap a group to fold
+          {coa.filter((a) => !a.isGroup).length} posting accounts in {groups.length} groups - tap a group to fold
         </div>
         <div className="overflow-x-auto">
           <div className="min-w-[560px] space-y-1">
@@ -317,7 +317,7 @@ function JournalCard({ j, open, onToggle, storeName }: { j: JournalDTO; open: bo
                   {j.lines.map((l) => (
                     <TableRow key={l.id}>
                       <TableCell className="py-1.5 text-[12px]">
-                        <span className="font-mono text-[11px] text-[#6B778C]">{l.accountCode}</span> — {l.accountName}
+                        <span className="font-mono text-[11px] text-[#6B778C]">{l.accountCode}</span> - {l.accountName}
                       </TableCell>
                       <TableCell className="py-1.5 text-right text-[12px]">
                         <Money v={l.debit} className="font-medium text-[#172B4D]" />
@@ -325,7 +325,7 @@ function JournalCard({ j, open, onToggle, storeName }: { j: JournalDTO; open: bo
                       <TableCell className="py-1.5 text-right text-[12px]">
                         <Money v={l.credit} className="font-medium text-[#172B4D]" />
                       </TableCell>
-                      <TableCell className="py-1.5 text-[11px] text-[#6B778C]">{l.memo || "—"}</TableCell>
+                      <TableCell className="py-1.5 text-[11px] text-[#6B778C]">{l.memo || "-"}</TableCell>
                     </TableRow>
                   ))}
                   <TableRow className="border-t-2 border-[#DFE1E6] bg-[#F4F5F7]/50">
@@ -426,7 +426,7 @@ function DailyJournalsTab({ entries, today, stores }: { entries: JournalDTO[]; t
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2 rounded-xl bg-[#E9F2FF] px-4 py-3 text-[13px] font-medium text-[#0052CC]">
         <Zap className="h-4 w-4 shrink-0" />
-        <span>Auto-posted from Z reports — every Day Close writes a balanced sales journal.</span>
+        <span>Auto-posted from Z reports - every Day Close writes a balanced sales journal.</span>
         <span className="ml-auto tabular-nums">
           Total Dr {KES(totalDr, true)} • Cr {KES(totalCr, true)}
         </span>
@@ -434,7 +434,7 @@ function DailyJournalsTab({ entries, today, stores }: { entries: JournalDTO[]; t
       {!hasToday && (
         <Alert className="border-[#FFD591] bg-[#FFF8E1] text-[#172B4D]">
           <AlertTriangle className="h-4 w-4 !text-[#B8860B]" />
-          <AlertTitle>Today not closed yet — no journal for today</AlertTitle>
+          <AlertTitle>Today not closed yet - no journal for today</AlertTitle>
           <AlertDescription className="text-[#6B778C]">
             Run the Day Close workflow to freeze today&apos;s Z report and auto-post its sales journal (Z report → JV).
           </AlertDescription>
@@ -462,9 +462,9 @@ function StockAccountsTab({ stock }: { stock: AccPayload["stockValuation"] }) {
     { icon: <ArrowUpFromLine className="h-4 w-4" />, label: "Stock out this period (1200 credits)", value: KES(stock.movement.out), sub: "Matched by COGS postings", bg: "#FFEBEE", fg: "#FF5630" },
   ];
   const movement = [
-    { icon: <ArrowDownToLine className="h-3.5 w-3.5 text-[#1B7A2E]" />, label: "Stock In — Inventory debits (1200)", amount: stock.movement.in, color: "text-[#1B7A2E]" },
-    { icon: <ArrowUpFromLine className="h-3.5 w-3.5 text-[#FF5630]" />, label: "Stock Out — Inventory credits (1200)", amount: stock.movement.out, color: "text-[#FF5630]" },
-    { icon: <PackageMinus className="h-3.5 w-3.5 text-[#B25E00]" />, label: "COGS — Purchases debits (5100)", amount: stock.movement.cogs, color: "text-[#B25E00]" },
+    { icon: <ArrowDownToLine className="h-3.5 w-3.5 text-[#1B7A2E]" />, label: "Stock In - Inventory debits (1200)", amount: stock.movement.in, color: "text-[#1B7A2E]" },
+    { icon: <ArrowUpFromLine className="h-3.5 w-3.5 text-[#FF5630]" />, label: "Stock Out - Inventory credits (1200)", amount: stock.movement.out, color: "text-[#FF5630]" },
+    { icon: <PackageMinus className="h-3.5 w-3.5 text-[#B25E00]" />, label: "COGS - Purchases debits (5100)", amount: stock.movement.cogs, color: "text-[#B25E00]" },
   ];
   return (
     <div className="space-y-4">
@@ -567,7 +567,7 @@ function TrialBalanceTab({
       </div>
       {autoBalanced && (
         <div className="mx-4 mt-3 rounded-xl border border-[#FFD591] bg-[#FFF8E1] px-3 py-2 text-[12px] text-[#8B6D00] md:mx-6">
-          Auto-balanced — difference of {KES(Math.abs(adjustment))} posted to Retained Earnings (3200).
+          Auto-balanced - difference of {KES(Math.abs(adjustment))} posted to Retained Earnings (3200).
         </div>
       )}
       <div className={cn("mt-3 px-4 pb-4 md:px-6 md:pb-6", SCROLL)}>
@@ -615,6 +615,16 @@ function TrialBalanceTab({
 
 /* ══ Profit & Loss tab ══════════════════════════════════════════════════════ */
 
+/** One labelled money line of the P&L statement (module level). */
+function PnlRow({ label, value, bold, indent, tone }: { label: string; value: number; bold?: boolean; indent?: boolean; tone?: "green" | "red" }) {
+  return (
+    <div className={cn("flex items-center justify-between py-1.5", bold && "border-t border-[#DFE1E6] pt-2.5 font-bold text-[#172B4D]")}>
+      <span className={cn("text-[13px]", indent && "pl-4 text-[12px] text-[#6B778C]", bold && "pl-0")}>{label}</span>
+      <span className={cn("tabular-nums", bold ? "text-[14px]" : "text-[13px] text-[#172B4D]", tone === "green" && "text-[#1B7A2E]", tone === "red" && "text-[#FF5630]")}>{KES(value)}</span>
+    </div>
+  );
+}
+
 function PnlTab({ pnl, month }: { pnl: AccPayload["pnl"]; month: string }) {
   const [sel, setSel] = useState(month);
   const isCurrent = sel === month;
@@ -631,13 +641,6 @@ function PnlTab({ pnl, month }: { pnl: AccPayload["pnl"]; month: string }) {
   const bars = view.expenses.filter((e) => e.amount > 0);
   const trend = pnl.trendPct;
 
-  const Row = ({ label, value, bold, indent, tone }: { label: string; value: number; bold?: boolean; indent?: boolean; tone?: "green" | "red" }) => (
-    <div className={cn("flex items-center justify-between py-1.5", bold && "border-t border-[#DFE1E6] pt-2.5 font-bold text-[#172B4D]")}>
-      <span className={cn("text-[13px]", indent && "pl-4 text-[12px] text-[#6B778C]", bold && "pl-0")}>{label}</span>
-      <span className={cn("tabular-nums", bold ? "text-[14px]" : "text-[13px] text-[#172B4D]", tone === "green" && "text-[#1B7A2E]", tone === "red" && "text-[#FF5630]")}>{KES(value)}</span>
-    </div>
-  );
-
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -650,23 +653,23 @@ function PnlTab({ pnl, month }: { pnl: AccPayload["pnl"]; month: string }) {
             <SelectItem value={prevMonth}>{fmtMonth(prevMonth)} (est.)</SelectItem>
           </SelectContent>
         </Select>
-        {!isCurrent && <Badge className="bg-[#FFF8E1] text-[#B8860B] hover:bg-[#FFF8E1]">Estimated — 82% of Sep run-rate</Badge>}
+        {!isCurrent && <Badge className="bg-[#FFF8E1] text-[#B8860B] hover:bg-[#FFF8E1]">Estimated - 82% of Sep run-rate</Badge>}
       </div>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
         <Panel className="lg:col-span-3">
-          <h3 className="font-display text-[15px] font-bold text-[#172B4D]">Profit &amp; Loss — {fmtMonth(sel)}</h3>
+          <h3 className="font-display text-[15px] font-bold text-[#172B4D]">Profit &amp; Loss - {fmtMonth(sel)}</h3>
           <p className="text-[11px] text-[#6B778C]">Accrual statement from posted journals (VAT-exclusive)</p>
           <div className="mt-4 space-y-0.5">
             <p className="pt-1 text-[11px] font-bold uppercase tracking-wide text-[#6B778C]">Revenue</p>
             {view.revenue.map((l) => (
-              <Row key={l.code} label={`${l.code} ${l.name}`} value={l.amount} indent />
+              <PnlRow key={l.code} label={`${l.code} ${l.name}`} value={l.amount} indent />
             ))}
-            <Row label="Net Sales" value={view.netSales} bold />
+            <PnlRow label="Net Sales" value={view.netSales} bold />
             <p className="pt-2 text-[11px] font-bold uppercase tracking-wide text-[#6B778C]">Cost of Goods Sold</p>
             {view.cogs.map((l) => (
-              <Row key={l.code} label={`${l.code} ${l.name}`} value={l.amount} indent />
+              <PnlRow key={l.code} label={`${l.code} ${l.name}`} value={l.amount} indent />
             ))}
-            <Row label="Total COGS" value={view.totalCogs} bold />
+            <PnlRow label="Total COGS" value={view.totalCogs} bold />
             <div className="mt-2 flex items-center justify-between border-t-2 border-[#172B4D] py-2.5">
               <span className="text-[14px] font-bold text-[#172B4D]">Gross Profit</span>
               <span className="flex items-center gap-2">
@@ -676,9 +679,9 @@ function PnlTab({ pnl, month }: { pnl: AccPayload["pnl"]; month: string }) {
             </div>
             <p className="pt-2 text-[11px] font-bold uppercase tracking-wide text-[#6B778C]">Operating Expenses</p>
             {view.expenses.map((l) => (
-              <Row key={l.code} label={`${l.code} ${l.name}`} value={l.amount} indent />
+              <PnlRow key={l.code} label={`${l.code} ${l.name}`} value={l.amount} indent />
             ))}
-            <Row label="Total Expenses" value={view.totalExpenses} bold />
+            <PnlRow label="Total Expenses" value={view.totalExpenses} bold />
             <div className="mt-2 flex items-center justify-between border-t-2 border-[#172B4D] py-3">
               <span className="font-display text-[15px] font-bold text-[#172B4D]">Net Profit</span>
               <span className={cn("text-[18px] font-bold tabular-nums", view.netProfit >= 0 ? "text-[#1B7A2E]" : "text-[#FF5630]")}>{KES(view.netProfit)}</span>
@@ -693,7 +696,7 @@ function PnlTab({ pnl, month }: { pnl: AccPayload["pnl"]; month: string }) {
                 <span className="text-[11px] text-[#6B778C]">(Aug estimated at 82% of Sep)</span>
               </div>
             ) : (
-              <p className="rounded-xl bg-[#F4F5F7] px-3 py-2 text-[12px] text-[#6B778C]">Approximate prior month — used for trend comparison only.</p>
+              <p className="rounded-xl bg-[#F4F5F7] px-3 py-2 text-[12px] text-[#6B778C]">Approximate prior month - used for trend comparison only.</p>
             )}
           </div>
         </Panel>
@@ -732,13 +735,9 @@ function PnlTab({ pnl, month }: { pnl: AccPayload["pnl"]; month: string }) {
 
 /* ══ Balance Sheet tab ══════════════════════════════════════════════════════ */
 
-function BalanceSheetTab({ bs }: { bs: AccPayload["balanceSheet"] }) {
-  const le = Math.round((bs.totalLiabilities + bs.totalEquity) * 100) / 100;
-  const balanced = Math.abs(bs.totalAssets - le) < 0.01;
-  const CURRENT_CODES = new Set(["1010", "1020", "1030", "1100", "1300", "1400"]);
-  const currentAssets = bs.assets.filter((a) => CURRENT_CODES.has(a.code)).reduce((t, a) => t + a.amount, 0);
-
-  const Section = ({ title, rows, total }: { title: string; rows: PnlLine[]; total: number }) => (
+/** A titled block of balance-sheet lines with a total footer (module level). */
+function BsSection({ title, rows, total }: { title: string; rows: PnlLine[]; total: number }) {
+  return (
     <div>
       <p className="text-[11px] font-bold uppercase tracking-wide text-[#6B778C]">{title}</p>
       <div className="mt-1 space-y-0.5">
@@ -748,7 +747,7 @@ function BalanceSheetTab({ bs }: { bs: AccPayload["balanceSheet"] }) {
               <span className="mr-2 font-mono text-[11px] text-[#6B778C]">{l.code}</span>
               {l.name}
             </span>
-            <span className="text-[13px] tabular-nums text-[#172B4D]">{l.amount === 0 ? <span className="text-[#C1C7D0]">—</span> : KES(l.amount)}</span>
+            <span className="text-[13px] tabular-nums text-[#172B4D]">{l.amount === 0 ? <span className="text-[#C1C7D0]">-</span> : KES(l.amount)}</span>
           </div>
         ))}
       </div>
@@ -758,6 +757,13 @@ function BalanceSheetTab({ bs }: { bs: AccPayload["balanceSheet"] }) {
       </div>
     </div>
   );
+}
+
+function BalanceSheetTab({ bs }: { bs: AccPayload["balanceSheet"] }) {
+  const le = Math.round((bs.totalLiabilities + bs.totalEquity) * 100) / 100;
+  const balanced = Math.abs(bs.totalAssets - le) < 0.01;
+  const CURRENT_CODES = new Set(["1010", "1020", "1030", "1100", "1300", "1400"]);
+  const currentAssets = bs.assets.filter((a) => CURRENT_CODES.has(a.code)).reduce((t, a) => t + a.amount, 0);
 
   return (
     <div className="space-y-3">
@@ -783,10 +789,10 @@ function BalanceSheetTab({ bs }: { bs: AccPayload["balanceSheet"] }) {
             <Boxes className="h-4 w-4 text-[#00C853]" />
             <h3 className="font-display text-[15px] font-bold text-[#172B4D]">Assets</h3>
           </div>
-          <Section title="Assets" rows={bs.assets} total={bs.totalAssets} />
+          <BsSection title="Assets" rows={bs.assets} total={bs.totalAssets} />
           <div className="mt-3 rounded-xl bg-[#E8F5E9]/60 px-3 py-2 text-[12px]">
             <span className="font-semibold text-[#1B7A2E]">Current assets: {KES(currentAssets)}</span>
-            <span className="text-[#6B778C]"> — cash, tills, bank, debtors &amp; VAT input</span>
+            <span className="text-[#6B778C]"> - cash, tills, bank, debtors &amp; VAT input</span>
           </div>
         </Panel>
         <div className="space-y-4">
@@ -795,14 +801,14 @@ function BalanceSheetTab({ bs }: { bs: AccPayload["balanceSheet"] }) {
               <Landmark className="h-4 w-4 text-[#FFAB00]" />
               <h3 className="font-display text-[15px] font-bold text-[#172B4D]">Liabilities</h3>
             </div>
-            <Section title="Liabilities" rows={bs.liabilities} total={bs.totalLiabilities} />
+            <BsSection title="Liabilities" rows={bs.liabilities} total={bs.totalLiabilities} />
           </Panel>
           <Panel>
             <div className="mb-3 flex items-center gap-2">
               <Scale className="h-4 w-4 text-[#172B4D]" />
               <h3 className="font-display text-[15px] font-bold text-[#172B4D]">Equity</h3>
             </div>
-            <Section title="Equity" rows={bs.equity} total={bs.totalEquity} />
+            <BsSection title="Equity" rows={bs.equity} total={bs.totalEquity} />
           </Panel>
         </div>
       </div>
@@ -834,7 +840,7 @@ function BankReconTab({ recon, ledgerCash }: { recon: AccPayload["bankRecon"]; l
 
   const matchLine = (r: (typeof rows)[number]) => {
     setDemo((d) => ({ ...d, [r.id]: true }));
-    toast({ title: "Demo match", description: `${r.ref} marked matched to a journal — demo only, nothing is saved.` });
+    toast({ title: "Demo match", description: `${r.ref} marked matched to a journal - demo only, nothing is saved.` });
   };
 
   const diff = Math.round((ledgerCash - summary.statementTotal) * 100) / 100;
@@ -858,7 +864,7 @@ function BankReconTab({ recon, ledgerCash }: { recon: AccPayload["bankRecon"]; l
         <div className="flex flex-wrap items-center gap-2 px-4 pt-4 md:px-6 md:pt-6">
           <Landmark className="h-4 w-4 text-[#0052CC]" />
           <h3 className="font-display text-[15px] font-bold text-[#172B4D]">M-Pesa Till statement</h3>
-          <span className="text-[11px] text-[#6B778C]">{recon.statement[0]?.till ?? "—"}</span>
+          <span className="text-[11px] text-[#6B778C]">{recon.statement[0]?.till ?? "-"}</span>
           <span className="ml-auto text-[11px] text-[#6B778C]">newest first</span>
         </div>
         <div className={cn("mt-3 px-4 pb-4 md:px-6 md:pb-6", SCROLL)}>
@@ -920,7 +926,7 @@ function BankReconTab({ recon, ledgerCash }: { recon: AccPayload["bankRecon"]; l
             <p className="text-[14px] font-bold tabular-nums text-[#172B4D]">{KES(summary.statementTotal)}</p>
           </div>
           <div className="rounded-xl border border-[#DFE1E6] bg-[#F4F5F7]/50 px-3 py-2.5">
-            <p className="text-[11px] text-[#6B778C]">Ledger cash — 1030 M-Pesa Till</p>
+            <p className="text-[11px] text-[#6B778C]">Ledger cash - 1030 M-Pesa Till</p>
             <p className="text-[14px] font-bold tabular-nums text-[#172B4D]">{KES(ledgerCash)}</p>
           </div>
           <div className="rounded-xl border border-[#FFD591] bg-[#FFF8E1] px-3 py-2.5">
@@ -929,7 +935,7 @@ function BankReconTab({ recon, ledgerCash }: { recon: AccPayload["bankRecon"]; l
           </div>
         </div>
         <p className="mt-2 text-[11px] text-[#6B778C]">
-          Statement covers recent M-Pesa activity only; the ledger carries the full till history — opening float plus posted sales.
+          Statement covers recent M-Pesa activity only; the ledger carries the full till history - opening float plus posted sales.
         </p>
       </Panel>
     </div>
@@ -953,14 +959,16 @@ export default function AccountingScreen() {
   }, []);
 
   useEffect(() => {
-    void load();
+    // async boundary: the loader touches state, so never call it synchronously here
+    const t = setTimeout(() => void load(), 0);
+    return () => clearTimeout(t);
   }, [load]);
 
   /* ── loading / error states ─────────────────────────────────────────────── */
   if (error && !data) {
     return (
       <div className="mx-auto w-full max-w-6xl space-y-6">
-        <ScreenHeader title="Accounting" subtitle="Double-entry ledger — journals, trial balance & statutory reports" />
+        <ScreenHeader title="Accounting" subtitle="Double-entry ledger - journals, trial balance & statutory reports" />
         <EmptyState
           icon={<AlertTriangle className="h-5 w-5" />}
           title="Could not load accounting data"
@@ -981,7 +989,7 @@ export default function AccountingScreen() {
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6">
-      <ScreenHeader title="Accounting" subtitle="Double-entry ledger — journals, trial balance & statutory reports" />
+      <ScreenHeader title="Accounting" subtitle="Double-entry ledger - journals, trial balance & statutory reports" />
 
       {/* KPI row */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">

@@ -18,7 +18,7 @@ export interface AuthUser {
   storeName?: string;
 }
 
-/** Session-scoped slice — the only part persisted to localStorage. */
+/** Session-scoped slice - the only part persisted to localStorage. */
 interface SessionSlice {
   page: ScreenId;
   sidebarCollapsed: boolean;
@@ -28,7 +28,7 @@ interface SessionSlice {
 }
 
 interface AppState extends SessionSlice {
-  /* hydration flag — flips once persisted session is restored */
+  /* hydration flag - flips once persisted session is restored */
   hydrated: boolean;
 
   setPage: (p: ScreenId) => void;
@@ -37,7 +37,7 @@ interface AppState extends SessionSlice {
   setUser: (u: AuthUser | null) => void;
   setActiveStoreId: (id: number | "all") => void;
 
-  /* bootstrap data (NOT persisted — refetched on boot) */
+  /* bootstrap data (NOT persisted - refetched on boot) */
   stores: StoreDto[];
   staff: StaffDto[];
   settings: SettingsDto | null;

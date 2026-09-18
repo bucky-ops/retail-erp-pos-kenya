@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
-/** POST /api/auth/login — staff PIN or owner login. */
+/** POST /api/auth/login - staff PIN or owner login. */
 export async function POST(req: NextRequest) {
   const { pin, role } = await req.json();
 

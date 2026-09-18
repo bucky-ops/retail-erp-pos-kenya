@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 export const dynamic = "force-dynamic";
 
 /**
- * GET /api/debt-plans/[id]/statement — everything the printable debtor
+ * GET /api/debt-plans/[id]/statement - everything the printable debtor
  * statement needs: customer + plan, credit invoices, payment ledger and
  * account summary. The UI renders this as an A4 statement (print → PDF).
  */

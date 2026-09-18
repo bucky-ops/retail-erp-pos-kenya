@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils";
 
-/** DukaFlow "D" mark — shopping bag + upward arrow + barcode lines + location pin dot. */
+/** DukaFlow "D" mark - shopping bag + upward arrow + barcode lines + location pin dot. */
 export function DukaMark({
   color = "#0052CC",
   accent = "#00C853",

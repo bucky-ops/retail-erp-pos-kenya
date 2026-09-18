@@ -49,12 +49,12 @@ const DEFAULTS = {
   kraPin: "P051234567X",
   branch: "Thika Road",
   till: "Till 123456",
-  promo: "Asante! You saved {saved} today — karibu tena",
+  promo: "Asante! You saved {saved} today - karibu tena",
 };
 
 const DEFAULT_TOGGLES: BrandToggles = { tier: true, loyalty: true, kraQr: true, barcode: true, signature: true };
 
-/* Sample hardware lines — used for the Walk-in pseudo sale and as a
+/* Sample hardware lines - used for the Walk-in pseudo sale and as a
    fallback when a sale DTO arrives without items. */
 const SAMPLE_ITEMS: SaleItemDto[] = [
   { id: 901, productId: 11, name: "BOMA Cement 32.5N 50kg", emoji: "🧱", qty: 4, unitPrice: 780, discount: 0, total: 3120 },
@@ -152,7 +152,7 @@ const promoLine = (text: string, discount: number) => {
   return text.split("{saved}").join(saved);
 };
 
-/* Deterministic pseudo-random barcode bar widths (1–4px) from a seed string. */
+/* Deterministic pseudo-random barcode bar widths (1-4px) from a seed string. */
 const barcodeBars = (seed: string, count = 38) =>
   Array.from({ length: count }, (_, i) => {
     const c = seed.length ? seed.charCodeAt(i % seed.length) : 65;
@@ -413,7 +413,7 @@ function ThermalPreview({ sale, brand }: { sale: SaleDto; brand: BrandConfig }) 
             <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", color: verified ? "#1B7A2E" : "#B8860B" }}>
               KRA eTIMS {(sale.kraStatus ?? "PENDING").toUpperCase()}
             </div>
-            <div style={{ fontSize: 9.5, color: "#6B778C" }}>CU No: {sale.cuInvoiceNumber ?? "—"}</div>
+            <div style={{ fontSize: 9.5, color: "#6B778C" }}>CU No: {sale.cuInvoiceNumber ?? "-"}</div>
             <div className="flex justify-center" style={{ marginTop: 8 }}>
               <QrBlock sale={sale} size={sale.qrCodeBase64 ? 84 : 56} brand={brand} />
             </div>
@@ -556,7 +556,7 @@ function A4Sheet({ sale, brand, mode }: { sale: SaleDto; brand: BrandConfig; mod
                 </td>
                 <td style={{ ...tdStyle, textAlign: "center" }}>{it.qty}</td>
                 <td style={{ ...tdStyle, textAlign: "right" }}>{num(it.unitPrice)}</td>
-                {isQuote && <td style={{ ...tdStyle, textAlign: "right", color: it.discount > 0 ? "#B8860B" : "#6B778C" }}>{it.discount > 0 ? num(it.discount) : "—"}</td>}
+                {isQuote && <td style={{ ...tdStyle, textAlign: "right", color: it.discount > 0 ? "#B8860B" : "#6B778C" }}>{it.discount > 0 ? num(it.discount) : "-"}</td>}
                 <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600 }}>{num(it.total)}</td>
               </tr>
             ))}
@@ -608,11 +608,11 @@ function A4Sheet({ sale, brand, mode }: { sale: SaleDto; brand: BrandConfig; mod
             <>
               <div>• Quotation valid for 14 days from issue date</div>
               <div>• Prices in KES, inclusive of 16% VAT</div>
-              <div>• Delivery: 2–3 working days within Nairobi</div>
+              <div>• Delivery: 2-3 working days within Nairobi</div>
             </>
           ) : (
             <>
-              <div>Bank: Equity Bank — A/C 1234567</div>
+              <div>Bank: Equity Bank - A/C 1234567</div>
               <div>M-Pesa Till: {brand.till}</div>
               <div>Paid via: {sale.paymentMethod}</div>
             </>
@@ -625,7 +625,7 @@ function A4Sheet({ sale, brand, mode }: { sale: SaleDto; brand: BrandConfig; mod
             <QrBlock sale={sale} size={76} brand={brand} />
             <div style={{ fontSize: 10, color: "#6B778C", paddingBottom: 2 }}>
               <div style={{ fontWeight: 700, color: "#172B4D" }}>Scan to verify with KRA eTIMS</div>
-              <div>CU Invoice No: {sale.cuInvoiceNumber ?? "—"}</div>
+              <div>CU Invoice No: {sale.cuInvoiceNumber ?? "-"}</div>
               <div>Status: {sale.kraStatus}{!isQuote && totalDiscount > 0 ? ` • Line discounts applied: KES ${num(totalDiscount)}` : ""}</div>
             </div>
           </div>
@@ -707,7 +707,7 @@ function GiftCardPreview({ brand }: { brand: BrandConfig }) {
       {/* label sheet */}
       <div className="w-full max-w-[520px] rounded-2xl border border-[#DFE1E6] bg-white p-4">
         <div className="mb-3 flex items-center justify-between">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-[#6B778C]">Shelf labels — 3 × 8 sheet</div>
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-[#6B778C]">Shelf labels - 3 × 8 sheet</div>
           <Badge variant="outline" className="text-[10px]">24 labels</Badge>
         </div>
         <div className="grid grid-cols-3 gap-2">
@@ -875,7 +875,7 @@ export default function ReceiptsScreen() {
     <div>
       <ScreenHeader
         title="Receipt Studio"
-        subtitle="Design receipts, invoices, gift cards and quotations — live previews update as you type."
+        subtitle="Design receipts, invoices, gift cards and quotations - live previews update as you type."
         actions={
           <Button variant="outline" size="sm" onClick={resetStudio}>
             <RotateCcw size={14} /> Reset studio
@@ -890,7 +890,7 @@ export default function ReceiptsScreen() {
           icon={<Printer size={17} />}
           label="Last exported"
           loading={!sales}
-          value={lastExport ? lastExport.receiptNo : "—"}
+          value={lastExport ? lastExport.receiptNo : "-"}
           sub={lastExport ? `Printed ${fmtDate(lastExport.createdAt)}` : "Awaiting first export"}
         />
         <KpiCard
@@ -962,7 +962,7 @@ export default function ReceiptsScreen() {
                 <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()}>
                   <Upload size={13} /> Upload logo
                 </Button>
-                <p className="mt-1 text-[10px] text-[#6B778C]">PNG/JPG — shown on all four templates</p>
+                <p className="mt-1 text-[10px] text-[#6B778C]">PNG/JPG - shown on all four templates</p>
               </div>
             </div>
             <div className="mt-4 grid grid-cols-2 gap-3">
@@ -998,7 +998,7 @@ export default function ReceiptsScreen() {
             <Label htmlFor="studio-promo" className="text-[11px] font-medium text-[#6B778C]">Promo message</Label>
             <Input id="studio-promo" value={promo} onChange={(e) => setPromo(e.target.value)} className="mt-1.5 h-9 text-[12px]" placeholder="e.g. Asante! You saved {saved} today" />
             <p className="mt-1.5 text-[10px] text-[#6B778C]">
-              Available variable: <code className="rounded bg-[#F4F5F7] px-1 py-0.5 font-mono text-[10px] text-[#0052CC]">{"{saved}"}</code> — replaced with the actual discount (or “KES 0”).
+              Available variable: <code className="rounded bg-[#F4F5F7] px-1 py-0.5 font-mono text-[10px] text-[#0052CC]">{"{saved}"}</code> - replaced with the actual discount (or “KES 0”).
             </p>
           </Panel>
 
@@ -1035,7 +1035,7 @@ export default function ReceiptsScreen() {
                 <SelectItem value="walkin">Walk-in (sample data)</SelectItem>
                 {(sales ?? []).map((s) => (
                   <SelectItem key={s.id} value={String(s.id)}>
-                    {s.receiptNo} — {s.customerName ?? "Walk-in"} · {KES(s.total, true)}
+                    {s.receiptNo} - {s.customerName ?? "Walk-in"} · {KES(s.total, true)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -1116,7 +1116,7 @@ export default function ReceiptsScreen() {
         <DialogContent className="sm:max-w-[900px]">
           <DialogHeader>
             <DialogTitle className="font-display">
-              {TEMPLATES.find((tp) => tp.id === template)?.label} — live preview
+              {TEMPLATES.find((tp) => tp.id === template)?.label} - live preview
             </DialogTitle>
             <DialogDescription>
               {selected.receiptNo} · {selected.customerName ?? "Walk-in"} · {KES(selected.total)}

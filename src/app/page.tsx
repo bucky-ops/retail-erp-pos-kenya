@@ -72,11 +72,11 @@ export default function App() {
         setBootstrap({ stores: d.stores, staff: d.staff, settings: d.settings, categories: d.categories })
       )
       .catch(() =>
-        toast({ title: "Offline start", description: "Could not reach server — POS still works offline." })
+        toast({ title: "Offline start", description: "Could not reach server - POS still works offline." })
       );
   }, [setBootstrap]);
 
-  /* session hydration flag — official persist API + failsafe */
+  /* session hydration flag - official persist API + failsafe */
   useEffect(() => {
     const flag = () => useApp.setState({ hydrated: true });
     if (useApp.persist.hasHydrated()) {
@@ -157,9 +157,9 @@ export default function App() {
         <div className={cn(device !== "desktop" && "p-2 md:p-6 bg-[#E3E6EA] min-h-screen")}>
           {/* @container makes every responsive `@xl:`-style variant inside respond to the FRAME
               width in preview modes (tablet 1016px / mobile 382px) instead of the real viewport,
-              and to the full window on desktop — fixes the mobile-frame clipping bug. */}
+              and to the full window on desktop - fixes the mobile-frame clipping bug. */}
           <div className={cn("@container flex h-screen min-h-0", frameClass)}>
-            {/* ── Sidebar (hidden in mobile frame — mobile nav is in topbar) ── */}
+            {/* ── Sidebar (hidden in mobile frame - mobile nav is in topbar) ── */}
             <aside
               className={cn(
                 "flex-col bg-[#172B4D] transition-all duration-200",
@@ -242,6 +242,9 @@ export default function App() {
                 >
                   <LogOut size={16} /> {!sidebarCollapsed && "Sign Out"}
                 </button>
+                <p className={cn("select-none text-center text-[10px] font-medium text-white/30", sidebarCollapsed && "tracking-tight")}>
+                  {sidebarCollapsed ? "v1.2.0" : "DukaFlow v1.2.0"}
+                </p>
               </div>
             </aside>
 
@@ -345,7 +348,7 @@ export default function App() {
                 </div>
               </header>
 
-              {/* Screen body — keyed for a soft transition between screens */}
+              {/* Screen body - keyed for a soft transition between screens */}
               <main key={page} className="df-fade-in min-h-0 flex-1 overflow-auto bg-[#F4F5F7] p-4 @md:p-6 @4xl:p-8 df-scroll" aria-live="polite">
                 {page === "login" && <LoginScreen embedded />}
                 {page === "design" && <DesignScreen />}
@@ -369,7 +372,7 @@ export default function App() {
               <footer className="mt-auto flex items-center justify-between border-t border-[#DFE1E6] bg-white px-4 py-2.5 text-[11px] text-[#6B778C] @4xl:px-8">
                 <span className="flex items-center gap-1.5">
                   <PackageCheck size={12} className="text-[#00C853]" />
-                  DukaFlow v2.4 — Multi-store • Offline-first POS • KRA eTIMS • M-Pesa Ready
+                  DukaFlow v2.4 - Multi-store • Offline-first POS • KRA eTIMS • M-Pesa Ready
                 </span>
                 <span className="hidden @md:inline">
                   {activeStore ? `${activeStore.name}, ${activeStore.location}` : "All Stores"} • Nairobi, Kenya

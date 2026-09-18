@@ -48,20 +48,20 @@ const TEMPLATES: { key: TemplateKey; label: string; body: string }[] = [
     key: "DebtReminder",
     label: "Debt Reminder",
     body:
-      "Hi {customer_name}, a friendly reminder — your account has an outstanding balance of KES {debt_balance}. " +
+      "Hi {customer_name}, a friendly reminder - your account has an outstanding balance of KES {debt_balance}. " +
       "Pay via M-Pesa Paybill 123456 or visit {shop_name} Thika Road. Asante!",
   },
   {
     key: "Birthday",
     label: "Birthday Offer",
     body:
-      "Happy Birthday {customer_name}! 🎉 Enjoy 10% off everything today at {shop_name} — a {tier} tier gift from us. Karibu!",
+      "Happy Birthday {customer_name}! 🎉 Enjoy 10% off everything today at {shop_name} - a {tier} tier gift from us. Karibu!",
   },
   {
     key: "Promo",
     label: "Promo",
     body:
-      "Hi {customer_name}! Bamburi Cement offer this week at {shop_name} — {tier} members save 10%. " +
+      "Hi {customer_name}! Bamburi Cement offer this week at {shop_name} - {tier} members save 10%. " +
       "You have {points_balance} points. Pop in today!",
   },
   {
@@ -91,7 +91,7 @@ const TYPE_META: Record<string, { label: string; cls: string }> = {
 
 const rel = (iso: string) => {
   const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-  if (!Number.isFinite(s)) return "—";
+  if (!Number.isFinite(s)) return "-";
   if (s < 60) return "just now";
   if (s < 3600) return `${Math.floor(s / 60)}m ago`;
   if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
@@ -127,7 +127,9 @@ export default function MessagesScreen() {
   }, []);
 
   useEffect(() => {
-    void load();
+    // async boundary: the loader touches state, so never call it synchronously here
+    const t = setTimeout(() => void load(), 0);
+    return () => clearTimeout(t);
   }, [load]);
 
   const audienceCount = data ? data.audiences[audience] : 0;
@@ -160,7 +162,7 @@ export default function MessagesScreen() {
         { audience, channel, body: body.trim(), label: template === "none" ? "Promo" : template }
       );
       toast({
-        title: `Blast sent to ${res.sent} customers — cost KES ${res.cost.toLocaleString()}`,
+        title: `Blast sent to ${res.sent} customers - cost KES ${res.cost.toLocaleString()}`,
         description: `Via ${res.channel} • Africa's Talking gateway`,
       });
       setBody("");
@@ -229,7 +231,7 @@ export default function MessagesScreen() {
 
       {/* Main grid */}
       <div className="grid grid-cols-12 gap-4">
-        {/* LEFT — compose */}
+        {/* LEFT - compose */}
         <Panel className="col-span-12 @4xl:col-span-7">
           <h3 className="font-display text-[15px] font-bold text-[#172B4D]">Compose Blast</h3>
           <p className="mt-0.5 text-[12px] text-[#6B778C]">Merge tags personalise every message per customer.</p>
@@ -392,7 +394,7 @@ export default function MessagesScreen() {
           </div>
         </Panel>
 
-        {/* RIGHT — recent messages */}
+        {/* RIGHT - recent messages */}
         <Panel className="col-span-12 @4xl:col-span-5" padding={false}>
           <div className="flex items-center justify-between border-b border-[#DFE1E6] p-4">
             <h3 className="font-display text-[15px] font-bold text-[#172B4D]">Recent Messages</h3>

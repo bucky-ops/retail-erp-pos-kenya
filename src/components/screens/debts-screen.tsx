@@ -77,7 +77,7 @@ interface StatementData {
   };
 }
 
-/** Creditors ledger — seed subset matching the prototype (Bamburi / Sadolin / Twiga). */
+/** Creditors ledger - seed subset matching the prototype (Bamburi / Sadolin / Twiga). */
 const CREDITORS: Creditor[] = [
   { id: 1, name: "Bamburi Cement Ltd", billNo: "BILL-001", amount: 120000, balance: 80000, due: "15 Sep", overdueDays: 0, paid: false, terms: "Net 30" },
   { id: 2, name: "Sadolin Paints Kenya", billNo: "BILL-002", amount: 45000, balance: 0, due: "30 Aug", overdueDays: 0, paid: true, terms: "Net 15" },
@@ -139,7 +139,7 @@ export default function DebtsScreen() {
   const [stmtLoading, setStmtLoading] = useState(false);
   const [stmtBusy, setStmtBusy] = useState(false);
 
-  /* statement email (mock mailer — audited in Messages) */
+  /* statement email (mock mailer - audited in Messages) */
   const [stmtEmailOpen, setStmtEmailOpen] = useState(false);
   const [stmtEmailTo, setStmtEmailTo] = useState("");
   const [stmtEmailSubject, setStmtEmailSubject] = useState("");
@@ -163,7 +163,9 @@ export default function DebtsScreen() {
   }, []);
 
   useEffect(() => {
-    void load();
+    // async boundary: the loader touches state, so never call it synchronously here
+    const t = setTimeout(() => void load(), 0);
+    return () => clearTimeout(t);
   }, [load]);
 
   const plans = data?.plans ?? [];
@@ -302,8 +304,8 @@ export default function DebtsScreen() {
       setStmtEmailBody(r.body);
       if (r.to) setStmtEmailTo(r.to);
     } catch {
-      setStmtEmailSubject(`Account Statement — ${stmtPlan.customerName}`);
-      setStmtEmailBody("Could not preview the statement — try again.");
+      setStmtEmailSubject(`Account Statement - ${stmtPlan.customerName}`);
+      setStmtEmailBody("Could not preview the statement - try again.");
     } finally {
       setStmtEmailLoading(false);
     }
@@ -584,7 +586,7 @@ export default function DebtsScreen() {
             </div>
           </div>
 
-          {/* ══════════ receivables aging — live stacked bar + clickable buckets ══════════ */}
+          {/* ══════════ receivables aging - live stacked bar + clickable buckets ══════════ */}
           <Panel className="p-4 @6xl:p-5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
@@ -621,7 +623,7 @@ export default function DebtsScreen() {
                       "h-full transition-all duration-500",
                       filter === b.key && "ring-2 ring-[#172B4D] ring-offset-1"
                     )}
-                    title={`${b.label} — ${KES(b.amount)}`}
+                    title={`${b.label} - ${KES(b.amount)}`}
                   />
                 ) : null
               )}
@@ -710,7 +712,7 @@ export default function DebtsScreen() {
                 <EmptyState
                   icon={<HandCoins className="h-6 w-6" />}
                   title="No debt plans here"
-                  sub={filter === "all" ? "No customer owes anything right now — credit sales create plans automatically." : "Nothing matches this filter. Try another chip."}
+                  sub={filter === "all" ? "No customer owes anything right now - credit sales create plans automatically." : "Nothing matches this filter. Try another chip."}
                   action={
                     <Button onClick={openBuilder} className="rounded-xl bg-[#0052CC] hover:bg-[#0041A8]">
                       <Plus className="h-4 w-4" /> Create payment plan
@@ -749,7 +751,7 @@ export default function DebtsScreen() {
                             <TierBadge tier={p.tier} />
                           </div>
                         </TableCell>
-                        <TableCell className="font-mono text-[11px] text-[#6B778C]">{p.invoiceNo ?? "—"}</TableCell>
+                        <TableCell className="font-mono text-[11px] text-[#6B778C]">{p.invoiceNo ?? "-"}</TableCell>
                         <TableCell className="font-display text-[13px] font-bold text-[#FF5630]">
                           {KES(p.totalDebt)}
                         </TableCell>
@@ -802,7 +804,7 @@ export default function DebtsScreen() {
                                 onClick={() =>
                                   toast({
                                     title: "Customer profile",
-                                    description: `${p.customerName} (${p.customerPhone}) — open the Customers screen for the full 360° view.`,
+                                    description: `${p.customerName} (${p.customerPhone}) - open the Customers screen for the full 360° view.`,
                                   })
                                 }
                               >
@@ -1044,7 +1046,7 @@ export default function DebtsScreen() {
           ) : (
             <>
               <div className="df-scroll max-h-[60vh] overflow-y-auto pr-1">
-                {/* the sheet — printable A4 area */}
+                {/* the sheet - printable A4 area */}
                 <div className="df-print-area df-print-area-a4 df-statement overflow-hidden rounded-xl border border-[#DFE1E6] shadow-sm">
                   {/* navy gradient header band */}
                   <div className="flex items-center justify-between bg-gradient-to-r from-[#0052CC] to-[#003d99] px-6 py-4 text-white">
@@ -1161,7 +1163,7 @@ export default function DebtsScreen() {
                             <tr key={p.id} className="border-b border-[#F4F5F7]">
                               <td className="py-1.5 text-[#6B778C]">{fmtDay(p.createdAt)}</td>
                               <td className="py-1.5 font-semibold text-[#172B4D]">{p.method}</td>
-                              <td className="max-w-[180px] truncate py-1.5 text-[11px] text-[#6B778C]">{p.note ?? "—"}</td>
+                              <td className="max-w-[180px] truncate py-1.5 text-[11px] text-[#6B778C]">{p.note ?? "-"}</td>
                               <td className="py-1.5 text-right font-bold text-[#1B7A2E]">−{KES(p.amount)}</td>
                             </tr>
                           ))
@@ -1173,7 +1175,7 @@ export default function DebtsScreen() {
                   {/* footer */}
                   <div className="border-t border-dashed border-[#DFE1E6] px-6 py-3 text-[10px] text-[#6B778C]">
                     This statement is generated by DukaFlow ERP and reflects the account position at the time of printing.
-                    Questions? Call +254 700 123 456 or email accounts@dukaflow.co.ke — Asante!
+                    Questions? Call +254 700 123 456 or email accounts@dukaflow.co.ke - Asante!
                   </div>
                 </div>
               </div>
@@ -1212,7 +1214,7 @@ export default function DebtsScreen() {
               Email account statement
             </DialogTitle>
             <DialogDescription className="text-[12px]">
-              Sends the full statement (invoices, payments, balance) to the debtor — mock mailer, audited in Messages.
+              Sends the full statement (invoices, payments, balance) to the debtor - mock mailer, audited in Messages.
             </DialogDescription>
           </DialogHeader>
 
@@ -1236,8 +1238,8 @@ export default function DebtsScreen() {
                 />
                 <p className="text-[10px] text-[#6B778C]">
                   {stmtData?.customer.email
-                    ? "Customer has an email on file — the address you send to will be kept for future statements."
-                    : `No email on file for ${stmtData?.customer.name ?? "this customer"} — the address you send to will be saved.`}
+                    ? "Customer has an email on file - the address you send to will be kept for future statements."
+                    : `No email on file for ${stmtData?.customer.name ?? "this customer"} - the address you send to will be saved.`}
                 </p>
               </div>
               <div className="space-y-1.5">
@@ -1286,7 +1288,7 @@ export default function DebtsScreen() {
                   <SelectContent>
                     {(customers ?? []).map((c) => (
                       <SelectItem key={c.id} value={String(c.id)}>
-                        {c.name} — {KES(c.debtBalance)} debt
+                        {c.name} - {KES(c.debtBalance)} debt
                       </SelectItem>
                     ))}
                   </SelectContent>

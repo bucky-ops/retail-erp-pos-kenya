@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
-/** "2026-09-18" — matches the date granularity used by the Attendance model. */
+/** "2026-09-18" - matches the date granularity used by the Attendance model. */
 const dateStr = (d: Date) => d.toISOString().slice(0, 10);
 const todayStr = () => dateStr(new Date());
 const currentPeriod = () => {
@@ -11,7 +11,7 @@ const currentPeriod = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 };
 
-/** GET /api/staff — full HRMS directory feed:
+/** GET /api/staff - full HRMS directory feed:
  *   • staff: every employee joined with store name + trailing-30-day attendance counts,
  *   • summary: total / onShift (Present|Late on the latest register day) / onLeave /
  *     payrollPending (Draft payslips for the current period) + their net KES value,
@@ -38,7 +38,7 @@ export async function GET() {
     db.payslip.findMany({ where: { period, status: "Draft" }, select: { net: true } }),
   ]);
 
-  // onShift — if nobody clocked in today (e.g. weekend seed), fall back to the
+  // onShift - if nobody clocked in today (e.g. weekend seed), fall back to the
   // most recent register day so the KPI never reads 0 on stale data.
   let onShiftIds = new Set(todayPresent.map((r) => r.employeeId));
   if (onShiftIds.size === 0) {
@@ -119,7 +119,7 @@ export async function GET() {
   });
 }
 
-/** POST /api/staff — onboard an employee.
+/** POST /api/staff - onboard an employee.
  *  Required: name, idNo, basic > 0. Auto-generates the next DF-xxx staff number
  *  and marks the newcomer Present on today's attendance register.
  */

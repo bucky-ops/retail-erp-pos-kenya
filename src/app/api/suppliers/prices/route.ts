@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 export const dynamic = "force-dynamic";
 
 /**
- * DukaFlow — supplier price lists (negotiated per-product costs).
+ * DukaFlow - supplier price lists (negotiated per-product costs).
  *
  * GET  /api/suppliers/prices?supplierId=1  → every negotiated cost for one
  *      supplier (product-joined). Omit supplierId → the full matrix (used to

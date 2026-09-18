@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Bulk Stock Import — spreadsheet paste → validated diff preview → apply.
+ * Bulk Stock Import - spreadsheet paste → validated diff preview → apply.
  *
  * Accepts CSV / tab-separated rows of `code,qty` (barcode or SKU, header and
  * comment lines skipped) and runs them through the two-phase
@@ -56,7 +56,7 @@ interface ApplyResult {
   rows: { name: string; emoji: string; delta: number; newQty: number }[];
 }
 
-const SAMPLE = `# barcode or sku,qty — lines starting with # are ignored
+const SAMPLE = `# barcode or sku,qty - lines starting with # are ignored
 6200001000000,40
 CMT-001,25
 PNT-012,12`;
@@ -162,7 +162,7 @@ export function BulkImportDialog({
               Bulk stock import
             </DialogTitle>
             <DialogDescription className="text-[12px]">
-              Paste a spreadsheet of barcode/SKU + quantity — preview every diff before anything is written.
+              Paste a spreadsheet of barcode/SKU + quantity - preview every diff before anything is written.
             </DialogDescription>
           </DialogHeader>
         </div>
@@ -248,8 +248,8 @@ export function BulkImportDialog({
                   }}
                   className="mt-1 h-9 w-full rounded-xl border border-[#DFE1E6] bg-[#FAFBFC] px-2.5 text-[12px] font-semibold text-[#172B4D] outline-none focus:border-[#0052CC]"
                 >
-                  <option value="set">Set — qty becomes exactly this</option>
-                  <option value="add">Add — qty += this (deliveries)</option>
+                  <option value="set">Set - qty becomes exactly this</option>
+                  <option value="add">Add - qty += this (deliveries)</option>
                 </select>
               </div>
             </div>
@@ -277,7 +277,7 @@ export function BulkImportDialog({
                   setText(e.target.value);
                   setPreview(null);
                 }}
-                placeholder={"6200001000000,40\nCMT-001,25\n# barcode or SKU — one per line"}
+                placeholder={"6200001000000,40\nCMT-001,25\n# barcode or SKU - one per line"}
                 rows={5}
                 className="df-scroll mt-1 rounded-xl border-[#DFE1E6] bg-[#FAFBFC] font-mono text-[12px]"
               />
@@ -291,7 +291,7 @@ export function BulkImportDialog({
                 <div className="flex flex-wrap items-center gap-2 border-b border-[#DFE1E6] px-3 py-2">
                   <ShieldCheck size={13} className="text-[#0052CC]" />
                   <p className="flex-1 text-[11.5px] font-bold text-[#172B4D]">
-                    Preview — {preview.valid} valid{preview.errors > 0 ? `, ${preview.errors} will be skipped` : ""}
+                    Preview - {preview.valid} valid{preview.errors > 0 ? `, ${preview.errors} will be skipped` : ""}
                   </p>
                   <span className="rounded-full bg-[#F4F5F7] px-2 py-0.5 text-[10px] font-bold text-[#6B778C]">{preview.storeName}</span>
                 </div>

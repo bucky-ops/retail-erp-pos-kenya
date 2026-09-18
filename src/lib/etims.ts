@@ -1,5 +1,5 @@
 /**
- * KRA eTIMS helpers — CU invoice numbers, QR payload, status machine.
+ * KRA eTIMS helpers - CU invoice numbers, QR payload, status machine.
  * This is a local simulator (mock endpoint) standing in for the KRA eTIMS OSU API.
  */
 import QRCode from "qrcode";

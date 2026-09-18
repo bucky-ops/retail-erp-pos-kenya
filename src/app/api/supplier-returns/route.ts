@@ -5,7 +5,7 @@ import { emitLive } from "@/lib/live-emit";
 export const dynamic = "force-dynamic";
 
 /**
- * DukaFlow — Return to Vendor (RTV) with numbered debit notes.
+ * DukaFlow - Return to Vendor (RTV) with numbered debit notes.
  *
  * GET  /api/supplier-returns → recent RTVs (supplier, store, lines, totals)
  * POST /api/supplier-returns → create one
@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
       }
       if (qty > level.qty) {
         return NextResponse.json(
-          { ok: false, error: `Cannot return ${qty} × ${level.product.name} — only ${level.qty} in stock at ${store.name}` },
+          { ok: false, error: `Cannot return ${qty} × ${level.product.name} - only ${level.qty} in stock at ${store.name}` },
           { status: 400 }
         );
       }
@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Decrement live stock (outbound). No receivedAt reset — the batch shrinks, not refreshes.
+    // Decrement live stock (outbound). No receivedAt reset - the batch shrinks, not refreshes.
     for (const line of validated) {
       await db.stockLevel.update({
         where: { productId_storeId: { productId: line.productId, storeId } },
@@ -108,7 +108,7 @@ export async function POST(req: NextRequest) {
     const channel = await db.chatChannel.findFirst({ where: { name: "stock-alerts" } });
     if (channel) {
       const lines = validated.map((l) => `  • ${l.qty} × ${l.name} (KES ${Math.round(l.total).toLocaleString()})`).join("\n");
-      const msg = `📤 ${rtnNo} — goods returned to ${supplier.name} (${reason}). ${debitNoteNo} raised for KES ${Math.round(total).toLocaleString()}.\n${lines}\nFrom ${store.name}. Stock decremented.`;
+      const msg = `📤 ${rtnNo} - goods returned to ${supplier.name} (${reason}). ${debitNoteNo} raised for KES ${Math.round(total).toLocaleString()}.\n${lines}\nFrom ${store.name}. Stock decremented.`;
       await db.chatMessage.create({ data: { channelId: channel.id, author: "Procurement Bot", initials: "PB", content: msg } });
       await db.chatChannel.update({ where: { id: channel.id }, data: { unread: { increment: 1 } } });
       emitLive("chat:new", { channelId: channel.id, channelName: channel.name, id: 0, author: "Procurement Bot", initials: "PB", content: msg, createdAt: new Date().toISOString() });
@@ -124,7 +124,7 @@ export async function POST(req: NextRequest) {
 }
 
 /**
- * PATCH /api/supplier-returns — mark a debit note as credited by the supplier
+ * PATCH /api/supplier-returns - mark a debit note as credited by the supplier
  * (owner reconciles when the credit actually lands on the supplier statement).
  * body: { id, status: "Credited" }
  */

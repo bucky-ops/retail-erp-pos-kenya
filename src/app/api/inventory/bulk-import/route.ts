@@ -5,7 +5,7 @@ import { emitLive } from "@/lib/live-emit";
 export const dynamic = "force-dynamic";
 
 /**
- * DukaFlow — bulk stock import (opening stock, delivery notes, spreadsheet paste).
+ * DukaFlow - bulk stock import (opening stock, delivery notes, spreadsheet paste).
  *
  * POST /api/inventory/bulk-import
  *   body: { storeId, mode: "set" | "add", dryRun: boolean,
@@ -176,7 +176,7 @@ export async function POST(req: NextRequest) {
     const downs = applied.filter((a) => a.delta < 0).length;
     const channel = await db.chatChannel.findFirst({ where: { name: "stock-alerts" } });
     if (channel && applied.length > 0) {
-      const note = `📥 Bulk stock import at ${store.name}: ${applied.length} line${applied.length === 1 ? "" : "s"} (${mode === "set" ? "set" : "add"} mode) — ${ups} up, ${downs} down, ${applied.length - ups - downs} unchanged. Applied by spreadsheet import.`;
+      const note = `📥 Bulk stock import at ${store.name}: ${applied.length} line${applied.length === 1 ? "" : "s"} (${mode === "set" ? "set" : "add"} mode) - ${ups} up, ${downs} down, ${applied.length - ups - downs} unchanged. Applied by spreadsheet import.`;
       await db.chatMessage.create({
         data: { channelId: channel.id, author: "System Bot", initials: "SB", content: note },
       });

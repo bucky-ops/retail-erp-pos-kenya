@@ -37,3 +37,4 @@ worklog.md
 # mini-services live code IS versioned now (live-feed event bus);
 # node_modules inside stays ignored via the global node_modules/ rule
 next-env.d.ts
+dukaflow-mobile/

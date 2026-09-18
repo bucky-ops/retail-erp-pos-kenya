@@ -4,7 +4,7 @@ import { emitLive } from "@/lib/live-emit";
 
 export const dynamic = "force-dynamic";
 
-/* DukaFlow — Purchase order lifecycle.
+/* DukaFlow - Purchase order lifecycle.
  *
  * PATCH /api/purchase-orders/[id]
  *   { action: "send" }                          → Draft → Sent

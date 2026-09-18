@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
-/* DukaFlow — Procurement: suppliers + purchase orders.
+/* DukaFlow - Procurement: suppliers + purchase orders.
  *
  * GET /api/purchase-orders                      → PO list (with supplier/store/items)
  * GET /api/purchase-orders?suggestions=1&storeId= → reorder suggestions:
@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
  * POST /api/purchase-orders                      → create PO { supplierId, storeId, items:[{productId, qty, unitCost?}], note? }
  */
 
-/** GET — PO list or reorder suggestions. */
+/** GET - PO list or reorder suggestions. */
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const storeId = searchParams.get("storeId");
@@ -95,7 +95,7 @@ export async function GET(req: NextRequest) {
   );
 }
 
-/** POST — create a purchase order. */
+/** POST - create a purchase order. */
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as {

@@ -5,7 +5,7 @@ import { emitLive } from "@/lib/live-emit";
 export const dynamic = "force-dynamic";
 
 /**
- * DukaFlow — single stock-take session lifecycle.
+ * DukaFlow - single stock-take session lifecycle.
  *
  * GET /api/stock-take/[id]
  *   → full session with product-labelled items for the counting UI.
@@ -116,7 +116,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
           });
           if (!level) continue;
           const newQty = level.qty + delta;
-          if (newQty < 0) continue; // defensive — snapshot should prevent this
+          if (newQty < 0) continue; // defensive - snapshot should prevent this
           await tx.stockLevel.update({
             where: { id: level.id },
             data: {
@@ -142,7 +142,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       if (channel) {
         const lines = applied.slice(0, 6).map((a) => `  • ${a.delta > 0 ? "+" : ""}${Math.round(a.delta)} × ${a.name} (KES ${Math.round(a.value).toLocaleString()})`);
         const extra = applied.length > 6 ? `\n  • …and ${applied.length - 6} more lines` : "";
-        const msg = `✅ ${session.stNo} approved — ${applied.length} variance lines applied at ${session.store.name}.\n${lines.join("\n")}${extra}\nNet variance: KES ${Math.round(netValue).toLocaleString()} (shortage KES ${Math.round(shortageValue).toLocaleString()} / surplus KES ${Math.round(surplusValue).toLocaleString()}).`;
+        const msg = `✅ ${session.stNo} approved - ${applied.length} variance lines applied at ${session.store.name}.\n${lines.join("\n")}${extra}\nNet variance: KES ${Math.round(netValue).toLocaleString()} (shortage KES ${Math.round(shortageValue).toLocaleString()} / surplus KES ${Math.round(surplusValue).toLocaleString()}).`;
         await db.chatMessage.create({ data: { channelId: channel.id, author: "Stock Bot", initials: "SB", content: msg } });
         await db.chatChannel.update({ where: { id: channel.id }, data: { unread: { increment: 1 } } });
         emitLive("chat:new", { channelId: channel.id, channelName: channel.name, id: 0, author: "Stock Bot", initials: "SB", content: msg, createdAt: new Date().toISOString() });

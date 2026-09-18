@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
-/** GET /api/customers?q=&tier=&hasDebt= — searchable customer list. */
+/** GET /api/customers?q=&tier=&hasDebt= - searchable customer list. */
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const q = searchParams.get("q") ?? "";
@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(customers);
 }
 
-/** POST /api/customers — walk-in signup at POS. */
+/** POST /api/customers - walk-in signup at POS. */
 export async function POST(req: NextRequest) {
   const body = await req.json();
   if (!body.name || !body.phone) {

@@ -1,6 +1,6 @@
 /**
  * Server-side bridge to the live-feed mini-service (mini-services/live-feed).
- * Fire-and-forget POST to the bridge port (3004, localhost only) — a missed
+ * Fire-and-forget POST to the bridge port (3004, localhost only) - a missed
  * realtime push must NEVER fail the business operation, so every error is
  * swallowed on purpose.
  */

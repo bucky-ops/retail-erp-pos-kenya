@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 const STATUSES = ["Active", "On Leave", "Suspended", "Exited"];
 
-/** GET /api/staff/[id] — full employee 360°:
+/** GET /api/staff/[id] - full employee 360°:
  *   • employee joined with store,
  *   • payslips (newest period first),
  *   • last 30 attendance days (newest first),
@@ -108,7 +108,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
   });
 }
 
-/** PATCH /api/staff/[id] — update editable HR fields: statutory numbers, pay,
+/** PATCH /api/staff/[id] - update editable HR fields: statutory numbers, pay,
  *  salary channel, emergency contact, employment status and leave balances.
  *  Setting status to "Exited" also deactivates the employee (hidden from payroll).
  */

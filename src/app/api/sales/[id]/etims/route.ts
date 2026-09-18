@@ -5,7 +5,7 @@ import { submitToEtims, generateInvoiceQr } from "@/lib/etims";
 export const dynamic = "force-dynamic";
 
 /**
- * POST /api/sales/[id]/etims — (re)submit a sale to KRA eTIMS.
+ * POST /api/sales/[id]/etims - (re)submit a sale to KRA eTIMS.
  * Used for invoices stuck in "Pending" (e.g. offline sync, device downtime).
  */
 export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
@@ -19,7 +19,7 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
 
   const settings = await db.settings.findUnique({ where: { id: 1 } });
   if (!settings?.kraConnected) {
-    return NextResponse.json({ ok: false, error: "KRA eTIMS not connected — check Settings" }, { status: 400 });
+    return NextResponse.json({ ok: false, error: "KRA eTIMS not connected - check Settings" }, { status: 400 });
   }
 
   const submission = await submitToEtims({
@@ -46,5 +46,5 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
     },
   });
 
-  return NextResponse.json({ ok: true, sale: updated, message: `Invoice submitted — CU ${submission.cuInvoiceNumber}` });
+  return NextResponse.json({ ok: true, sale: updated, message: `Invoice submitted - CU ${submission.cuInvoiceNumber}` });
 }

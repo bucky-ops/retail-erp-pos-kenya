@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
-/* DukaFlow — Supplier directory (procurement masters).
+/* DukaFlow - Supplier directory (procurement masters).
  *
  * GET  /api/suppliers            → active suppliers (with PO counts)
  * POST /api/suppliers { name, phone?, email?, kraPin?, category?, leadDays? }

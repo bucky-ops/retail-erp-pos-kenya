@@ -4,9 +4,9 @@ import { db } from "@/lib/db";
 export const dynamic = "force-dynamic";
 
 /**
- * GET  /api/day-close — today's DayClose (lazily created from live POS sales when absent),
+ * GET  /api/day-close - today's DayClose (lazily created from live POS sales when absent),
  *                       last 14 day closes, on-shift staff (approvers) and today's tender mix.
- * POST /api/day-close — { action, ... }
+ * POST /api/day-close - { action, ... }
  *   action: "count"   { cashCounted, mpesaCounted }  → persist drawer counts + live variance
  *   action: "approve" { approvedBy }                 → record who signed off a big variance
  *   action: "close"   { closingCash?, note? }        → freeze Z report + auto-post sales journal
@@ -20,7 +20,7 @@ const r2 = (n: number) => Math.round(n * 100) / 100;
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
 
-/** Local (server) calendar date — business days roll over at local midnight. */
+/** Local (server) calendar date - business days roll over at local midnight. */
 const localToday = () => {
   const d = new Date();
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
@@ -149,7 +149,7 @@ async function ensureToday(store: { id: number; name: string }) {
     });
     return created as DayCloseRow;
   } catch {
-    // Unique zNo collision (created concurrently) — re-read whichever row won.
+    // Unique zNo collision (created concurrently) - re-read whichever row won.
     const again = await db.dayClose.findFirst({
       where: { businessDate: today },
       orderBy: { id: "desc" },
@@ -167,7 +167,7 @@ export async function GET() {
 
   const todayRow = await ensureToday(store);
 
-  // Live tender mix for today (POS feed) — powers the payment-method breakdown bar.
+  // Live tender mix for today (POS feed) - powers the payment-method breakdown bar.
   const sales = await db.sale.findMany({
     where: { storeId: store.id, createdAt: { gte: startOfLocalDay() } },
     select: { total: true, paymentMethod: true },
@@ -260,7 +260,7 @@ export async function POST(req: NextRequest) {
   if (Math.abs(dc.variance) > 100 && !dc.approvedBy.trim())
     return NextResponse.json(
       {
-        error: `Variance of KES ${Math.abs(r2(dc.variance)).toLocaleString("en-KE")} exceeds the KES 100 tolerance — record an approval before closing.`,
+        error: `Variance of KES ${Math.abs(r2(dc.variance)).toLocaleString("en-KE")} exceeds the KES 100 tolerance - record an approval before closing.`,
       },
       { status: 400 }
     );
@@ -292,8 +292,8 @@ export async function POST(req: NextRequest) {
         { code: "1030", debit: r2(closed.mpesaSystem), memo: "M-Pesa sales" },
         { code: "1100", debit: r2(closed.cardSystem), memo: "Card & other settled tenders" },
         { code: "2200", credit: vat, memo: "VAT 16% collected" },
-        { code: "4100", credit: rev4100, memo: "Sales — Hardware" },
-        { code: "4200", credit: rev4200, memo: "Sales — Cement & Building" },
+        { code: "4100", credit: rev4100, memo: "Sales - Hardware" },
+        { code: "4200", credit: rev4200, memo: "Sales - Cement & Building" },
         { code: "5100", debit: cogs, memo: "COGS (64% of net sales)" },
         { code: "1200", credit: cogs, memo: "Inventory relief" },
       ];
@@ -320,7 +320,7 @@ export async function POST(req: NextRequest) {
         data: {
           jvNo,
           date: closed.businessDate,
-          memo: `Daily sales — ${closed.zNo}`,
+          memo: `Daily sales - ${closed.zNo}`,
           source: "DayClose",
           refNo: closed.zNo,
           storeId: closed.storeId,

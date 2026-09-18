@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Owner Dashboard — KPI row (sales / payment donut / debtors / low stock),
+ * Owner Dashboard - KPI row (sales / payment donut / debtors / low stock),
  * 7-day trend chart, sales-by-store, live feed, staff rail, quick actions
  * and low-stock alerts. Refetches when the active store changes.
  */
@@ -129,7 +129,7 @@ export default function DashboardScreen() {
     try {
       const qs = activeStoreId === "all" ? "" : `?storeId=${activeStoreId}`;
       setData(await api.get<DashboardData>(`/api/dashboard${qs}`));
-      // Server is now authoritative — clear optimistic live deltas so a
+      // Server is now authoritative - clear optimistic live deltas so a
       // manual refresh never double-counts a sale.
       setLiveTotals({ sales: 0, count: 0 });
       setLiveRows([]);
@@ -144,7 +144,9 @@ export default function DashboardScreen() {
   }, [activeStoreId]);
 
   useEffect(() => {
-    void load();
+    // async boundary: the loader touches state, so never call it synchronously here
+    const t = setTimeout(() => void load(), 0);
+    return () => clearTimeout(t);
   }, [load]);
 
   // ── Realtime event bus ────────────────────────────────────────────
@@ -193,7 +195,7 @@ export default function DashboardScreen() {
   const maxSales = data ? Math.max(...data.trend.map((t) => t.sales), 1) : 1;
   const trendData = (data?.trend ?? []).map((t) => ({ ...t, target: Math.round(maxSales * 0.8) }));
 
-  /* payment donut — M-Pesa green, Cash blue, everything else amber */
+  /* payment donut - M-Pesa green, Cash blue, everything else amber */
   const mpesaPct = data?.paySplit.find((p) => p.method === "M-Pesa")?.pct ?? 0;
   const cashPct = data?.paySplit.find((p) => p.method === "Cash")?.pct ?? 0;
   const donut = [
@@ -206,7 +208,7 @@ export default function DashboardScreen() {
     const first = data?.lowStock[0]?.name ?? "Bamburi Cement";
     toast({
       title: "PO draft created",
-      description: `${first} notified — ${data?.lowStock.length ?? 0} low-stock item${(data?.lowStock.length ?? 0) === 1 ? "" : "s"} queued for restock`,
+      description: `${first} notified - ${data?.lowStock.length ?? 0} low-stock item${(data?.lowStock.length ?? 0) === 1 ? "" : "s"} queued for restock`,
     });
   };
 
@@ -269,7 +271,7 @@ export default function DashboardScreen() {
           }
         />
 
-        {/* Payment split — mini donut card */}
+        {/* Payment split - mini donut card */}
         <div className="rounded-2xl border border-[#DFE1E6] bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl" style={{ background: "#E9F2FF", color: "#0052CC" }}>
@@ -659,7 +661,7 @@ export default function DashboardScreen() {
               );
             })}
           {!loading && (data?.lowStock.length ?? 0) === 0 && (
-            <p className="py-2 text-[12px] text-[#6B778C]">All stock levels are healthy — no alerts.</p>
+            <p className="py-2 text-[12px] text-[#6B778C]">All stock levels are healthy - no alerts.</p>
           )}
         </div>
       </Panel>

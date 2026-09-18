@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 export const dynamic = "force-dynamic";
 
 /**
- * GET/POST /api/cron/report — scheduled report email (mock mailer).
+ * GET/POST /api/cron/report - scheduled report email (mock mailer).
  *
  * Mirrors a Frappe scheduler hook that emails the owner their sales report:
  *   - Daily   → covers the previous day
@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
  *   - Monthly → covers the previous 30 days (1st 08:00 EAT)
  *
  * Due-check: a report is due when lastSentAt is older than the frequency
- * window (or force=1 — used by the "Send test now" button in Settings /
+ * window (or force=1 - used by the "Send test now" button in Settings /
  * the Reports schedule dialog). Every send is logged to SmsLog with
  * channel="Email" so the owner can audit the mail history in Messages.
  *
@@ -83,15 +83,15 @@ async function runScheduledReport(force = false) {
   const rangeLabel = `${periodStart.toLocaleDateString("en-KE", { day: "numeric", month: "short" })} → ${periodEnd.toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" })}`;
 
   const lines = [
-    `📊 ${settings.companyName} — ${freq} Sales Report (${rangeLabel})`,
+    `📊 ${settings.companyName} - ${freq} Sales Report (${rangeLabel})`,
     `Receipts: ${sales.length} • Revenue: ${fmtKES(revenue)} • Avg basket: ${fmtKES(avg)}`,
     `Discounts given: ${fmtKES(discounts)} • VAT collected: ${fmtKES(vat)}`,
-    ...topProducts.map(([name, p], i) => `${i + 1}. ${name} — ${p.qty} sold • ${fmtKES(p.revenue)}`),
+    ...topProducts.map(([name, p], i) => `${i + 1}. ${name} - ${p.qty} sold • ${fmtKES(p.revenue)}`),
     Object.keys(byStore).length > 1
       ? `Stores: ${Object.entries(byStore).map(([st, rev]) => `${st} ${fmtKES(rev)}`).join(" • ")}`
       : "",
     `Payments: ${Object.entries(byMethod).sort((a, b) => b[1] - a[1]).map(([m, v]) => `${m} ${fmtKES(v)}`).join(" • ") || "No sales"}`,
-    `— sent automatically by DukaFlow (${freq} schedule, 08:00 EAT)`,
+    `- sent automatically by DukaFlow (${freq} schedule, 08:00 EAT)`,
   ].filter(Boolean);
 
   const message = lines.join("\n");

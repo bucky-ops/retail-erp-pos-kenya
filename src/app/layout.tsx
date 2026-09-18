@@ -16,9 +16,9 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "DukaFlow — Kenya Retail ERP + POS",
+  title: "DukaFlow - Kenya Retail ERP + POS",
   description:
-    "Offline-first multi-store POS, loyalty, gift cards, debt plans, KRA eTIMS, M-Pesa, Kenya-compliant payroll and Raven chat — built for Kenyan hardware stores and supermarkets.",
+    "Offline-first multi-store POS, loyalty, gift cards, debt plans, KRA eTIMS, M-Pesa, Kenya-compliant payroll and Raven chat - built for Kenyan hardware stores and supermarkets.",
   keywords: ["POS Kenya", "eTIMS", "M-Pesa", "ERP", "hardware store", "loyalty", "payroll"],
   icons: { icon: "/favicon.svg", apple: "/icons/apple-touch-icon.png" },
   manifest: "/manifest.webmanifest",

@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Login screen — split marketing/auth card.
+ * Login screen - split marketing/auth card.
  * Staff PIN keypad (auto-submits at 4 digits, shake on error) or Owner PIN login,
  * then a store-select modal that sets activeStoreId and calls onLogin.
  */
@@ -99,7 +99,7 @@ export default function LoginScreen({
       setOwnerPin("");
       toast({
         title: `Karibu, ${res.user.name}`,
-        description: `${res.user.role} — pick a store to start operating`,
+        description: `${res.user.role} - pick a store to start operating`,
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Login failed. Try again.");
@@ -111,7 +111,10 @@ export default function LoginScreen({
 
   /* auto-submit staff PIN at 4 digits */
   useEffect(() => {
-    if (tab === "staff" && pin.length === 4 && !busy && !authed) void submitPin(pin);
+    if (tab !== "staff" || pin.length !== 4 || busy || authed) return;
+    // async boundary: submitPin touches state, so never call it synchronously here
+    const t = setTimeout(() => void submitPin(pin), 0);
+    return () => clearTimeout(t);
   }, [pin, tab, busy, authed, submitPin]);
 
   const press = (digit: string) => {
@@ -165,7 +168,7 @@ export default function LoginScreen({
           Stock Smart.
         </h2>
         <p className="relative mt-3 text-sm text-white/70">
-          {"Kenya's smart retail ERP + POS — KRA eTIMS & M-Pesa native."}
+          {"Kenya's smart retail ERP + POS - KRA eTIMS & M-Pesa native."}
         </p>
 
         {/* duka shelf illustration */}
@@ -357,7 +360,7 @@ export default function LoginScreen({
                     className="h-8 border-0 bg-transparent px-0 text-lg font-bold tracking-[0.5em] shadow-none focus-visible:ring-0"
                   />
                 </div>
-                <p className="mt-1.5 text-[11px] text-[#6B778C]">Owner PIN 0000 — unlocks dashboards, payroll &amp; settings</p>
+                <p className="mt-1.5 text-[11px] text-[#6B778C]">Owner PIN 0000 - unlocks dashboards, payroll &amp; settings</p>
               </div>
               {error && <p className="text-[12px] font-semibold text-[#FF5630]">{error}</p>}
               <Button
@@ -384,7 +387,7 @@ export default function LoginScreen({
 
         {!online && (
           <div className="mt-3 flex w-fit items-center gap-2 rounded-full border border-[#FFE0B2] bg-[#FFF8E1] px-3 py-1.5 text-[11px] font-bold text-[#B8860B]">
-            <WifiOff size={12} /> Offline — POS will queue sales
+            <WifiOff size={12} /> Offline - POS will queue sales
           </div>
         )}
       </div>
@@ -393,7 +396,7 @@ export default function LoginScreen({
 
   return (
     <>
-      {/* local animation (shake on wrong PIN) — kept self-contained in this file */}
+      {/* local animation (shake on wrong PIN) - kept self-contained in this file */}
       <style>{`
         @keyframes df-pin-shake {
           0%, 100% { transform: translateX(0); }
@@ -457,7 +460,7 @@ export default function LoginScreen({
               onClick={() => completeLogin("all")}
               className="mt-4 w-full rounded-xl border-[#DFE1E6] bg-white font-semibold text-[#172B4D]"
             >
-              Skip — operate across All Stores
+              Skip - operate across All Stores
             </Button>
           </div>
         </div>

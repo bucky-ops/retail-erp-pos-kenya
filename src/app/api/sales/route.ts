@@ -7,7 +7,7 @@ import { SalePayload } from "@/types";
 
 export const dynamic = "force-dynamic";
 
-/** GET /api/sales?storeId=&customerId=&limit= — receipt/invoice list. */
+/** GET /api/sales?storeId=&customerId=&limit= - receipt/invoice list. */
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const storeId = searchParams.get("storeId");
@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
 }
 
 /**
- * POST /api/sales — create a POS receipt / sale.
+ * POST /api/sales - create a POS receipt / sale.
  * Full business logic:
  *  1. Debt blocking (credit sale blocked when plan overdue > 7 days + auto-block on)
  *  2. Tier discount (Gold 10%, Silver 5%) when no explicit discount
@@ -118,7 +118,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Happy Hour auto-pricing — % off qualifying categories while the window
+    // Happy Hour auto-pricing - % off qualifying categories while the window
     // runs. Evaluated at the sale's own timestamp so offline-replayed sales
     // get the price that was on the till when they were rung up.
     const saleTime = payload.createdAt ? new Date(payload.createdAt) : new Date();
@@ -271,7 +271,7 @@ export async function POST(req: NextRequest) {
 
     // ── 11b. Auto e-invoice email on KRA verify ──────────
     // When eTIMS stamped the invoice and the customer has an email on file,
-    // deliver the electronic tax invoice automatically (best-effort — a mail
+    // deliver the electronic tax invoice automatically (best-effort - a mail
     // hiccup must never fail a committed sale).
     if (customer?.email && kraStatus === "Verified") {
       try {
@@ -293,7 +293,7 @@ export async function POST(req: NextRequest) {
 
     // ── 12. Realtime broadcast + low-stock watchdog ─────
     // Push the committed sale to every open dashboard (socket.io via the
-    // live-feed service). Best-effort — must never fail the sale.
+    // live-feed service). Best-effort - must never fail the sale.
     const store = await db.store.findUnique({ where: { id: storeId } });
     emitLive("sale:new", {
       receiptNo,

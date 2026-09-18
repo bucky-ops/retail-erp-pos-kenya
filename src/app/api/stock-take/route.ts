@@ -5,7 +5,7 @@ import { emitLive } from "@/lib/live-emit";
 export const dynamic = "force-dynamic";
 
 /**
- * DukaFlow — Stock take / cycle count sessions.
+ * DukaFlow - Stock take / cycle count sessions.
  *
  * GET  /api/stock-take            → list sessions (with store + item progress)
  * POST /api/stock-take            → open a new session
@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
   });
   if (open) {
     return NextResponse.json(
-      { ok: false, error: `${open.stNo} is still open for this store — approve or cancel it first.` },
+      { ok: false, error: `${open.stNo} is still open for this store - approve or cancel it first.` },
       { status: 409 }
     );
   }
@@ -111,7 +111,7 @@ export async function POST(req: NextRequest) {
   // Audit line in Raven so the whole team knows a count is running.
   const channel = await db.chatChannel.findFirst({ where: { name: "stock-alerts" } });
   if (channel) {
-    const msg = `📋 ${stNo} opened: cycle count of ${levels.length} products at ${store.name}${category !== "All" ? ` (${category})` : ""} by ${startedBy}. POS sales stay live — variances are computed from the snapshot.`;
+    const msg = `📋 ${stNo} opened: cycle count of ${levels.length} products at ${store.name}${category !== "All" ? ` (${category})` : ""} by ${startedBy}. POS sales stay live - variances are computed from the snapshot.`;
     await db.chatMessage.create({ data: { channelId: channel.id, author: "Stock Bot", initials: "SB", content: msg } });
     await db.chatChannel.update({ where: { id: channel.id }, data: { unread: { increment: 1 } } });
     emitLive("chat:new", { channelId: channel.id, channelName: channel.name, id: 0, author: "Stock Bot", initials: "SB", content: msg, createdAt: new Date().toISOString() });

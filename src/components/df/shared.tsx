@@ -5,7 +5,7 @@ import { ReactNode } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DeltaPill } from "@/components/df/badges";
 
-/** Standard KPI card — icon tile, label, value, delta/sub text, optional inline chart. */
+/** Standard KPI card - icon tile, label, value, delta/sub text, optional inline chart. */
 export function KpiCard({
   icon,
   label,

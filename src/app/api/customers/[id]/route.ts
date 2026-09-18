@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
-/** GET /api/customers/[id] — 360° customer view. */
+/** GET /api/customers/[id] - 360° customer view. */
 export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const customerId = Number(id);
@@ -23,7 +23,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
 
   if (!customer) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  // Spend chart — last 6 months buckets
+  // Spend chart - last 6 months buckets
   const months: { month: string; spend: number }[] = [];
   for (let i = 5; i >= 0; i--) {
     const d = new Date();
@@ -52,7 +52,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
   });
 }
 
-/** PATCH /api/customers/[id] — edit tier / credit limit / notes / points. */
+/** PATCH /api/customers/[id] - edit tier / credit limit / notes / points. */
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const body = await req.json();

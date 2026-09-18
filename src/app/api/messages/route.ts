@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
-/** GET /api/messages — SMS/WhatsApp log + campaign stats. */
+/** GET /api/messages - SMS/WhatsApp log + campaign stats. */
 export async function GET() {
   const logs = await db.smsLog.findMany({
     include: { customer: true },
