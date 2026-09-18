@@ -149,3 +149,23 @@ Stage Summary:
 - MOBILE: v1.1.0 released (4 APKs) - wireframe live preview on GitHub Pages, dash-free, version 1.1.0+2.
 - Preview URLs: web app via Preview Panel; wireframe: https://bucky-ops.github.io/dukaflow-mobile/
 - Pending watch item: post-rewrite CI re-runs on mobile (same code, expected green; v1.1.0 run re-uploads release assets).
+
+---
+Task ID: 11 - dash sweep round 2, hosted backend (Supabase), integrations
+Agent: Z.ai Code (main)
+Task: Remove all remaining dash characters from tracked files; validate provided tokens; build hosted backend (Supabase Postgres) and integrations (GitHub secrets, Vercel project); test full stack end to end.
+
+Work Log:
+- Dash sweep round 2: found 190 em dashes + 1 en dash + 7,420 box-drawing chars in 45 TRACKED files missed by round 1 scope (DESIGN_SPEC.md, .env.example, install.sh, mini-services/live-feed, public/manifest.webmanifest, public/sw.js + comment dividers). Swept via sed over git ls-files. Verified: git ls-files grep = 0. Mobile repo re-verified 0. Commit 3ea3f4c pushed.
+- Token validation: GitHub ghp_ VALID (bucky-ops, full admin scopes); Supabase sbp_ VALID (Management API, org + Portfolio project visible); Vercel vcp_ VALID (account muchiricollins98-4080); Neon napi_ UNREACHABLE - api.neon.tech has NO public A/AAAA records right now (checked sandbox resolver AND Google DNS; not a sandbox allowlist issue).
+- Neon pivot: documented scripts/neon-setup.sh (idempotent bootstrap: token check, project create, pooled URI) for when DNS resolves. Token retained in /tmp/tokens.
+- Supabase backend: created project "DukaFlow Production" (ref ekyglotdtltlacszdysr, us-east-2, ACTIVE_HEALTHY) via Management API. Verified pooler TCP (aws-0-us-east-2.pooler.supabase.com 5432/6543 OK). Created prisma/schema.postgres.prisma (provider swap only, model-identical). prisma db push OK (29.5s). All 4 seed scripts OK against hosted DB.
+- Full-stack test: dev server restarted against Supabase. scripts/smoke.sh = 25 passed / 0 failed (all read APIs + stock-take flow + RTV guard + cron digest + statement emails). Browser QA: login PIN 1234, store select, dashboard live product data, v1.2.0 labels. API spot checks: day-close today = Z-20260918-THIKA Open salesTotal 96400 receipts 35; accounting coa full chart with balances; attendance 12 rows.
+- Integration: GitHub secret HOSTED_DATABASE_URL stored in retail-erp-pos-kenya (libsodium sealed box via bun + libsodium-wrappers). Vercel project dukaflow-web created (framework nextjs) with encrypted DATABASE_URL + DIRECT_URL env vars (all targets).
+- Sandbox resilience: prisma/schema.prisma stays SQLite default; .env untouched; prisma client regenerated for SQLite after verification so the local preview keeps working offline. scripts/db-hosted.sh switch/sqlite toggles.
+
+Stage Summary:
+- GitHub (both repos), README, app UI strings: 0 em/en/box dashes anywhere in tracked content or commit messages.
+- Hosted backend LIVE + verified: Supabase Postgres with full schema + seed data; app passes 25/25 smoke tests against it.
+- Vercel project dukaflow-web ready to deploy with DB env wired; GitHub secret available to CI.
+- Tokens redacted everywhere; stored only in /tmp/tokens (chmod 600). Recommend user ROTATE all four tokens since they were pasted in chat.
