@@ -135,6 +135,44 @@ install.sh             # One-command bootstrap (init → seed → dev)
 
 See `.env.example` - only `DATABASE_URL` is required to run; KRA / M-Pesa / SMS keys configure the simulators and are managed in-app under **Settings**.
 
+
+## Hosted database (Supabase / Neon)
+
+The repo ships with two Prisma schemas:
+
+| File | Provider | Use |
+| --- | --- | --- |
+| `prisma/schema.prisma` | SQLite | Sandbox / local default (zero setup) |
+| `prisma/schema.postgres.prisma` | PostgreSQL | Supabase or Neon hosted database |
+
+### Supabase (verified working)
+
+The app has been tested end to end against a Supabase Postgres project
+("DukaFlow Production", region us-east-2) using the **session pooler**
+connection string (port 5432, user `postgres.<project-ref>`):
+
+```bash
+export DATABASE_URL="postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres?connection_limit=5"
+bash scripts/db-hosted.sh push   # push prisma/schema.postgres.prisma
+bash scripts/db-hosted.sh seed   # run all four seed scripts
+bash scripts/db-hosted.sh switch # point local dev at the hosted DB
+bash scripts/db-hosted.sh sqlite # revert local dev to the SQLite file
+```
+
+The pooled connection string is stored as the GitHub Actions secret
+`HOSTED_DATABASE_URL` and as `DATABASE_URL` / `DIRECT_URL` environment
+variables on the Vercel project `dukaflow-web`, ready for deployment.
+
+### Neon (ready-to-run)
+
+`scripts/neon-setup.sh` bootstraps a Neon project via the public API
+(project + pooled URI). It is idempotent and only needs `NEON_API_TOKEN`.
+Note: during initial setup the `api.neon.tech` host had no public DNS
+records; the script is written to be run once DNS resolves.
+
+> Never commit real credentials. Secrets belong in shell env vars, GitHub
+> Actions secrets, or Vercel encrypted environment variables.
+
 ## License
 
 MIT - built with ❤️ for Kenyan dukas.
